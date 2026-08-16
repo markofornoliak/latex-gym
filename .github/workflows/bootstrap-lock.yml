@@ -1,0 +1,81 @@
+name: Bootstrap and verify source
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout bootstrap payload
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Reconstruct source tree
+        shell: bash
+        run: |
+          cat .bootstrap/part-* > /tmp/latex-gym.b64
+          base64 --decode /tmp/latex-gym.b64 > /tmp/latex-gym.tgz
+          tar -xzf /tmp/latex-gym.tgz
+          rm -rf .bootstrap .init
+
+      - name: Install dependencies and create lockfile
+        run: npm install
+
+      - name: Dev server smoke test
+        shell: bash
+        run: |
+          npm run dev -- --host 127.0.0.1 > /tmp/vite.log 2>&1 &
+          PID=$!
+          READY=0
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:5173/latex-gym/ >/dev/null; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$READY" -ne 1 ]; then
+            cat /tmp/vite.log
+            kill $PID || true
+            exit 1
+          fi
+          curl -fsS http://127.0.0.1:5173/latex-gym/ >/dev/null
+          kill $PID
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Upload verified build
+        uses: actions/upload-artifact@v6
+        with:
+          name: latex-gym-verified-build
+          path: |
+            package-lock.json
+            dist
+
+      - name: Commit verified application source
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+          else
+            git commit -m "Build LaTeX gym application"
+            git push origin HEAD:main
+          fi
