@@ -1,6 +1,10 @@
 name: Bootstrap and verify source
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bootstrap-lock.yml'
   workflow_dispatch:
 
 permissions:
