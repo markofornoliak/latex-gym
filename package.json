@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
-    "validate:curriculum": "vitest run src/services/curriculumLinter.test.ts"
+    "validate:curriculum": "vitest run src/services/curriculumLinter.test.ts",
+    "install:full-tex": "node scripts/install-full-tex.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.0",
