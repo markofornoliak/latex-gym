@@ -16,6 +16,7 @@ import './styles/progressDeep.css';
 import './styles/interactionPolish.css';
 import './styles/conceptExercises.css';
 import './styles/sourceOutputCausality.css';
+import './styles/lessonToc.css';
 
 registerSW({ immediate: true });
 createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
