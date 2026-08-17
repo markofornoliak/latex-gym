@@ -2,19 +2,27 @@ import { describe, expect, it } from 'vitest';
 import { diagnoseLatex } from './compilerDiagnostics';
 
 describe('compiler diagnostics',()=>{
-  it('recognizes an undefined control sequence typo with a useful suggestion',()=>{
+  it('recognizes an undefined control sequence typo with progressive educational evidence',()=>{
     const diagnostics=diagnoseLatex('\\documentclass{article}\n\\begin{document}\n\\secton{Result}\n\\end{document}');
-    expect(diagnostics.some(item=>item.message.includes('Undefined control sequence')&&item.suggestion?.includes('section'))).toBe(true);
+    const diagnostic=diagnostics.find(item=>item.message.includes('Undefined control sequence'));
+    expect(diagnostic?.suggestion).toContain('section');
+    expect(diagnostic?.mistakeCategory).toBe('unknown-command');
+    expect(diagnostic?.conceptId).toBe('command');
+    expect(diagnostic?.rawMessage).toContain('Undefined control sequence');
+    expect(diagnostic?.hints).toHaveLength(2);
   });
 
   it('recognizes missing closing braces',()=>{
     const diagnostics=diagnoseLatex('\\section{Method');
-    expect(diagnostics.some(item=>item.message==='Missing } inserted')).toBe(true);
+    const diagnostic=diagnostics.find(item=>item.message==='Missing } inserted');
+    expect(diagnostic?.mistakeCategory).toBe('group-balance');
   });
 
   it('recognizes an extra alignment tab in tabular',()=>{
     const diagnostics=diagnoseLatex('\\begin{tabular}{lr}\nA & B & C \\\\\n\\end{tabular}');
-    expect(diagnostics.some(item=>item.message.includes('Extra alignment tab'))).toBe(true);
+    const diagnostic=diagnostics.find(item=>item.message.includes('Extra alignment tab'));
+    expect(diagnostic?.mistakeCategory).toBe('table-alignment');
+    expect(diagnostic?.hints?.[0]).toContain('ячейки');
   });
 
   it('recognizes unknown environments without rejecting defined custom environments',()=>{
