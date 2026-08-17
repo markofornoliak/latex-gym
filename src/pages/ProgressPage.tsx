@@ -1,13 +1,48 @@
 import { Link } from 'react-router-dom';
+import { conceptById } from '../data/concepts';
 import { exercises, lessons, modules } from '../data/courses';
+import { projects } from '../data/projects';
 import { useAppStore } from '../store/useAppStore';
+
 export function ProgressPage(){
-  const completedLessons=useAppStore(s=>s.completedLessons);const completedExercises=useAppStore(s=>s.completedExercises);const attempts=useAppStore(s=>s.attempts);const successes=useAppStore(s=>s.successfulAttempts);const streak=useAppStore(s=>s.streak);const scores=useAppStore(s=>s.conceptScores);
-  const attemptCount=Object.values(attempts).reduce((a,b)=>a+b,0);const successCount=Object.values(successes).reduce((a,b)=>a+b,0);const practiceRate=attemptCount?Math.round((successCount/attemptCount)*100):0;const totalPct=Math.round(completedLessons.length/lessons.length*100);
-  return <div className="page editorial-page"><header className="page-intro"><span className="eyebrow">ПРОГРЕСС</span><h1>{totalPct}% курса</h1><p>Здесь виден не «счёт», а фактическая работа: пройденные уроки, практика и понятия, которые требуют повторения.</p></header>
-    <div className="progress-ledger"><div><span>Пройдено уроков</span><strong>{completedLessons.length} / {lessons.length}</strong></div><div><span>Решено задач</span><strong>{completedExercises.length} / {exercises.length}</strong></div><div><span>Успешность практики</span><strong>{practiceRate}%</strong></div><div><span>Текущая серия</span><strong>{streak.count} дней</strong></div></div>
-    <section><h2 className="section-title">По модулям</h2>{modules.map(m=>{const done=m.lessons.filter(l=>completedLessons.includes(l.id)).length;return <div className="module-progress-row" key={m.id}><span>{String(m.number).padStart(2,'0')} {m.title}</span><div><i style={{width:`${done/m.lessons.length*100}%`}}/></div><small>{done}/{m.lessons.length}</small></div>})}</section>
-    <section className="concept-review"><h2 className="section-title">Повторение понятий</h2>{Object.keys(scores).length?<div>{Object.entries(scores).sort((a,b)=>a[1]-b[1]).slice(0,8).map(([concept,score])=><span key={concept}><code>{concept}</code><small>{score<0?'повторить':score<2?'закрепить':'устойчиво'}</small></span>)}</div>:<p>После первых попыток здесь появится приоритет повторения.</p>}</section>
-    <Link className="quiet-link" to="/history">Открыть историю обучения</Link>
+  const completedLessons=useAppStore(state=>state.completedLessons);
+  const completedExercises=useAppStore(state=>state.completedExercises);
+  const projectProgress=useAppStore(state=>state.completedProjectStages);
+  const attempts=useAppStore(state=>state.attempts);
+  const successes=useAppStore(state=>state.successfulAttempts);
+  const streak=useAppStore(state=>state.streak);
+  const mastery=useAppStore(state=>state.conceptMastery);
+  const attemptCount=Object.values(attempts).reduce((sum,value)=>sum+value,0);
+  const successCount=Object.values(successes).reduce((sum,value)=>sum+value,0);
+  const practiceRate=attemptCount?Math.round((successCount/attemptCount)*100):0;
+  const totalPct=Math.round(completedLessons.length/Math.max(1,lessons.length)*100);
+  const projectStages=projects.reduce((sum,project)=>sum+project.stages.length,0);
+  const completedStages=projects.reduce((sum,project)=>sum+(projectProgress[project.id]?.length??0),0);
+  const review=Object.entries(mastery).sort(([,left],[,right])=>reviewPriority(left)-reviewPriority(right)).slice(0,8);
+
+  return <div className="page editorial-page progress-deep">
+    <header className="page-intro"><span className="eyebrow">ПРОГРЕСС</span><h1>{totalPct}% курса</h1><p>Общий процент остаётся ориентиром. Ниже разделены четыре разные вещи: прохождение курса, практика, устойчивость понятий и работа над документами.</p></header>
+
+    <section className="progress-section"><div className="section-heading"><h2>Курс</h2><span>{completedLessons.length} / {lessons.length} уроков</span></div>{modules.map(module=>{const done=module.lessons.filter(lesson=>completedLessons.includes(lesson.id)).length;const percent=module.lessons.length?done/module.lessons.length*100:0;return <div className="module-progress-row" key={module.id}><span>{String(module.number).padStart(2,'0')} {module.title}</span><div><i style={{width:`${percent}%`}}/></div><small>{done}/{module.lessons.length}</small></div>;})}</section>
+
+    <section className="progress-section practice-ledger"><div className="section-heading"><h2>Практика</h2><span>{completedExercises.length} / {exercises.length} задач</span></div><dl><div><dt>Попытки</dt><dd>{attemptCount}</dd></div><div><dt>Успешные решения</dt><dd>{successCount}</dd></div><div><dt>Успешность</dt><dd>{attemptCount?`${practiceRate}%`:'—'}</dd></div><div><dt>Текущая серия</dt><dd>{streak.count?`${streak.count} дн.`:'—'}</dd></div></dl></section>
+
+    <section className="progress-section concept-review"><div className="section-heading"><h2>Понятия к повторению</h2><span>{Object.keys(mastery).length} отслеживается</span></div>{review.length?<div className="mastery-list">{review.map(([id,state])=><div className="mastery-row" key={id}><span><strong>{conceptById.get(id)?.title??id}</strong><small>{masteryLabel(state.score,state.nextReview)}</small></span><div aria-label={`Устойчивость ${Math.round(state.score*100)}%`}><i style={{width:`${Math.round(state.score*100)}%`}}/></div></div>)}</div>:<p className="progress-empty">После первых упражнений здесь появятся понятия, которым полезно повторение.</p>}</section>
+
+    <section className="progress-section project-progress"><div className="section-heading"><h2>Проекты</h2><span>{completedStages} / {projectStages} этапов</span></div>{projects.map(project=>{const done=projectProgress[project.id]?.length??0;return <Link to={`/project/${project.id}`} className="project-progress-row" key={project.id}><span><strong>{project.title}</strong><small>{done?`${done} из ${project.stages.length} этапов`:'Не начат'}</small></span><div><i style={{width:`${done/project.stages.length*100}%`}}/></div></Link>;})}</section>
+
+    <Link className="quiet-link" to="/history">История обучения</Link>
   </div>;
+}
+
+function reviewPriority(state:{score:number;nextReview:string|null;mistakeCount:number}){
+  const due=state.nextReview?new Date(state.nextReview).getTime()<=Date.now():true;
+  return state.score+(due?-1:0)-Math.min(.4,state.mistakeCount*.04);
+}
+function masteryLabel(score:number,nextReview:string|null){
+  const due=nextReview?new Date(nextReview).getTime()<=Date.now():true;
+  if(due&&score<.7)return 'повторить сейчас';
+  if(score<.55)return 'требует практики';
+  if(score<.8)return 'закрепить';
+  return due?'короткое повторение':'устойчиво';
 }
