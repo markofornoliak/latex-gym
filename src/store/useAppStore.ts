@@ -1,124 +1,126 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Bookmark, HistoryEntry } from '../types';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import type { Bookmark, ConceptMastery, HistoryEntry } from '../types';
 
-type Settings = {
-  textSize: 'small' | 'medium' | 'large';
-  wordWrap: boolean;
-  autoClose: boolean;
-  lineNumbers: boolean;
+type Settings={textSize:'small'|'medium'|'large';wordWrap:boolean;autoClose:boolean;lineNumbers:boolean};
+type ProjectProgress=Record<string,string[]>;
+
+type AppState={
+  version:number;
+  onboarded:boolean;
+  completedLessons:string[];
+  completedExercises:string[];
+  completedProjectStages:ProjectProgress;
+  currentLessonId:string;
+  bookmarks:Bookmark[];
+  attempts:Record<string,number>;
+  successfulAttempts:Record<string,number>;
+  hintsUsed:Record<string,number>;
+  drafts:Record<string,string>;
+  conceptScores:Record<string,number>;
+  conceptMastery:Record<string,ConceptMastery>;
+  history:HistoryEntry[];
+  streak:{count:number;lastActive:string|null};
+  settings:Settings;
+  setOnboarded:()=>void;
+  setCurrentLesson:(id:string)=>void;
+  completeLesson:(id:string,title:string)=>void;
+  recordExerciseAttempt:(exerciseId:string,ok:boolean,concepts:string[],title:string)=>void;
+  completeProjectStage:(projectId:string,stageId:string,title:string)=>void;
+  recordHint:(exerciseId:string,level:number)=>void;
+  setDraft:(key:string,source:string)=>void;
+  toggleBookmark:(type:Bookmark['type'],targetId:string)=>void;
+  touchReference:(title:string)=>void;
+  updateSettings:(patch:Partial<Settings>)=>void;
+  importProgress:(raw:string)=>{ok:boolean;message:string};
+  resetProgress:()=>void;
 };
 
-type AppState = {
-  version: number;
-  onboarded: boolean;
-  completedLessons: string[];
-  completedExercises: string[];
-  currentLessonId: string;
-  bookmarks: Bookmark[];
-  attempts: Record<string,number>;
-  successfulAttempts: Record<string,number>;
-  hintsUsed: Record<string,number>;
-  drafts: Record<string,string>;
-  conceptScores: Record<string,number>;
-  history: HistoryEntry[];
-  streak: { count:number; lastActive:string | null };
-  settings: Settings;
-  setOnboarded: () => void;
-  setCurrentLesson: (id:string) => void;
-  completeLesson: (id:string,title:string) => void;
-  recordExerciseAttempt: (exerciseId:string,ok:boolean,concepts:string[],title:string) => void;
-  recordHint: (exerciseId:string,level:number) => void;
-  setDraft: (key:string,source:string) => void;
-  toggleBookmark: (type:Bookmark['type'],targetId:string) => void;
-  touchReference: (title:string) => void;
-  updateSettings: (patch:Partial<Settings>) => void;
-  importProgress: (raw:string) => {ok:boolean; message:string};
-  resetProgress: () => void;
-};
-
-const defaultSettings:Settings = { textSize:'medium', wordWrap:true, autoClose:true, lineNumbers:true };
+const defaultSettings:Settings={textSize:'medium',wordWrap:true,autoClose:true,lineNumbers:true};
 const pad2=(value:number)=>String(value).padStart(2,'0');
-const today = () => {const date=new Date();return `${date.getFullYear()}-${pad2(date.getMonth()+1)}-${pad2(date.getDate())}`;};
-const localDate = (value:string) => {const [year,month,day]=value.split('-').map(Number);return new Date(year,month-1,day,12);};
+const today=()=>{const date=new Date();return `${date.getFullYear()}-${pad2(date.getMonth()+1)}-${pad2(date.getDate())}`;};
+const localDate=(value:string)=>{const [year,month,day]=value.split('-').map(Number);return new Date(year,month-1,day,12);};
+const clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(max,value));
+const unique=(values:string[],value:string)=>values.includes(value)?values:[...values,value];
+const historyItem=(text:string,kind:HistoryEntry['kind']):HistoryEntry=>({id:crypto.randomUUID(),at:new Date().toISOString(),text,kind});
 
-function nextStreak(streak:AppState['streak']) {
+function nextStreak(streak:AppState['streak']){
   const current=today();
-  if (streak.lastActive===current) return streak;
-  if (!streak.lastActive) return {count:1,lastActive:current};
-  const prev=localDate(streak.lastActive);
-  const now=localDate(current);
-  const diff=Math.round((now.getTime()-prev.getTime())/86400000);
+  if(streak.lastActive===current)return streak;
+  if(!streak.lastActive)return {count:1,lastActive:current};
+  const diff=Math.round((localDate(current).getTime()-localDate(streak.lastActive).getTime())/86400000);
   return {count:diff===1?streak.count+1:1,lastActive:current};
 }
 
-const unique = (arr:string[],value:string) => arr.includes(value)?arr:[...arr,value];
-const historyItem = (text:string,kind:HistoryEntry['kind']):HistoryEntry => ({id:crypto.randomUUID(),at:new Date().toISOString(),text,kind});
+export function updateConceptMastery(previous:ConceptMastery|undefined,ok:boolean,now=new Date()):ConceptMastery{
+  const base:ConceptMastery=previous??{score:.3,attempts:0,successes:0,mistakeCount:0,lastPracticed:null,stability:1,nextReview:null};
+  const attempts=base.attempts+1;
+  const successes=base.successes+(ok?1:0);
+  const mistakeCount=base.mistakeCount+(ok?0:1);
+  const evidence=ok?1:0;
+  const learningRate=attempts<4?.32:.2;
+  const score=clamp(base.score*(1-learningRate)+evidence*learningRate,0,1);
+  const stability=clamp(ok?base.stability*(1.18+score*.32):base.stability*.62,.5,60);
+  const intervalDays=ok?Math.max(1,Math.round(stability*(score>.82?4:score>.62?2:1))):1;
+  const nextReview=new Date(now);nextReview.setDate(nextReview.getDate()+intervalDays);
+  return {score,attempts,successes,mistakeCount,lastPracticed:now.toISOString(),stability,nextReview:nextReview.toISOString()};
+}
 
 export const useAppStore=create<AppState>()(persist((set)=>({
-  version:1,
+  version:2,
   onboarded:false,
-  completedLessons:[], completedExercises:[], currentLessonId:'document-structure', bookmarks:[], attempts:{}, successfulAttempts:{}, hintsUsed:{}, drafts:{}, conceptScores:{}, history:[], streak:{count:0,lastActive:null}, settings:defaultSettings,
+  completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null},settings:defaultSettings,
   setOnboarded:()=>set({onboarded:true}),
   setCurrentLesson:(id)=>set({currentLessonId:id}),
-  completeLesson:(id,title)=>set(s=>({
-    completedLessons:unique(s.completedLessons,id), currentLessonId:id,
-    history:[historyItem(`Пройден урок «${title}»`,'lesson'),...s.history].slice(0,100), streak:nextStreak(s.streak)
-  })),
-  recordExerciseAttempt:(exerciseId,ok,concepts,title)=>set(s=>{
-    const attempts={...s.attempts,[exerciseId]:(s.attempts[exerciseId]??0)+1};
-    const successfulAttempts={...s.successfulAttempts};
-    if(ok) successfulAttempts[exerciseId]=(successfulAttempts[exerciseId]??0)+1;
-    const conceptScores={...s.conceptScores};
-    for(const concept of concepts) conceptScores[concept]=(conceptScores[concept]??0)+(ok?1:-1);
-    return {
-      attempts,successfulAttempts,conceptScores,
-      completedExercises:ok?unique(s.completedExercises,exerciseId):s.completedExercises,
-      history:ok?[historyItem(`Решена задача «${title}»`,'exercise'),...s.history].slice(0,100):s.history,
-      streak:nextStreak(s.streak)
-    };
+  completeLesson:(id,title)=>set(state=>({completedLessons:unique(state.completedLessons,id),currentLessonId:id,history:[historyItem(`Пройден урок «${title}»`,'lesson'),...state.history].slice(0,100),streak:nextStreak(state.streak)})),
+  recordExerciseAttempt:(exerciseId,ok,concepts,title)=>set(state=>{
+    const attempts={...state.attempts,[exerciseId]:(state.attempts[exerciseId]??0)+1};
+    const successfulAttempts={...state.successfulAttempts};
+    if(ok)successfulAttempts[exerciseId]=(successfulAttempts[exerciseId]??0)+1;
+    const conceptScores={...state.conceptScores};
+    const conceptMastery={...state.conceptMastery};
+    const now=new Date();
+    for(const conceptId of concepts){
+      conceptScores[conceptId]=(conceptScores[conceptId]??0)+(ok?1:-1);
+      conceptMastery[conceptId]=updateConceptMastery(conceptMastery[conceptId],ok,now);
+    }
+    return {attempts,successfulAttempts,conceptScores,conceptMastery,completedExercises:ok?unique(state.completedExercises,exerciseId):state.completedExercises,history:ok?[historyItem(`Решена задача «${title}»`,'exercise'),...state.history].slice(0,100):state.history,streak:nextStreak(state.streak)};
   }),
-  recordHint:(exerciseId,level)=>set(s=>({hintsUsed:{...s.hintsUsed,[exerciseId]:Math.max(level,s.hintsUsed[exerciseId]??0)}})),
-  setDraft:(key,source)=>set(s=>({drafts:{...s.drafts,[key]:source}})),
-  toggleBookmark:(type,targetId)=>set(s=>{
-    const id=`${type}:${targetId}`;
-    const exists=s.bookmarks.some(b=>b.id===id);
-    return {bookmarks:exists?s.bookmarks.filter(b=>b.id!==id):[...s.bookmarks,{id,type,targetId,createdAt:new Date().toISOString()}]};
-  }),
-  touchReference:(title)=>set(s=>({history:[historyItem(`Изучена команда ${title}`,'reference'),...s.history].slice(0,100),streak:nextStreak(s.streak)})),
-  updateSettings:(patch)=>set(s=>({settings:{...s.settings,...patch}})),
+  completeProjectStage:(projectId,stageId,title)=>set(state=>({completedProjectStages:{...state.completedProjectStages,[projectId]:unique(state.completedProjectStages[projectId]??[],stageId)},history:[historyItem(`Завершён этап проекта «${title}»`,'exercise'),...state.history].slice(0,100),streak:nextStreak(state.streak)})),
+  recordHint:(exerciseId,level)=>set(state=>({hintsUsed:{...state.hintsUsed,[exerciseId]:Math.max(level,state.hintsUsed[exerciseId]??0)}})),
+  setDraft:(key,source)=>set(state=>({drafts:{...state.drafts,[key]:source}})),
+  toggleBookmark:(type,targetId)=>set(state=>{const id=`${type}:${targetId}`;const exists=state.bookmarks.some(bookmark=>bookmark.id===id);return {bookmarks:exists?state.bookmarks.filter(bookmark=>bookmark.id!==id):[...state.bookmarks,{id,type,targetId,createdAt:new Date().toISOString()}]};}),
+  touchReference:(title)=>set(state=>({history:[historyItem(`Изучена команда ${title}`,'reference'),...state.history].slice(0,100),streak:nextStreak(state.streak)})),
+  updateSettings:(patch)=>set(state=>({settings:{...state.settings,...patch}})),
   importProgress:(raw)=>{
-    try {
+    try{
       const parsed=JSON.parse(raw) as Partial<AppState>;
-      if(!parsed || typeof parsed!=='object') throw new Error('bad');
-      set(s=>({
-        onboarded:parsed.onboarded??s.onboarded,
-        completedLessons:Array.isArray(parsed.completedLessons)?parsed.completedLessons:s.completedLessons,
-        completedExercises:Array.isArray(parsed.completedExercises)?parsed.completedExercises:s.completedExercises,
-        currentLessonId:typeof parsed.currentLessonId==='string'?parsed.currentLessonId:s.currentLessonId,
-        bookmarks:Array.isArray(parsed.bookmarks)?parsed.bookmarks:s.bookmarks,
-        attempts:parsed.attempts??s.attempts, successfulAttempts:parsed.successfulAttempts??s.successfulAttempts,
-        hintsUsed:parsed.hintsUsed??s.hintsUsed,drafts:parsed.drafts??s.drafts,conceptScores:parsed.conceptScores??s.conceptScores,
-        history:Array.isArray(parsed.history)?parsed.history:s.history,streak:parsed.streak??s.streak,settings:{...s.settings,...parsed.settings}
+      if(!parsed||typeof parsed!=='object')throw new Error('invalid');
+      set(state=>({
+        onboarded:parsed.onboarded??state.onboarded,
+        completedLessons:Array.isArray(parsed.completedLessons)?parsed.completedLessons:state.completedLessons,
+        completedExercises:Array.isArray(parsed.completedExercises)?parsed.completedExercises:state.completedExercises,
+        completedProjectStages:parsed.completedProjectStages??state.completedProjectStages,
+        currentLessonId:typeof parsed.currentLessonId==='string'?parsed.currentLessonId:state.currentLessonId,
+        bookmarks:Array.isArray(parsed.bookmarks)?parsed.bookmarks:state.bookmarks,
+        attempts:parsed.attempts??state.attempts,successfulAttempts:parsed.successfulAttempts??state.successfulAttempts,
+        hintsUsed:parsed.hintsUsed??state.hintsUsed,drafts:parsed.drafts??state.drafts,conceptScores:parsed.conceptScores??state.conceptScores,conceptMastery:parsed.conceptMastery??state.conceptMastery,
+        history:Array.isArray(parsed.history)?parsed.history:state.history,streak:parsed.streak??state.streak,settings:{...state.settings,...parsed.settings}
       }));
       return {ok:true,message:'Прогресс импортирован.'};
-    } catch { return {ok:false,message:'Файл прогресса имеет неверный формат.'}; }
+    }catch{return {ok:false,message:'Файл прогресса имеет неверный формат.'};}
   },
-  resetProgress:()=>set({completedLessons:[],completedExercises:[],currentLessonId:'document-structure',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},drafts:{},conceptScores:{},history:[],streak:{count:0,lastActive:null}})
+  resetProgress:()=>set({completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null}})
 }),{
-  name:'latex-gym-state', version:1, storage:createJSONStorage(()=>localStorage),
+  name:'latex-gym-state',version:2,storage:createJSONStorage(()=>localStorage),
   migrate:(persisted,version)=>{
-    const p=(persisted??{}) as Record<string,unknown>;
-    if(version<1) return {...p,version:1} as unknown as AppState;
-    return p as unknown as AppState;
+    const state=(persisted??{}) as Record<string,unknown>;
+    if(version<2)return {...state,version:2,completedProjectStages:state.completedProjectStages??{},conceptMastery:state.conceptMastery??{}} as unknown as AppState;
+    return state as unknown as AppState;
   }
 }));
 
-export function exportProgress() {
+export function exportProgress(){
   const state=useAppStore.getState();
-  const data={
-    version:1,onboarded:state.onboarded,completedLessons:state.completedLessons,completedExercises:state.completedExercises,currentLessonId:state.currentLessonId,
-    bookmarks:state.bookmarks,attempts:state.attempts,successfulAttempts:state.successfulAttempts,hintsUsed:state.hintsUsed,drafts:state.drafts,conceptScores:state.conceptScores,history:state.history,streak:state.streak,settings:state.settings
-  };
-  return JSON.stringify(data,null,2);
+  return JSON.stringify({version:2,onboarded:state.onboarded,completedLessons:state.completedLessons,completedExercises:state.completedExercises,completedProjectStages:state.completedProjectStages,currentLessonId:state.currentLessonId,bookmarks:state.bookmarks,attempts:state.attempts,successfulAttempts:state.successfulAttempts,hintsUsed:state.hintsUsed,drafts:state.drafts,conceptScores:state.conceptScores,conceptMastery:state.conceptMastery,history:state.history,streak:state.streak,settings:state.settings},null,2);
 }
