@@ -68,7 +68,7 @@ export function LessonPage(){
       {lessons.map(item=><Link key={item.id} title={item.title} to={`/lesson/${item.id}`} className={item.id===lesson.id?'active':''}><span>{String(item.number).padStart(2,'0')}</span>{item.title}</Link>)}
     </aside>
 
-    <main className="lesson-center">
+    <div className="lesson-center">
       <header className="lesson-hero">
         <div className="lesson-hero-nav">
           <Link to="/courses" aria-label="Назад к курсам"><BackIcon/></Link>
@@ -99,7 +99,7 @@ export function LessonPage(){
         {safeSlide<slideCount-1?<button onClick={()=>setSlide(value=>value+1)} aria-label="Следующий шаг"><ChevronIcon/></button>:<button className="next-primary" onClick={finish} aria-label="Завершить урок"><ChevronIcon/></button>}
       </footer>
       <div className="lesson-neighbors">{prev&&<Link to={`/lesson/${prev.id}`}>← {prev.title}</Link>}{next&&<Link to={`/lesson/${next.id}`}>{next.title} →</Link>}</div>
-    </main>
+    </div>
 
     <aside className="lesson-context">
       <span className="eyebrow">КОНТЕКСТ</span>
