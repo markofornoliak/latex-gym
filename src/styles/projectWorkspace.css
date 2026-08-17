@@ -21,6 +21,26 @@
 .project-source-editor .editor-status-line{padding-inline:12px;border-bottom:1px solid var(--soft-border)}
 .project-source-editor .editor-frame{border:0}
 .project-editor>.compile-result-note,.project-editor>.validation-panel{margin-top:12px}
-@media(max-width:767px){.project-source-workspace{grid-template-columns:1fr}.project-file-tree{border-right:0;border-bottom:1px solid var(--soft-border)}.project-file-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px}.project-file-add{grid-template-columns:minmax(0,1fr) auto;align-items:center}.project-file-add button{padding:7px}.project-source-editor .editor-status-line{flex-wrap:wrap;gap:4px}}
+.full-compile-button{min-height:38px;border:1px solid var(--soft-border);background:transparent;padding:8px 13px;color:var(--navy);font-size:11px;cursor:pointer;transition:background-color .14s ease,border-color .14s ease}
+.full-compile-button:hover,.full-compile-button:focus-visible{background:rgba(6,26,58,.035);border-color:rgba(6,26,58,.28);outline:none}
+.full-compile-button:disabled{opacity:.45;cursor:default}
+.compile-result-note--error{border-color:rgba(120,35,35,.22)}
+.full-compile-result{margin-top:15px}
+.full-compile-summary{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--soft-border)}
+.full-compile-summary strong{font-family:var(--font-serif);font-size:13px;font-weight:500;color:var(--navy)}
+.full-compile-summary span{font-family:var(--font-mono);font-size:9px;color:var(--muted)}
+.full-compile-summary--error strong{color:var(--danger,#7a2929)}
+.full-compile-diagnostics{display:grid;gap:8px;padding:10px 0}
+.full-diagnostic{padding:10px 11px;border-left:2px solid var(--soft-border);background:rgba(255,255,255,.38)}
+.full-diagnostic>div{display:flex;justify-content:space-between;gap:8px;font-family:var(--font-mono);font-size:8.5px;color:var(--muted)}
+.full-diagnostic p{font-family:var(--font-mono);font-size:10.5px;line-height:1.45;margin:6px 0 0;color:var(--text);overflow-wrap:anywhere}
+.full-diagnostic small{display:block;font-size:9.5px;line-height:1.5;color:var(--secondary);margin-top:5px}
+.full-diagnostic--error{border-left-color:rgba(130,35,35,.5)}
+.full-diagnostic--warning{border-left-color:rgba(120,95,35,.45)}
+.full-compile-pdf{width:100%;height:min(64vh,760px);min-height:430px;border:1px solid var(--soft-border);background:#fff;margin-top:12px}
+.full-compile-log{border-top:1px solid var(--soft-border);margin-top:11px;padding-top:9px}
+.full-compile-log summary{font-size:10px;color:var(--secondary);cursor:pointer}
+.full-compile-log pre{max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--font-mono);font-size:9px;line-height:1.5;color:var(--secondary);background:rgba(6,26,58,.02);padding:10px;margin:8px 0 0}
+@media(max-width:767px){.project-source-workspace{grid-template-columns:1fr}.project-file-tree{border-right:0;border-bottom:1px solid var(--soft-border)}.project-file-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px}.project-file-add{grid-template-columns:minmax(0,1fr) auto;align-items:center}.project-file-add button{padding:7px}.project-source-editor .editor-status-line{flex-wrap:wrap;gap:4px}.full-compile-pdf{min-height:520px}.project-editor-actions .full-compile-button{order:2}.project-editor-actions .primary-button{order:3;width:100%}}
 @media(min-width:768px) and (max-width:1279px){.project-source-workspace{grid-template-columns:180px minmax(0,1fr)}}
-@media(min-width:2560px){.project-source-workspace{grid-template-columns:270px minmax(0,1fr)}.project-file-tree{padding:20px 16px}.project-file-row code{font-size:13px}.project-file-row>button:first-child{padding:11px 9px}.project-file-add input,.project-file-add button{font-size:12px}}
+@media(min-width:2560px){.project-source-workspace{grid-template-columns:270px minmax(0,1fr)}.project-file-tree{padding:20px 16px}.project-file-row code{font-size:13px}.project-file-row>button:first-child{padding:11px 9px}.project-file-add input,.project-file-add button{font-size:12px}.full-compile-button{min-height:44px;font-size:13px}.full-compile-summary strong{font-size:16px}.full-diagnostic p{font-size:13px}.full-diagnostic small{font-size:11px}.full-compile-log pre{font-size:11px}}
