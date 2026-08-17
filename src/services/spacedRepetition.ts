@@ -1,16 +1,38 @@
-import type { Exercise } from '../types';
+import type { ConceptMastery, Exercise } from '../types';
 
-export function selectDailyTraining(exercises:Exercise[], conceptScores:Record<string,number>, completedLessonIds:string[], daySeed = new Date().toISOString().slice(0,10)) {
-  const unlocked = exercises.filter(e => completedLessonIds.length === 0 ? e.difficulty === 'Начальный' : completedLessonIds.includes(e.lessonId));
-  const pool = unlocked.length >= 5 ? unlocked : exercises.filter(e => ['Начальный','Базовый'].includes(e.difficulty));
-  const hash = [...daySeed].reduce((a,c)=>((a*31)+c.charCodeAt(0))>>>0,7);
-  return [...pool].sort((a,b)=>{
-    const sa = a.concepts.reduce((sum,c)=>sum+(conceptScores[c] ?? 0),0)/Math.max(1,a.concepts.length);
-    const sb = b.concepts.reduce((sum,c)=>sum+(conceptScores[c] ?? 0),0)/Math.max(1,b.concepts.length);
-    if (sa !== sb) return sa-sb;
-    return seeded(a.id,hash)-seeded(b.id,hash);
+export function selectDailyTraining(
+  exercises:Exercise[],
+  conceptScores:Record<string,number>,
+  completedLessonIds:string[],
+  daySeed=new Date().toISOString().slice(0,10),
+  mastery:Record<string,ConceptMastery>={}
+){
+  const unlocked=exercises.filter(exercise=>completedLessonIds.length===0?exercise.difficulty==='Начальный':completedLessonIds.includes(exercise.lessonId));
+  const pool=unlocked.length>=5?unlocked:exercises.filter(exercise=>['Начальный','Базовый'].includes(exercise.difficulty));
+  const hash=[...daySeed].reduce((value,char)=>((value*31)+char.charCodeAt(0))>>>0,7);
+  const now=Date.now();
+  return [...pool].sort((left,right)=>{
+    const delta=priority(left,conceptScores,mastery,now)-priority(right,conceptScores,mastery,now);
+    if(Math.abs(delta)>.0001)return delta;
+    return seeded(left.id,hash)-seeded(right.id,hash);
   }).slice(0,5);
 }
-function seeded(id:string,seed:number) {
-  let x=seed; for(const c of id) x=(x*33+c.charCodeAt(0))>>>0; return x;
+
+function priority(exercise:Exercise,scores:Record<string,number>,mastery:Record<string,ConceptMastery>,now:number){
+  if(exercise.concepts.length===0)return 2;
+  return exercise.concepts.reduce((sum,conceptId)=>{
+    const state=mastery[conceptId];
+    if(!state)return sum+(scores[conceptId]??0)*.08-1.8;
+    const due=state.nextReview?new Date(state.nextReview).getTime()<=now:true;
+    const errorRate=state.attempts?state.mistakeCount/state.attempts:0;
+    const neverPracticed=!state.lastPracticed;
+    const daysSince=state.lastPracticed?Math.max(0,(now-new Date(state.lastPracticed).getTime())/86400000):30;
+    const weakness=state.score*4;
+    const reviewPressure=due?-2.5:0;
+    const mistakePressure=-errorRate*1.8;
+    const recencyPressure=-Math.min(1.5,daysSince/14);
+    return sum+weakness+reviewPressure+mistakePressure+recencyPressure+(neverPracticed?-1:0);
+  },0)/exercise.concepts.length;
 }
+
+function seeded(id:string,seed:number){let value=seed;for(const char of id)value=(value*33+char.charCodeAt(0))>>>0;return value;}
