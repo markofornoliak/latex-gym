@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Full TeX smoke</title></head>
+<body data-status="boot">boot
+<script>
+(async()=>{
+  const root='/latex-gym/full-tex/';
+  const body=document.body;
+  const fail=(message)=>{body.dataset.status='failed';body.textContent=`FULL_TEX_FAILED: ${message}`;};
+  const worker=new Worker(`${root}busytex_worker.js`);
+  const timeout=setTimeout(()=>{worker.terminate();fail('timeout');},90000);
+  worker.onerror=(event)=>{clearTimeout(timeout);fail(event.message||'worker error');};
+  worker.onmessage=(event)=>{
+    const message=event.data||{};
+    if(message.exception){clearTimeout(timeout);fail(message.exception);return;}
+    if(message.initialized){
+      body.dataset.status='compiling';body.textContent='compiling';
+      worker.postMessage({
+        files:[{path:'main.tex',contents:'\\documentclass{article}\n\\begin{document}\nFull Compile works. $E=mc^2$.\n\\end{document}\n'}],
+        main_tex_path:'main.tex',verbose:'silent',bibtex:null,driver:'xetex_bibtex8_dvipdfmx',data_packages_js:null
+      });
+      return;
+    }
+    if(message.exit_code===undefined)return;
+    clearTimeout(timeout);
+    const length=message.pdf?.byteLength||0;
+    if(message.exit_code===0&&length>1000){body.dataset.status='success';body.textContent=`FULL_TEX_OK PDF_BYTES=${length}`;}
+    else fail(`exit=${message.exit_code} pdf=${length} log=${String(message.log||'').slice(0,800)}`);
+    worker.terminate();
+  };
+  const packages=[`${root}texlive-basic.js`,`${root}ubuntu-texlive-latex-base.js`,`${root}ubuntu-texlive-latex-recommended.js`,`${root}ubuntu-texlive-latex-extra.js`];
+  worker.postMessage({
+    busytex_worker_js:`${root}busytex_worker.js`,busytex_pipeline_js:`${root}busytex_pipeline.js`,busytex_js:`${root}busytex.js`,busytex_wasm:`${root}busytex.wasm`,
+    texmf_local:[],preload:true,preload_data_packages_js:[packages[0]],data_packages_js:packages
+  });
+})().catch(error=>{document.body.dataset.status='failed';document.body.textContent=`FULL_TEX_FAILED: ${error?.message||error}`;});
+</script>
+</body>
+</html>
