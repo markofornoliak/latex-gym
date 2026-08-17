@@ -47,10 +47,12 @@ function CausalMath({latex,display,targets,causal}:{latex:string;display:boolean
     if(!host||!causal)return;
     const cleanups:Array<()=>void>=[];
     const fractions=[...host.querySelectorAll<HTMLElement>('.katex-html .mfrac')];
-    for(const target of targets.filter(item=>item.part)){
+    for(const target of targets){
+      const part=target.part;
+      if(!part)continue;
       const fraction=fractions[target.fractionIndex??0];
       if(!fraction)continue;
-      const node=target.part==='fraction'?fraction:fractionPart(fraction,target.part);
+      const node=part==='fraction'?fraction:fractionPart(fraction,part);
       if(!node)continue;
       node.classList.add('causal-output-target','causal-output-target--math-part');
       node.tabIndex=0;
