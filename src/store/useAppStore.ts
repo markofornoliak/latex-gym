@@ -38,14 +38,16 @@ type AppState = {
 };
 
 const defaultSettings:Settings = { textSize:'medium', wordWrap:true, autoClose:true, lineNumbers:true };
-const today = () => new Date().toISOString().slice(0,10);
+const pad2=(value:number)=>String(value).padStart(2,'0');
+const today = () => {const date=new Date();return `${date.getFullYear()}-${pad2(date.getMonth()+1)}-${pad2(date.getDate())}`;};
+const localDate = (value:string) => {const [year,month,day]=value.split('-').map(Number);return new Date(year,month-1,day,12);};
 
 function nextStreak(streak:AppState['streak']) {
   const current=today();
   if (streak.lastActive===current) return streak;
   if (!streak.lastActive) return {count:1,lastActive:current};
-  const prev=new Date(`${streak.lastActive}T12:00:00Z`);
-  const now=new Date(`${current}T12:00:00Z`);
+  const prev=localDate(streak.lastActive);
+  const now=localDate(current);
   const diff=Math.round((now.getTime()-prev.getTime())/86400000);
   return {count:diff===1?streak.count+1:1,lastActive:current};
 }
