@@ -8,16 +8,18 @@ import { useAppStore } from '../store/useAppStore';
 import type { CompilationState, CompileResult } from '../types';
 
 const CodeEditor=lazy(()=>import('../components/CodeEditor').then(module=>({default:module.CodeEditor})));
+const EMPTY_PROJECT_PROGRESS:string[]=[];
 
 export function ProjectPage(){
   const {projectId,stageId}=useParams();
   const navigate=useNavigate();
   const project=getProject(projectId);
-  const settings=useAppStore(state=>state.settings);
-  const drafts=useAppStore(state=>state.drafts);
-  const setDraft=useAppStore(state=>state.setDraft);
-  const completeStage=useAppStore(state=>state.completeProjectStage);
-  const projectProgress=useAppStore(state=>state.completedProjectStages[projectId??'']??[]);
+  const settings=useAppStore(store=>store.settings);
+  const drafts=useAppStore(store=>store.drafts);
+  const setDraft=useAppStore(store=>store.setDraft);
+  const completeStage=useAppStore(store=>store.completeProjectStage);
+  const completedProjectStages=useAppStore(store=>store.completedProjectStages);
+  const projectProgress=completedProjectStages[projectId??'']??EMPTY_PROJECT_PROGRESS;
   const index=useMemo(()=>project?Math.max(0,stageId?project.stages.findIndex(stage=>stage.id===stageId):0):0,[project,stageId]);
   const stage=project?.stages[index];
   const key=project&&stage?`project:${project.id}:${stage.id}`:'';
