@@ -17,7 +17,13 @@ type BusyTexMessage={
 type PendingCompilation={resolve:(result:FullCompileResult)=>void;reject:(error:Error)=>void;started:number;logLines:string[]};
 
 const FULL_TEX_DIR='full-tex/';
-const RELEASE_ASSETS=['busytex_worker.js','busytex_pipeline.js','busytex.js','busytex.wasm','texlive-basic.js','texlive-basic.data','ubuntu-texlive-latex-recommended.js','ubuntu-texlive-latex-recommended.data','ubuntu-texlive-latex-extra.js','ubuntu-texlive-latex-extra.data','ubuntu-texlive-science.js','ubuntu-texlive-science.data'] as const;
+const RELEASE_ASSETS=[
+  'busytex_worker.js','busytex_pipeline.js','busytex.js','busytex.wasm',
+  'texlive-basic.js','texlive-basic.data',
+  'ubuntu-texlive-latex-base.js','ubuntu-texlive-latex-base.data',
+  'ubuntu-texlive-latex-recommended.js','ubuntu-texlive-latex-recommended.data',
+  'ubuntu-texlive-latex-extra.js','ubuntu-texlive-latex-extra.data'
+] as const;
 
 export class FullCompiler{
   private worker:Worker|null=null;
@@ -64,7 +70,12 @@ export class FullCompiler{
       this.worker=new Worker(`${base}busytex_worker.js`);
       this.worker.addEventListener('message',event=>this.handleMessage(event.data as BusyTexMessage));
       this.worker.addEventListener('error',event=>this.handleWorkerError(new Error(event.message||'Ошибка TeX worker.')));
-      const packages=[`${base}texlive-basic.js`,`${base}ubuntu-texlive-latex-recommended.js`,`${base}ubuntu-texlive-latex-extra.js`,`${base}ubuntu-texlive-science.js`];
+      const packages=[
+        `${base}texlive-basic.js`,
+        `${base}ubuntu-texlive-latex-base.js`,
+        `${base}ubuntu-texlive-latex-recommended.js`,
+        `${base}ubuntu-texlive-latex-extra.js`
+      ];
       this.worker.postMessage({
         busytex_worker_js:`${base}busytex_worker.js`,
         busytex_pipeline_js:`${base}busytex_pipeline.js`,
@@ -120,8 +131,10 @@ export function fullTexBaseUrl(){
 
 export async function fullTexAssetsAvailable(base=fullTexBaseUrl()){
   try{
-    const response=await fetch(`${base}busytex_worker.js`,{method:'HEAD',cache:'force-cache'});
-    return response.ok;
+    const response=await fetch(`${base}manifest.json`,{method:'GET',cache:'force-cache'});
+    if(!response.ok)return false;
+    const manifest=await response.json() as {assets?:Record<string,{size?:number}>};
+    return RELEASE_ASSETS.every(name=>(manifest.assets?.[name]?.size??0)>0);
   }catch{return false;}
 }
 
