@@ -13,6 +13,7 @@ import './styles/deepProduct.css';
 import './styles/smartEditor.css';
 import './styles/projects.css';
 import './styles/referenceDeep.css';
+import './styles/progressDeep.css';
 
 registerSW({ immediate: true });
 createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
