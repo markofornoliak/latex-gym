@@ -5,7 +5,7 @@ type Education={category:MistakeCategory;conceptId?:string;plain:string;hints:[s
 export function educateDiagnostic(diagnostic:Diagnostic):Diagnostic{
   const text=`${diagnostic.message} ${diagnostic.explanation}`.toLowerCase();
   const education=classify(text,diagnostic);
-  return {...diagnostic,rawMessage:diagnostic.rawMessage??diagnostic.message,mistakeCategory:diagnostic.mistakeCategory??education.category,conceptId:diagnostic.conceptId??education.conceptId,explanation:education.plain,hints:diagnostic.hints??education.hints,suggestion:undefined};
+  return {...diagnostic,rawMessage:diagnostic.rawMessage??diagnostic.message,mistakeCategory:diagnostic.mistakeCategory??education.category,conceptId:diagnostic.conceptId??education.conceptId,explanation:education.plain,hints:diagnostic.hints??education.hints};
 }
 
 function classify(text:string,diagnostic:Diagnostic):Education{
