@@ -59,11 +59,11 @@ export function updateConceptMastery(previous:ConceptMastery|undefined,ok:boolea
   const successes=base.successes+(ok?1:0);
   const mistakeCount=base.mistakeCount+(ok?0:1);
   const hintPenalty=Math.min(.36,(evidence.hintsUsed??0)*.12);
-  const solutionPenalty=evidence.solutionRevealed?.34:0;
-  const firstTryBonus=evidence.firstTry?.08:0;
-  const applicationBonus=evidence.application?.1:0;
+  const solutionPenalty=evidence.solutionRevealed ? .34 : 0;
+  const firstTryBonus=evidence.firstTry ? .08 : 0;
+  const applicationBonus=evidence.application ? .1 : 0;
   const quality=ok?clamp(1-hintPenalty-solutionPenalty+firstTryBonus+applicationBonus,.22,1):0;
-  const learningRate=attempts<4?.32:.2;
+  const learningRate=attempts<4 ? .32 : .2;
   const score=clamp(base.score*(1-learningRate)+quality*learningRate,0,1);
   const stability=clamp(ok?base.stability*(1.08+quality*.38+score*.18):base.stability*.62,.5,60);
   const intervalDays=ok?Math.max(1,Math.round(stability*(score>.82?4:score>.62?2:1))):1;
