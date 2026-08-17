@@ -4,33 +4,33 @@
 <body data-status="boot">boot
 <script>
 (async()=>{
-  const root='/latex-gym/full-tex/';const body=document.body;let stage='image';let worker=null;let timer=null;
+  const root='/latex-gym/full-tex/';const body=document.body;let stage='image';let worker=null;let timer=null;const prints=[];
   const setStatus=(status,text)=>{body.dataset.status=status;body.textContent=text;};
-  const fail=(message)=>{if(timer)clearTimeout(timer);setStatus('failed',`FULL_TEX_FAILED ADVANCED: ${message}`);worker?.terminate();};
+  const fail=(message)=>{if(timer)clearTimeout(timer);setStatus('failed',`FULL_TEX_FAILED ADVANCED: ${message}${prints.length?` PRINT=${prints.slice(-8).join(' | ')}`:''}`);worker?.terminate();};
   const phaseTimeout=(message,ms)=>{if(timer)clearTimeout(timer);timer=setTimeout(()=>fail(message),ms);};
   const png=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='),char=>char.charCodeAt(0));
-  setStatus('loading-engine','loading engine for advanced compile');
-  phaseTimeout('engine initialization timed out',180000);
   worker=new Worker(`${root}busytex_worker.js`);
-  const compileImage=()=>{setStatus('compiling-image','compiling image asset');phaseTimeout('image compilation timed out',120000);worker.postMessage({files:[{path:'main.tex',contents:'\\documentclass{article}\n\\usepackage{graphicx}\n\\begin{document}\n\\includegraphics[width=8mm]{figures/pixel.png}\n\\end{document}\n'},{path:'figures/pixel.png',contents:png}],main_tex_path:'main.tex',verbose:'silent',bibtex:null,driver:'xetex_bibtex8_dvipdfmx',data_packages_js:null});};
-  const compileBibliography=()=>{setStatus('compiling-bibliography','compiling bibliography');phaseTimeout('bibliography compilation timed out',180000);worker.postMessage({files:[{path:'main.tex',contents:'\\documentclass{article}\n\\usepackage[backend=bibtex]{biblatex}\n\\addbibresource{references.bib}\n\\begin{document}\nKnuth~\\cite{knuth1984}.\n\\printbibliography\n\\end{document}\n'},{path:'references.bib',contents:'@book{knuth1984, author={Donald E. Knuth}, title={The TeXbook}, year={1984}}\n'}],main_tex_path:'main.tex',verbose:'silent',bibtex:null,driver:'xetex_bibtex8_dvipdfmx',data_packages_js:null});};
+  const compileImage=()=>{setStatus('compiling-image','initializing engine and compiling image asset');phaseTimeout('image compilation timed out',300000);worker.postMessage({files:[{path:'main.tex',contents:'\\documentclass{article}\n\\usepackage{graphicx}\n\\begin{document}\n\\includegraphics[width=8mm]{figures/pixel.png}\n\\end{document}\n'},{path:'figures/pixel.png',contents:png}],main_tex_path:'main.tex',verbose:'silent',bibtex:null});};
+  const compileBibliography=()=>{setStatus('compiling-bibliography','compiling bibliography');phaseTimeout('bibliography compilation timed out',300000);worker.postMessage({files:[{path:'main.tex',contents:'\\documentclass{article}\n\\usepackage[backend=bibtex]{biblatex}\n\\addbibresource{references.bib}\n\\begin{document}\nKnuth~\\cite{knuth1984}.\n\\printbibliography\n\\end{document}\n'},{path:'references.bib',contents:'@book{knuth1984, author={Donald E. Knuth}, title={The TeXbook}, year={1984}}\n'}],main_tex_path:'main.tex',verbose:'silent',bibtex:null});};
   worker.onerror=(event)=>fail(event.message||'worker error');
   worker.onmessage=(event)=>{
-    const message=event.data||{};if(message.exception){fail(message.exception);return;}
-    if(message.initialized){if(timer)clearTimeout(timer);compileImage();return;}
-    if(message.exit_code===undefined)return;
+    const message=event.data||{};
+    if(message.print){prints.push(String(message.print));return;}
+    if(!Object.prototype.hasOwnProperty.call(message,'pdf')&&!Object.prototype.hasOwnProperty.call(message,'log'))return;
     if(timer)clearTimeout(timer);
     const pdfBytes=message.pdf?.byteLength||0;const log=String(message.log||'');
-    if(message.exit_code!==0||pdfBytes<1000){fail(`${stage} exit=${message.exit_code} pdf=${pdfBytes} log=${log.slice(0,1600)}`);return;}
+    if(pdfBytes<1000){fail(`${stage} pdf=${pdfBytes} log=${log.slice(0,1800)}`);return;}
     if(stage==='image'){
-      if(/File .* not found|Cannot determine size of graphic/i.test(log)){fail(`image resource was not resolved: ${log.slice(0,1600)}`);return;}
+      if(/File .* not found|Cannot determine size of graphic/i.test(log)){fail(`image resource was not resolved: ${log.slice(0,1800)}`);return;}
       stage='bibliography';compileBibliography();return;
     }
-    if(/Citation .* undefined|There were undefined references|Empty bibliography/i.test(log)){fail(`bibliography remained unresolved: ${log.slice(0,2000)}`);return;}
+    if(/Citation .* undefined|There were undefined references|Empty bibliography/i.test(log)){fail(`bibliography remained unresolved: ${log.slice(0,2200)}`);return;}
     setStatus('success',`FULL_TEX_OK ADVANCED PDF_BYTES=${pdfBytes}`);worker.terminate();
   };
-  const packages=[`${root}texlive-basic.js`,`${root}ubuntu-texlive-latex-base.js`,`${root}ubuntu-texlive-latex-recommended.js`,`${root}ubuntu-texlive-latex-extra.js`];
-  worker.postMessage({busytex_worker_js:`${root}busytex_worker.js`,busytex_pipeline_js:`${root}busytex_pipeline.js`,busytex_js:`${root}busytex.js`,busytex_wasm:`${root}busytex.wasm`,texmf_local:[],preload:true,preload_data_packages_js:[packages[0]],data_packages_js:packages});
+  const texliveJs=[`${root}texlive-basic.js`,`${root}ubuntu-texlive-latex-base.js`,`${root}ubuntu-texlive-latex-recommended.js`,`${root}ubuntu-texlive-latex-extra.js`];
+  setStatus('loading-engine','initializing pinned BusyTeX worker');
+  worker.postMessage({busytex_js:`${root}busytex.js`,busytex_wasm:`${root}busytex.wasm`,texlive_js:texliveJs,texmf_local:[],preload:true,verbose:'silent'});
+  compileImage();
 })().catch(error=>{document.body.dataset.status='failed';document.body.textContent=`FULL_TEX_FAILED ADVANCED: ${error?.stack||error?.message||error}`;});
 </script>
 </body>
