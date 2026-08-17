@@ -72,13 +72,30 @@ jobs:
             local name="$1" route="$2" width="$3" height="$4" expected="$5"
             local url="http://127.0.0.1:4173/latex-gym/#${route}"
             local browser_log="/tmp/${name}.browser.log"
+            local dom="/tmp/${name}.html"
+            echo "QA ${name}: ${width}x${height} ${route}"
             "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars \
               --force-device-scale-factor=1 --run-all-compositor-stages-before-draw \
               --virtual-time-budget=2400 --window-size="${width},${height}" \
-              --dump-dom "$url" > "/tmp/${name}.html" 2> "$browser_log"
-            grep -Fq "$expected" "/tmp/${name}.html"
-            ! grep -Fq 'Страница не найдена' "/tmp/${name}.html"
-            ! grep -Eq 'Uncaught (TypeError|ReferenceError|SyntaxError)|CONSOLE.*ERROR' "$browser_log"
+              --dump-dom "$url" > "$dom" 2> "$browser_log"
+
+            if ! grep -Fq "$expected" "$dom"; then
+              echo "Expected text not found: ${expected}"
+              tail -n 50 "$dom" || true
+              cat "$browser_log" || true
+              return 1
+            fi
+            if grep -Fq 'Страница не найдена' "$dom"; then
+              echo "Route rendered the fallback page: ${route}"
+              cat "$browser_log" || true
+              return 1
+            fi
+            if grep -Eq 'Uncaught (TypeError|ReferenceError|SyntaxError)|CONSOLE.*ERROR' "$browser_log"; then
+              echo "Browser reported a JavaScript error for ${route}"
+              cat "$browser_log"
+              return 1
+            fi
+
             "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars \
               --force-device-scale-factor=1 --run-all-compositor-stages-before-draw \
               --virtual-time-budget=2400 --window-size="${width},${height}" \
