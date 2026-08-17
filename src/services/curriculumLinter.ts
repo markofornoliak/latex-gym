@@ -4,6 +4,8 @@ import { conceptById } from '../data/concepts';
 export type CurriculumIssue={severity:'error'|'warning';code:string;message:string;lessonId?:string;exerciseId?:string};
 
 const unique=(values:string[])=>new Set(values).size===values.length;
+const normalizeGroupWhitespace=(source:string)=>source.replace(/[ \t]+}/g,'}');
+const hasStructuralText=(source:string,value:string)=>source.includes(value)||normalizeGroupWhitespace(source).includes(normalizeGroupWhitespace(value));
 
 export function lintCurriculum(lessons:Lesson[],exercises:Exercise[],references:ReferenceEntry[]):CurriculumIssue[]{
   const issues:CurriculumIssue[]=[];
@@ -65,9 +67,9 @@ function ruleSatisfiedBySolution(rule:ValidatorRule,source:string):boolean{
     case 'documentClass':return new RegExp(`\\\\documentclass(?:\\[[^\\]]*\\])?\\{${escapeRegExp(rule.value)}\\}`).test(source);
     case 'documentClassOption':return new RegExp(`\\\\documentclass\\[[^\\]]*${escapeRegExp(rule.value)}[^\\]]*\\]`).test(source);
     case 'environment':return new RegExp(`\\\\begin\\{${escapeRegExp(rule.value)}\\}[\\s\\S]*\\\\end\\{${escapeRegExp(rule.value)}\\}`).test(source);
-    case 'command':return (source.match(new RegExp(`\\\\${escapeRegExp(rule.value)}(?=\\s*\\{|\\s*\\[|\\b)`,'g'))??[]).length>=(rule.min??1);
+    case 'command':return (source.match(new RegExp(`\\\\${escapeRegExp(rule.value)}(?=[^A-Za-z@]|$)`,'g'))??[]).length>=(rule.min??1);
     case 'package':return new RegExp(`\\\\usepackage(?:\\[[^\\]]*\\])?\\{[^}]*${escapeRegExp(rule.value)}[^}]*\\}`).test(source.split(/\\begin\{document\}/)[0]??source);
-    case 'containsText':return source.includes(rule.value);
+    case 'containsText':return hasStructuralText(source,rule.value);
     case 'forbiddenText':return !source.includes(rule.value);
     case 'regex':try{return new RegExp(rule.value,rule.flags).test(source);}catch{return false;}
     case 'paragraph':return /[\p{L}\p{N}]{2,}/u.test(source.replace(/\\[a-zA-Z]+/g,' '));
