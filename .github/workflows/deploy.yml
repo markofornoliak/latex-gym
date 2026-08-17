@@ -3,6 +3,8 @@ name: Deploy LaTeX gym to GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -12,7 +14,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -21,88 +23,77 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-
       - name: Install dependencies
         run: npm ci
-
       - name: Typecheck
         run: npm run typecheck
-
-      - name: Test
+      - name: Unit tests
         run: npm test
-
+      - name: Curriculum integrity
+        run: npm run validate:curriculum
+      - name: Cache pinned browser TeX assets
+        uses: actions/cache@v4
+        with:
+          path: public/full-tex
+          key: busytex-build-b16fdf28019d93ccfd8f09776e4191835acea5dc-release-88f12c721278c652c9fb69c6a097af9481a2ae7e
+      - name: Install pinned browser TeX assets
+        run: npm run install:full-tex
       - name: Build
         run: npm run build
 
-      - name: Production visual and route QA
+      - name: Production browser, Full TeX and E2E QA
         shell: bash
         run: |
           set -euo pipefail
+          cp scripts/full-tex-smoke.html dist/full-tex-smoke.html
+          cp scripts/full-tex-advanced-smoke.html dist/full-tex-advanced-smoke.html
           npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/latex-gym-preview.log 2>&1 &
           PREVIEW_PID=$!
           trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
 
           READY=0
           for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:4173/latex-gym/ >/dev/null; then
-              READY=1
-              break
-            fi
+            if curl -fsS http://127.0.0.1:4173/latex-gym/ >/dev/null; then READY=1; break; fi
             sleep 1
           done
-          if [ "$READY" -ne 1 ]; then
-            cat /tmp/latex-gym-preview.log
-            exit 1
-          fi
+          if [ "$READY" -ne 1 ]; then cat /tmp/latex-gym-preview.log; exit 1; fi
+          curl -fsS http://127.0.0.1:4173/latex-gym/full-tex/manifest.json | grep -Fq 'build_b16fdf28019d93ccfd8f09776e4191835acea5dc'
 
           CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
-          if [ -z "$CHROME" ]; then
-            echo 'A Chromium-compatible browser is required for visual QA.'
-            exit 1
-          fi
+          if [ -z "$CHROME" ]; then echo 'A Chromium-compatible browser is required for browser QA.'; exit 1; fi
+
+          echo 'QA Full Compile: real document, figure asset and bibliography workflow'
+          "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --remote-debugging-port=9222 --user-data-dir=/tmp/latex-gym-full-tex-cdp about:blank > /tmp/full-tex-chrome.log 2>&1 &
+          SMOKE_CHROME_PID=$!
+          for i in {1..30}; do if curl -fsS http://127.0.0.1:9222/json/version >/dev/null; then break; fi; sleep 1; done
+          if ! timeout 135 node scripts/full-tex-smoke.mjs 'http://127.0.0.1:4173/latex-gym/full-tex-smoke.html'; then cat /tmp/full-tex-chrome.log || true; kill "$SMOKE_CHROME_PID" 2>/dev/null || true; exit 1; fi
+          if ! timeout 240 node scripts/full-tex-smoke.mjs 'http://127.0.0.1:4173/latex-gym/full-tex-advanced-smoke.html'; then cat /tmp/full-tex-chrome.log || true; kill "$SMOKE_CHROME_PID" 2>/dev/null || true; exit 1; fi
+          kill "$SMOKE_CHROME_PID" 2>/dev/null || true
+          rm -f dist/full-tex-smoke.html dist/full-tex-advanced-smoke.html
 
           mkdir -p qa-screenshots
           capture() {
             local name="$1" route="$2" width="$3" height="$4" expected="$5"
             local url="http://127.0.0.1:4173/latex-gym/#${route}"
-            local browser_log="/tmp/${name}.browser.log"
-            local dom="/tmp/${name}.html"
+            local browser_log="/tmp/${name}.browser.log" dom="/tmp/${name}.html"
             echo "QA ${name}: ${width}x${height} ${route}"
-            "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars \
-              --force-device-scale-factor=1 --run-all-compositor-stages-before-draw \
-              --virtual-time-budget=2400 --window-size="${width},${height}" \
+            "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
+              --run-all-compositor-stages-before-draw --virtual-time-budget=2400 --window-size="${width},${height}" \
               --dump-dom "$url" > "$dom" 2> "$browser_log"
-
-            if ! grep -Fq "$expected" "$dom"; then
-              echo "Expected text not found: ${expected}"
-              tail -n 50 "$dom" || true
-              cat "$browser_log" || true
-              return 1
-            fi
-            if grep -Fq 'Страница не найдена' "$dom"; then
-              echo "Route rendered the fallback page: ${route}"
-              cat "$browser_log" || true
-              return 1
-            fi
-            if grep -Eq 'Uncaught (TypeError|ReferenceError|SyntaxError)|CONSOLE.*ERROR' "$browser_log"; then
-              echo "Browser reported a JavaScript error for ${route}"
-              cat "$browser_log"
-              return 1
-            fi
-
-            "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars \
-              --force-device-scale-factor=1 --run-all-compositor-stages-before-draw \
-              --virtual-time-budget=2400 --window-size="${width},${height}" \
+            if ! grep -Fq "$expected" "$dom"; then echo "Expected text not found: ${expected}"; tail -n 50 "$dom" || true; cat "$browser_log" || true; return 1; fi
+            if grep -Fq 'Страница не найдена' "$dom"; then echo "Route rendered fallback: ${route}"; return 1; fi
+            if grep -Eq 'Uncaught (TypeError|ReferenceError|SyntaxError)|CONSOLE.*ERROR' "$browser_log"; then echo "Browser JavaScript error: ${route}"; cat "$browser_log"; return 1; fi
+            "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
+              --run-all-compositor-stages-before-draw --virtual-time-budget=2400 --window-size="${width},${height}" \
               --screenshot="qa-screenshots/${name}.png" "$url" 2>> "$browser_log"
           }
 
-          # Intentional device matrix: phone, tablet, laptop, desktop and TV/4K.
           capture phone-320-foundation /lesson/what-is-latex 320 568 'Что такое LaTeX'
           capture phone-360-practice /practice/deep-001 360 800 'ЗАДАНИЕ 1 ИЗ 3'
           capture phone-390-command /lesson/commands-foundation 390 844 'Команды'
@@ -111,15 +102,55 @@ jobs:
           capture tablet-1024-project /project/academic-paper/stage-4 1024 1366 'Математическая модель'
           capture laptop-1280-lesson /lesson/table-anatomy 1280 800 'Анатомия tabular'
           capture desktop-1440-practice /practice/e01 1440 900 'Проверить решение'
+          capture desktop-1440-playground /playground 1440 900 'Свободный документ'
           capture desktop-1920-project /project/academic-paper/stage-10 1920 1080 'Архитектура публикации'
           capture tv-2560-debug /lesson/debug-alignment-tab 2560 1440 'Extra alignment tab'
           capture tv-3840-project /project/technical-report/build 3840 2160 'Сборка'
 
-          # A second load of the same deep route exercises reload/direct-route behavior.
           "$CHROME" --headless --no-sandbox --disable-gpu --virtual-time-budget=1600 \
             --dump-dom 'http://127.0.0.1:4173/latex-gym/#/lesson/what-is-latex' > /tmp/reload.html 2>/tmp/reload.browser.log
           grep -Fq 'Что такое LaTeX' /tmp/reload.html
           ! grep -Fq 'Страница не найдена' /tmp/reload.html
+
+          echo 'QA E2E: conceptual exercise → compiler failure → repair → persistence → project acceptance → offline PWA'
+          "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --remote-debugging-port=9222 --user-data-dir=/tmp/latex-gym-e2e-cdp about:blank > /tmp/e2e-chrome.log 2>&1 &
+          E2E_CHROME_PID=$!
+          for i in {1..30}; do if curl -fsS http://127.0.0.1:9222/json/version >/dev/null; then break; fi; sleep 1; done
+          if ! timeout 120 node scripts/e2e-learning.mjs 'http://127.0.0.1:4173'; then cat /tmp/e2e-chrome.log || true; kill "$E2E_CHROME_PID" 2>/dev/null || true; exit 1; fi
+          if ! timeout 240 node scripts/e2e-project.mjs 'http://127.0.0.1:4173'; then cat /tmp/e2e-chrome.log || true; kill "$E2E_CHROME_PID" 2>/dev/null || true; exit 1; fi
+          if ! timeout 90 node scripts/e2e-pwa.mjs 'http://127.0.0.1:4173'; then cat /tmp/e2e-chrome.log || true; kill "$E2E_CHROME_PID" 2>/dev/null || true; exit 1; fi
+          kill "$E2E_CHROME_PID" 2>/dev/null || true
+
+      - name: Download main visual baseline
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN_ID=$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?branch=main&status=success&event=push&per_page=1" \
+            | python -c "import json,sys; data=json.load(sys.stdin); print(data['workflow_runs'][0]['id'])")
+          ARTIFACT_ID=$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts" \
+            | python -c "import json,sys; data=json.load(sys.stdin); matches=[a for a in data['artifacts'] if a['name']=='latex-gym-visual-qa' and not a['expired']]; print(matches[0]['id'])")
+          mkdir -p qa-baseline
+          curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" -o /tmp/latex-gym-baseline.zip
+          unzip -q /tmp/latex-gym-baseline.zip -d qa-baseline
+
+      - name: Visual regression against main
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/compare-png.py qa-baseline/phone-320-foundation.png qa-screenshots/phone-320-foundation.png 0.48 32
+          python scripts/compare-png.py qa-baseline/phone-390-command.png qa-screenshots/phone-390-command.png 0.48 32
+          python scripts/compare-png.py qa-baseline/tablet-768-reference.png qa-screenshots/tablet-768-reference.png 0.45 32
+          python scripts/compare-png.py qa-baseline/laptop-1280-lesson.png qa-screenshots/laptop-1280-lesson.png 0.52 32
+          python scripts/compare-png.py qa-baseline/desktop-1440-practice.png qa-screenshots/desktop-1440-practice.png 0.58 32
+          python scripts/compare-png.py qa-baseline/desktop-1920-project.png qa-screenshots/desktop-1920-project.png 0.55 32
 
       - name: Upload visual QA screenshots
         uses: actions/upload-artifact@v6
@@ -129,20 +160,39 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Upload production build for Pages packaging
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v6
+        with:
+          name: latex-gym-dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+
+  package-pages:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download validated production build
+        uses: actions/download-artifact@v5
+        with:
+          name: latex-gym-dist
+          path: dist
       - name: Configure Pages
         uses: actions/configure-pages@v6
-
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
           path: ./dist
 
   deploy:
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: build
+    needs: package-pages
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

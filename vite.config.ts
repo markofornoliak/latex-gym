@@ -23,7 +23,17 @@ export default defineConfig({
       workbox: {
         navigateFallback: 'index.html',
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
-        cleanupOutdatedCaches: true
+        globIgnores: ['full-tex/**'],
+        cleanupOutdatedCaches: true,
+        runtimeCaching: [{
+          urlPattern: ({url}) => url.origin === self.location.origin && url.pathname.includes('/full-tex/'),
+          handler: 'CacheFirst',
+          options: {
+            cacheName: 'latex-gym-full-tex-v1',
+            expiration: { maxEntries: 24, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            cacheableResponse: { statuses: [200] }
+          }
+        }]
       }
     })
   ],

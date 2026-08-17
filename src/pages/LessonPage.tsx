@@ -5,7 +5,7 @@ import { CodeBlock } from '../components/CodeBlock';
 import { LatexPreview } from '../components/LatexPreview';
 import { LearningBlockView } from '../components/LearningBlockView';
 import { conceptById } from '../data/concepts';
-import { getLesson, lessonIndex, lessons } from '../data/courses';
+import { getLesson, lessonIndex, lessons, modules } from '../data/courses';
 import { compiler } from '../services/compiler';
 import { useAppStore } from '../store/useAppStore';
 import type { CompileResult, TheoryBlock as TheoryBlockType } from '../types';
@@ -20,6 +20,7 @@ export function LessonPage(){
   const [slide,setSlide]=useState(0);
   const [exampleResult,setExampleResult]=useState<CompileResult|null>(null);
   const bookmarks=useAppStore(state=>state.bookmarks);
+  const completedLessons=useAppStore(state=>state.completedLessons);
   const toggle=useAppStore(state=>state.toggleBookmark);
   const complete=useAppStore(state=>state.completeLesson);
   const setCurrent=useAppStore(state=>state.setCurrentLesson);
@@ -35,6 +36,8 @@ export function LessonPage(){
   const index=lesson?lessonIndex.get(lesson.id)??0:0;
   const prev=lessons[index-1];
   const next=lessons[index+1];
+  const currentModuleIndex=lesson?modules.findIndex(module=>module.id===lesson.moduleId):-1;
+  const visibleModules=currentModuleIndex>=0?modules.filter((_,moduleIndex)=>Math.abs(moduleIndex-currentModuleIndex)<=1):[];
   const theoryCount=lesson?.content?.length??lesson?.theory.length??1;
   const slideCount=tab==='theory'?theoryCount:tab==='example'?lesson?.examples.length??1:lesson?.exercises.length??1;
   const safeSlide=Math.min(slide,Math.max(0,slideCount-1));
@@ -65,7 +68,19 @@ export function LessonPage(){
     <aside className="lesson-sidebar" aria-label="Содержание курса">
       <Link to="/courses" className="lesson-side-brand">LaTeX gym</Link>
       <span className="eyebrow">СОДЕРЖАНИЕ</span>
-      {lessons.map(item=><Link key={item.id} title={item.title} to={`/lesson/${item.id}`} className={item.id===lesson.id?'active':''}><span>{String(item.number).padStart(2,'0')}</span>{item.title}</Link>)}
+      <nav className="lesson-toc" aria-label="Оглавление модуля">
+        {visibleModules.map(module=>{
+          const expanded=module.id===lesson.moduleId;
+          return <section className={`lesson-toc-module ${expanded?'is-current':''}`} key={module.id}>
+            <Link className="lesson-toc-module-title" to={`/course/${module.id}`}><span>{String(module.number).padStart(2,'0')}</span><strong>{module.title}</strong><small>{expanded?'текущий модуль':module.number<(modules[currentModuleIndex]?.number??0)?'предыдущий':'следующий'}</small></Link>
+            {expanded&&<div className="lesson-toc-lessons">{module.lessons.map(item=>{
+              const done=completedLessons.includes(item.id);
+              return <Link key={item.id} title={item.title} to={`/lesson/${item.id}`} className={item.id===lesson.id?'active':''}><span>{String(item.number).padStart(2,'0')}</span><strong>{item.title}</strong>{done&&<i aria-label="Урок завершён">✓</i>}</Link>;
+            })}</div>}
+          </section>;
+        })}
+      </nav>
+      <Link className="lesson-toc-all" to="/courses">Полное содержание</Link>
     </aside>
 
     <div className="lesson-center">

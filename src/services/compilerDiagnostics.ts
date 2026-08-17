@@ -1,111 +1,23 @@
 import type { Diagnostic } from '../types';
+import { educateDiagnostic } from './diagnosticEducation';
 
 const knownEnvironments=new Set(['document','abstract','itemize','enumerate','quote','quotation','center','flushleft','flushright','equation','equation*','align','align*','gather','gather*','multline','multline*','matrix','pmatrix','bmatrix','vmatrix','Vmatrix','cases','tabular','table','figure','tikzpicture','proof','frame']);
 
 export function diagnoseLatex(source:string):Diagnostic[]{
   const diagnostics:Diagnostic[]=[];
   const cleaned=stripComments(source);
-  diagnoseBraces(cleaned,diagnostics);
-  diagnoseEnvironments(cleaned,diagnostics);
-  diagnoseKnownTypos(cleaned,diagnostics);
-  diagnoseMathDelimiters(cleaned,diagnostics);
-  diagnoseAlignment(cleaned,diagnostics);
-  diagnoseLabels(cleaned,diagnostics);
-  diagnosePackageRequirements(cleaned,diagnostics);
-  diagnoseExternalResourceSyntax(cleaned,diagnostics);
-  return dedupeDiagnostics(diagnostics);
+  diagnoseBraces(cleaned,diagnostics);diagnoseEnvironments(cleaned,diagnostics);diagnoseKnownTypos(cleaned,diagnostics);diagnoseMathDelimiters(cleaned,diagnostics);diagnoseAlignment(cleaned,diagnostics);diagnoseLabels(cleaned,diagnostics);diagnosePackageRequirements(cleaned,diagnostics);diagnoseExternalResourceSyntax(cleaned,diagnostics);
+  return dedupeDiagnostics(diagnostics).map(educateDiagnostic);
 }
-
 export function lineOf(source:string,index:number){return source.slice(0,Math.max(0,index)).split('\n').length;}
-
 function stripComments(source:string){return source.replace(/(^|[^\\])%.*$/gm,'$1');}
-
-function diagnoseBraces(source:string,out:Diagnostic[]){
-  let depth=0;let firstExtra=-1;
-  for(let index=0;index<source.length;index++){
-    if(source[index]==='{'&&source[index-1]!=='\\')depth++;
-    if(source[index]==='}'&&source[index-1]!=='\\'){
-      depth--;
-      if(depth<0&&firstExtra<0)firstExtra=index;
-    }
-  }
-  if(firstExtra>=0)out.push({severity:'error',line:lineOf(source,firstExtra),message:'Extra } / несогласованная фигурная скобка',explanation:'Закрывающая скобка не соответствует открытой группе или аргументу.',suggestion:'Удалите лишнюю } или восстановите открывающую { в конструкции, которой она принадлежит.'});
-  else if(depth>0)out.push({severity:'error',line:lineOf(source,source.length),message:'Missing } inserted',explanation:'Один или несколько обязательных аргументов или групп не закрыты.',suggestion:'Найдите ближайшую незавершённую конструкцию {...}; не добавляйте } в конец файла наугад.'});
-}
-
-function diagnoseEnvironments(source:string,out:Diagnostic[]){
-  const custom=new Set<string>();
-  for(const match of source.matchAll(/\\newenvironment\s*\{([^}]+)\}/g))custom.add(match[1]);
-  for(const match of source.matchAll(/\\newtheorem\s*\{([^}]+)\}/g))custom.add(match[1]);
-
-  const stack:Array<{name:string;index:number}>=[];
-  for(const match of source.matchAll(/\\(begin|end)\s*\{([^}]+)\}/g)){
-    const kind=match[1];const name=match[2];const index=match.index??0;
-    if(kind==='begin'){
-      if(!knownEnvironments.has(name)&&!custom.has(name))out.push({severity:'error',line:lineOf(source,index),message:`Environment ${name} undefined`,explanation:`LaTeX не знает окружение ${name}. Возможна опечатка, отсутствующий пакет или отсутствующее собственное определение.`,suggestion:'Проверьте имя, затем пакет или \\newenvironment/\\newtheorem в преамбуле.'});
-      stack.push({name,index});
-    }else{
-      const top=stack.pop();
-      if(!top||top.name!==name){
-        out.push({severity:'error',line:lineOf(source,index),message:`Окружение ${name} закрыто неверно`,explanation:top?`Сейчас открыто окружение ${top.name}, но встречено \\end{${name}}.`:`Найдено \\end{${name}} без соответствующего \\begin.`,suggestion:top?`Замените на \\end{${top.name}} или исправьте открывающее окружение.`:`Добавьте \\begin{${name}} перед этим местом.`});
-        break;
-      }
-    }
-  }
-  if(stack.length){const top=stack.at(-1)!;out.push({severity:'error',line:lineOf(source,top.index),message:`Не закрыто окружение ${top.name}`,explanation:`Для \\begin{${top.name}} не найдено соответствующее завершение.`,suggestion:`Добавьте \\end{${top.name}} в логически правильном месте.`});}
-}
-
-function diagnoseKnownTypos(source:string,out:Diagnostic[]){
-  const typos:Record<string,string>={secton:'section',subsecton:'subsection',documetclass:'documentclass',begn:'begin',inclduegraphics:'includegraphics',usepakage:'usepackage'};
-  for(const [wrong,right] of Object.entries(typos)){
-    const match=new RegExp(`\\\\${wrong}\\b`).exec(source);
-    if(match)out.push({severity:'error',line:lineOf(source,match.index),message:`Undefined control sequence: \\${wrong}`,explanation:`Команда \\${wrong} не определена. Для этой формы наиболее вероятна опечатка.`,suggestion:`Возможно, вы имели в виду \\${right}.`});
-  }
-}
-
-function diagnoseMathDelimiters(source:string,out:Diagnostic[]){
-  const dollars=[...source.matchAll(/(?<!\\)\$/g)];
-  if(dollars.length%2!==0){const last=dollars.at(-1);out.push({severity:'error',line:lineOf(source,last?.index??source.length),message:'Missing $ inserted / математический режим не закрыт',explanation:'Количество неэкранированных символов $ нечётно, поэтому граница математического режима неоднозначна.',suggestion:'Добавьте закрывающий $ либо удалите лишний открывающий.'});}
-  const opens=[...source.matchAll(/\\\[/g)].length;const closes=[...source.matchAll(/\\\]/g)].length;
-  if(opens!==closes)out.push({severity:'error',line:1,message:'Несогласованы \\[ и \\]',explanation:'Выключной математический режим должен иметь открывающую и закрывающую границы.',suggestion:'Проверьте пары \\[ ... \\].'});
-}
-
-function diagnoseAlignment(source:string,out:Diagnostic[]){
-  for(const table of source.matchAll(/\\begin\{tabular\}\{([^}]*)\}([\s\S]*?)\\end\{tabular\}/g)){
-    const spec=table[1];const content=table[2];const columns=(spec.match(/[lcrX]|[pmb]\s*\{/g)??[]).length;
-    if(columns<1)continue;
-    let offset=(table.index??0)+table[0].indexOf(content);
-    for(const row of content.split(/\\\\/)){
-      const cells=(row.match(/(?<!\\)&/g)??[]).length+1;
-      if(cells>columns){out.push({severity:'error',line:lineOf(source,offset),message:'Extra alignment tab has been changed to \\cr',explanation:`Строка содержит ${cells} ячейки, но спецификация tabular описывает ${columns}. Лишний & создаёт дополнительную ячейку.`,suggestion:'Исправьте число & либо модель столбцов tabular.'});break;}
-      offset+=row.length+2;
-    }
-  }
-}
-
-function diagnoseLabels(source:string,out:Diagnostic[]){
-  const seen=new Set<string>();
-  for(const match of source.matchAll(/\\label\{([^}]+)\}/g)){
-    const key=match[1];
-    if(seen.has(key))out.push({severity:'warning',line:lineOf(source,match.index??0),message:`Метка ${key} объявлена повторно`,explanation:'Перекрёстные ссылки на дублирующуюся метку неоднозначны.',suggestion:'Используйте уникальные смысловые ключи label.'});
-    seen.add(key);
-  }
-}
-
-function diagnosePackageRequirements(source:string,out:Diagnostic[]){
-  const preamble=source.split(/\\begin\s*\{document\}/)[0]??source;
-  const loaded=(name:string)=>new RegExp(`\\\\usepackage(?:\\[[^\\]]*\\])?\\{[^}]*\\b${escapeRegExp(name)}\\b[^}]*\\}`).test(preamble);
-  if(/\\includegraphics\b/.test(source)&&!loaded('graphicx')){const index=source.search(/\\includegraphics\b/);out.push({severity:'error',line:lineOf(source,index),message:'Undefined control sequence: \\includegraphics',explanation:'Команда вставки изображений определяется пакетом graphicx.',suggestion:'Добавьте \\usepackage{graphicx} в преамбулу.'});}
-  if(/\\begin\{(?:align\*?|cases|pmatrix|bmatrix)\}/.test(source)&&!loaded('amsmath')){const index=source.search(/\\begin\{(?:align|cases|pmatrix|bmatrix)/);out.push({severity:'error',line:lineOf(source,index),message:'Математическое окружение требует amsmath',explanation:'Эта конструкция предоставляется пакетом amsmath.',suggestion:'Добавьте \\usepackage{amsmath} в преамбулу.'});}
-  if(/\\begin\{proof\}/.test(source)&&!loaded('amsthm')){const index=source.search(/\\begin\{proof\}/);out.push({severity:'error',line:lineOf(source,index),message:'Environment proof undefined',explanation:'Окружение proof определяется пакетом amsthm.',suggestion:'Добавьте \\usepackage{amsthm} в преамбулу.'});}
-}
-
-function diagnoseExternalResourceSyntax(source:string,out:Diagnostic[]){
-  for(const command of ['includegraphics','input','include']){
-    const match=new RegExp(`\\\\${command}(?:\\[[^\\]]*\\])?\\{\\s*\\}`).exec(source);
-    if(match)out.push({severity:'error',line:lineOf(source,match.index),message:'File name is empty',explanation:`Команда \\${command} ожидает путь к внешнему ресурсу.`,suggestion:'Укажите существующий путь проекта. Наличие файла проверяет полноценная TeX-сборка, а не учебный preview.'});
-  }
-}
-
+function diagnoseBraces(source:string,out:Diagnostic[]){let depth=0,firstExtra=-1;for(let index=0;index<source.length;index++){if(source[index]==='{'&&source[index-1]!=='\\')depth++;if(source[index]==='}'&&source[index-1]!=='\\'){depth--;if(depth<0&&firstExtra<0)firstExtra=index;}}if(firstExtra>=0)out.push({severity:'error',line:lineOf(source,firstExtra),message:'Extra } / несогласованная фигурная скобка',explanation:'Закрывающая скобка не соответствует открытой группе или аргументу.',suggestion:'Удалите лишнюю } или восстановите открывающую { в конструкции, которой она принадлежит.'});else if(depth>0)out.push({severity:'error',line:lineOf(source,source.length),message:'Missing } inserted',explanation:'Один или несколько обязательных аргументов или групп не закрыты.',suggestion:'Найдите ближайшую незавершённую конструкцию {...}; не добавляйте } в конец файла наугад.'});}
+function diagnoseEnvironments(source:string,out:Diagnostic[]){const custom=new Set<string>();for(const match of source.matchAll(/\\newenvironment\s*\{([^}]+)\}/g))custom.add(match[1]);for(const match of source.matchAll(/\\newtheorem\s*\{([^}]+)\}/g))custom.add(match[1]);const stack:Array<{name:string;index:number}>=[];for(const match of source.matchAll(/\\(begin|end)\s*\{([^}]+)\}/g)){const kind=match[1],name=match[2],index=match.index??0;if(kind==='begin'){if(!knownEnvironments.has(name)&&!custom.has(name))out.push({severity:'error',line:lineOf(source,index),message:`Environment ${name} undefined`,explanation:`LaTeX не знает окружение ${name}. Возможна опечатка, отсутствующий пакет или отсутствующее собственное определение.`,suggestion:'Проверьте имя, затем пакет или \\newenvironment/\\newtheorem в преамбуле.'});stack.push({name,index});}else{const top=stack.pop();if(!top||top.name!==name){out.push({severity:'error',line:lineOf(source,index),message:`Окружение ${name} закрыто неверно`,explanation:top?`Сейчас открыто окружение ${top.name}, но встречено \\end{${name}}.`:`Найдено \\end{${name}} без соответствующего \\begin.`,suggestion:top?`Замените на \\end{${top.name}} или исправьте открывающее окружение.`:`Добавьте \\begin{${name}} перед этим местом.`});break;}}}if(stack.length){const top=stack.at(-1)!;out.push({severity:'error',line:lineOf(source,top.index),message:`Не закрыто окружение ${top.name}`,explanation:`Для \\begin{${top.name}} не найдено соответствующее завершение.`,suggestion:`Добавьте \\end{${top.name}} в логически правильном месте.`});}}
+function diagnoseKnownTypos(source:string,out:Diagnostic[]){const typos:Record<string,string>={secton:'section',subsecton:'subsection',documetclass:'documentclass',begn:'begin',inclduegraphics:'includegraphics',usepakage:'usepackage'};for(const [wrong,right] of Object.entries(typos)){const match=new RegExp(`\\\\${wrong}\\b`).exec(source);if(match)out.push({severity:'error',line:lineOf(source,match.index),message:`Undefined control sequence: \\${wrong}`,explanation:`Команда \\${wrong} не определена. Для этой формы наиболее вероятна опечатка.`,suggestion:`Возможно, вы имели в виду \\${right}.`});}}
+function diagnoseMathDelimiters(source:string,out:Diagnostic[]){const dollars=[...source.matchAll(/(?<!\\)\$/g)];if(dollars.length%2!==0){const last=dollars.at(-1);out.push({severity:'error',line:lineOf(source,last?.index??source.length),message:'Missing $ inserted / математический режим не закрыт',explanation:'Количество неэкранированных символов $ нечётно, поэтому граница математического режима неоднозначна.',suggestion:'Добавьте закрывающий $ либо удалите лишний открывающий.'});}const opens=[...source.matchAll(/\\\[/g)].length,closes=[...source.matchAll(/\\\]/g)].length;if(opens!==closes)out.push({severity:'error',line:1,message:'Несогласованы \\[ и \\]',explanation:'Выключной математический режим должен иметь открывающую и закрывающую границы.',suggestion:'Проверьте пары \\[ ... \\].'});}
+function diagnoseAlignment(source:string,out:Diagnostic[]){for(const table of source.matchAll(/\\begin\{tabular\}\{([^}]*)\}([\s\S]*?)\\end\{tabular\}/g)){const spec=table[1],content=table[2],columns=(spec.match(/[lcrX]|[pmb]\s*\{/g)??[]).length;if(columns<1)continue;let offset=(table.index??0)+table[0].indexOf(content);for(const row of content.split(/\\\\/)){const cells=(row.match(/(?<!\\)&/g)??[]).length+1;if(cells>columns){out.push({severity:'error',line:lineOf(source,offset),message:'Extra alignment tab has been changed to \\cr',explanation:`Строка содержит ${cells} ячейки, но спецификация tabular описывает ${columns}. Лишний & создаёт дополнительную ячейку.`,suggestion:'Исправьте число & либо модель столбцов tabular.'});break;}offset+=row.length+2;}}}
+function diagnoseLabels(source:string,out:Diagnostic[]){const seen=new Set<string>();for(const match of source.matchAll(/\\label\{([^}]+)\}/g)){const key=match[1];if(seen.has(key))out.push({severity:'warning',line:lineOf(source,match.index??0),message:`Метка ${key} объявлена повторно`,explanation:'Перекрёстные ссылки на дублирующуюся метку неоднозначны.',suggestion:'Используйте уникальные смысловые ключи label.'});seen.add(key);}}
+function diagnosePackageRequirements(source:string,out:Diagnostic[]){const preamble=source.split(/\\begin\s*\{document\}/)[0]??source;const loaded=(name:string)=>new RegExp(`\\\\usepackage(?:\\[[^\\]]*\\])?\\{[^}]*\\b${escapeRegExp(name)}\\b[^}]*\\}`).test(preamble);if(/\\includegraphics\b/.test(source)&&!loaded('graphicx')){const index=source.search(/\\includegraphics\b/);out.push({severity:'error',line:lineOf(source,index),message:'Undefined control sequence: \\includegraphics',explanation:'Команда вставки изображений определяется пакетом graphicx.',suggestion:'Добавьте \\usepackage{graphicx} в преамбулу.'});}if(/\\begin\{(?:align\*?|cases|pmatrix|bmatrix)\}/.test(source)&&!loaded('amsmath')){const index=source.search(/\\begin\{(?:align|cases|pmatrix|bmatrix)/);out.push({severity:'error',line:lineOf(source,index),message:'Математическое окружение требует amsmath',explanation:'Эта конструкция предоставляется пакетом amsmath.',suggestion:'Добавьте \\usepackage{amsmath} в преамбулу.'});}if(/\\begin\{proof\}/.test(source)&&!loaded('amsthm')){const index=source.search(/\\begin\{proof\}/);out.push({severity:'error',line:lineOf(source,index),message:'Environment proof undefined',explanation:'Окружение proof определяется пакетом amsthm.',suggestion:'Добавьте \\usepackage{amsthm} в преамбулу.'});}}
+function diagnoseExternalResourceSyntax(source:string,out:Diagnostic[]){for(const command of ['includegraphics','input','include']){const match=new RegExp(`\\\\${command}(?:\\[[^\\]]*\\])?\\{\\s*\\}`).exec(source);if(match)out.push({severity:'error',line:lineOf(source,match.index),message:'File name is empty',explanation:`Команда \\${command} ожидает путь к внешнему ресурсу.`,suggestion:'Укажите существующий путь проекта. Наличие файла проверяет полноценная TeX-сборка, а не учебный preview.'});}}
 function dedupeDiagnostics(items:Diagnostic[]){const seen=new Set<string>();return items.filter(item=>{const key=`${item.severity}:${item.line}:${item.message}`;if(seen.has(key))return false;seen.add(key);return true;});}
 function escapeRegExp(value:string){return value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}

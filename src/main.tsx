@@ -1,11 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
-import './data/editorialEnhancements';
-import './data/curriculumExpansion';
-import './data/deepCurriculum';
-import './data/debuggingTrack';
-import './data/explanationElaboration';
+import './data/curriculumBuild';
 import { App } from './app/App';
 import './styles/index.css';
 import './styles/fidelity.css';
@@ -14,9 +10,13 @@ import './styles/laptopPolish.css';
 import './styles/deepProduct.css';
 import './styles/smartEditor.css';
 import './styles/projects.css';
+import './styles/projectWorkspace.css';
 import './styles/referenceDeep.css';
 import './styles/progressDeep.css';
 import './styles/interactionPolish.css';
+import './styles/conceptExercises.css';
+import './styles/sourceOutputCausality.css';
+import './styles/lessonToc.css';
 
 registerSW({ immediate: true });
 createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);

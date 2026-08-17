@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import '../data/editorialEnhancements';
-import '../data/curriculumExpansion';
-import '../data/deepCurriculum';
-import '../data/debuggingTrack';
+import '../data/curriculumBuild';
 import { exercises, lessons, modules } from '../data/courses';
 import { concepts, conceptById } from '../data/concepts';
 import { projects } from '../data/projects';
@@ -35,9 +32,16 @@ describe('curriculum quality gate',()=>{
   });
 
   it('contains no curriculum integrity errors',()=>{
-    const issues=lintCurriculum(lessons,exercises,referenceEntries);
+    const issues=lintCurriculum(lessons,exercises,referenceEntries,projects);
     const errors=issues.filter(issue=>issue.severity==='error');
     expect(errors,errors.map(issue=>`${issue.code}: ${issue.lessonId??issue.exerciseId??''} ${issue.message}`).join('\n')).toEqual([]);
+  });
+
+  it('freezes the final curriculum after all build stages',()=>{
+    expect(Object.isFrozen(modules)).toBe(true);
+    expect(Object.isFrozen(lessons)).toBe(true);
+    expect(Object.isFrozen(exercises)).toBe(true);
+    expect(Object.isFrozen(lessons[0])).toBe(true);
   });
 });
 
