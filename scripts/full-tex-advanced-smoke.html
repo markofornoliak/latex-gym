@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Advanced Full TeX smoke</title></head>
+<body data-status="boot">boot
+<script>
+(async()=>{
+  const root='/latex-gym/full-tex/';const body=document.body;let stage='image';
+  const fail=(message)=>{body.dataset.status='failed';body.textContent=`FULL_TEX_ADVANCED_FAILED: ${message}`;worker.terminate();};
+  const png=Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='),char=>char.charCodeAt(0));
+  const worker=new Worker(`${root}busytex_worker.js`);
+  const compileImage=()=>worker.postMessage({files:[{path:'main.tex',contents:'\\documentclass{article}\n\\usepackage{graphicx}\n\\begin{document}\n\\includegraphics[width=8mm]{figures/pixel.png}\n\\end{document}\n'},{path:'figures/pixel.png',contents:png}],main_tex_path:'main.tex',verbose:'silent',bibtex:null,driver:'xetex_bibtex8_dvipdfmx',data_packages_js:null});
+  const compileBibliography=()=>worker.postMessage({files:[{path:'main.tex',contents:'\\documentclass{article}\n\\usepackage[backend=bibtex]{biblatex}\n\\addbibresource{references.bib}\n\\begin{document}\nKnuth~\\cite{knuth1984}.\n\\printbibliography\n\\end{document}\n'},{path:'references.bib',contents:'@book{knuth1984, author={Donald E. Knuth}, title={The TeXbook}, year={1984}}\n'}],main_tex_path:'main.tex',verbose:'silent',bibtex:null,driver:'xetex_bibtex8_dvipdfmx',data_packages_js:null});
+  worker.onerror=(event)=>fail(event.message||'worker error');
+  worker.onmessage=(event)=>{
+    const message=event.data||{};if(message.exception){fail(message.exception);return;}
+    if(message.initialized){body.dataset.status='compiling-image';body.textContent='compiling image';compileImage();return;}
+    if(message.exit_code===undefined)return;
+    const pdfBytes=message.pdf?.byteLength||0;const log=String(message.log||'');
+    if(message.exit_code!==0||pdfBytes<1000){fail(`${stage} exit=${message.exit_code} pdf=${pdfBytes} log=${log.slice(0,1600)}`);return;}
+    if(stage==='image'){
+      if(/File .* not found|Cannot determine size of graphic/i.test(log)){fail(`image resource was not resolved: ${log.slice(0,1600)}`);return;}
+      stage='bibliography';body.dataset.status='compiling-bibliography';body.textContent='compiling bibliography';compileBibliography();return;
+    }
+    if(/Citation .* undefined|There were undefined references|Empty bibliography/i.test(log)){fail(`bibliography remained unresolved: ${log.slice(0,2000)}`);return;}
+    body.dataset.status='success';body.textContent=`FULL_TEX_ADVANCED_OK PDF_BYTES=${pdfBytes}`;worker.terminate();
+  };
+  const packages=[`${root}texlive-basic.js`,`${root}ubuntu-texlive-latex-base.js`,`${root}ubuntu-texlive-latex-recommended.js`,`${root}ubuntu-texlive-latex-extra.js`];
+  worker.postMessage({busytex_worker_js:`${root}busytex_worker.js`,busytex_pipeline_js:`${root}busytex_pipeline.js`,busytex_js:`${root}busytex.js`,busytex_wasm:`${root}busytex.wasm`,texmf_local:[],preload:true,preload_data_packages_js:[packages[0]],data_packages_js:packages});
+})().catch(error=>{document.body.dataset.status='failed';document.body.textContent=`FULL_TEX_ADVANCED_FAILED: ${error?.message||error}`;});
+</script>
+</body>
+</html>
