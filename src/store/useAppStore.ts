@@ -4,6 +4,7 @@ import type { Bookmark, ConceptMastery, HistoryEntry } from '../types';
 
 type Settings={textSize:'small'|'medium'|'large';wordWrap:boolean;autoClose:boolean;lineNumbers:boolean};
 type ProjectProgress=Record<string,string[]>;
+export type ExerciseAttemptEvidence={firstTry?:boolean;hintsUsed?:number;solutionRevealed?:boolean;application?:boolean};
 
 type AppState={
   version:number;
@@ -25,8 +26,8 @@ type AppState={
   setOnboarded:()=>void;
   setCurrentLesson:(id:string)=>void;
   completeLesson:(id:string,title:string)=>void;
-  recordExerciseAttempt:(exerciseId:string,ok:boolean,concepts:string[],title:string)=>void;
-  completeProjectStage:(projectId:string,stageId:string,title:string)=>void;
+  recordExerciseAttempt:(exerciseId:string,ok:boolean,concepts:string[],title:string,evidence?:ExerciseAttemptEvidence)=>void;
+  completeProjectStage:(projectId:string,stageId:string,title:string,concepts?:string[])=>void;
   recordHint:(exerciseId:string,level:number)=>void;
   setDraft:(key:string,source:string)=>void;
   toggleBookmark:(type:Bookmark['type'],targetId:string)=>void;
@@ -52,18 +53,28 @@ function nextStreak(streak:AppState['streak']){
   return {count:diff===1?streak.count+1:1,lastActive:current};
 }
 
-export function updateConceptMastery(previous:ConceptMastery|undefined,ok:boolean,now=new Date()):ConceptMastery{
+export function updateConceptMastery(previous:ConceptMastery|undefined,ok:boolean,now=new Date(),evidence:ExerciseAttemptEvidence={}):ConceptMastery{
   const base:ConceptMastery=previous??{score:.3,attempts:0,successes:0,mistakeCount:0,lastPracticed:null,stability:1,nextReview:null};
   const attempts=base.attempts+1;
   const successes=base.successes+(ok?1:0);
   const mistakeCount=base.mistakeCount+(ok?0:1);
-  const evidence=ok?1:0;
+  const hintPenalty=Math.min(.36,(evidence.hintsUsed??0)*.12);
+  const solutionPenalty=evidence.solutionRevealed?.34:0;
+  const firstTryBonus=evidence.firstTry?.08:0;
+  const applicationBonus=evidence.application?.1:0;
+  const quality=ok?clamp(1-hintPenalty-solutionPenalty+firstTryBonus+applicationBonus,.22,1):0;
   const learningRate=attempts<4?.32:.2;
-  const score=clamp(base.score*(1-learningRate)+evidence*learningRate,0,1);
-  const stability=clamp(ok?base.stability*(1.18+score*.32):base.stability*.62,.5,60);
+  const score=clamp(base.score*(1-learningRate)+quality*learningRate,0,1);
+  const stability=clamp(ok?base.stability*(1.08+quality*.38+score*.18):base.stability*.62,.5,60);
   const intervalDays=ok?Math.max(1,Math.round(stability*(score>.82?4:score>.62?2:1))):1;
   const nextReview=new Date(now);nextReview.setDate(nextReview.getDate()+intervalDays);
-  return {score,attempts,successes,mistakeCount,lastPracticed:now.toISOString(),stability,nextReview:nextReview.toISOString()};
+  return {
+    score,attempts,successes,mistakeCount,lastPracticed:now.toISOString(),stability,nextReview:nextReview.toISOString(),
+    firstTrySuccesses:(base.firstTrySuccesses??0)+(ok&&evidence.firstTry?1:0),
+    hintedSuccesses:(base.hintedSuccesses??0)+(ok&&(evidence.hintsUsed??0)>0?1:0),
+    solutionReveals:(base.solutionReveals??0)+(evidence.solutionRevealed?1:0),
+    applications:(base.applications??0)+(ok&&evidence.application?1:0)
+  };
 }
 
 export const useAppStore=create<AppState>()(persist((set)=>({
@@ -73,7 +84,7 @@ export const useAppStore=create<AppState>()(persist((set)=>({
   setOnboarded:()=>set({onboarded:true}),
   setCurrentLesson:(id)=>set({currentLessonId:id}),
   completeLesson:(id,title)=>set(state=>({completedLessons:unique(state.completedLessons,id),currentLessonId:id,history:[historyItem(`Пройден урок «${title}»`,'lesson'),...state.history].slice(0,100),streak:nextStreak(state.streak)})),
-  recordExerciseAttempt:(exerciseId,ok,concepts,title)=>set(state=>{
+  recordExerciseAttempt:(exerciseId,ok,concepts,title,evidence={})=>set(state=>{
     const attempts={...state.attempts,[exerciseId]:(state.attempts[exerciseId]??0)+1};
     const successfulAttempts={...state.successfulAttempts};
     if(ok)successfulAttempts[exerciseId]=(successfulAttempts[exerciseId]??0)+1;
@@ -82,11 +93,20 @@ export const useAppStore=create<AppState>()(persist((set)=>({
     const now=new Date();
     for(const conceptId of concepts){
       conceptScores[conceptId]=(conceptScores[conceptId]??0)+(ok?1:-1);
-      conceptMastery[conceptId]=updateConceptMastery(conceptMastery[conceptId],ok,now);
+      conceptMastery[conceptId]=updateConceptMastery(conceptMastery[conceptId],ok,now,evidence);
     }
     return {attempts,successfulAttempts,conceptScores,conceptMastery,completedExercises:ok?unique(state.completedExercises,exerciseId):state.completedExercises,history:ok?[historyItem(`Решена задача «${title}»`,'exercise'),...state.history].slice(0,100):state.history,streak:nextStreak(state.streak)};
   }),
-  completeProjectStage:(projectId,stageId,title)=>set(state=>({completedProjectStages:{...state.completedProjectStages,[projectId]:unique(state.completedProjectStages[projectId]??[],stageId)},history:[historyItem(`Завершён этап проекта «${title}»`,'exercise'),...state.history].slice(0,100),streak:nextStreak(state.streak)})),
+  completeProjectStage:(projectId,stageId,title,concepts=[])=>set(state=>{
+    const conceptMastery={...state.conceptMastery};
+    const conceptScores={...state.conceptScores};
+    const now=new Date();
+    for(const conceptId of concepts){
+      conceptMastery[conceptId]=updateConceptMastery(conceptMastery[conceptId],true,now,{application:true});
+      conceptScores[conceptId]=(conceptScores[conceptId]??0)+1;
+    }
+    return {completedProjectStages:{...state.completedProjectStages,[projectId]:unique(state.completedProjectStages[projectId]??[],stageId)},conceptMastery,conceptScores,history:[historyItem(`Завершён этап проекта «${title}»`,'exercise'),...state.history].slice(0,100),streak:nextStreak(state.streak)};
+  }),
   recordHint:(exerciseId,level)=>set(state=>({hintsUsed:{...state.hintsUsed,[exerciseId]:Math.max(level,state.hintsUsed[exerciseId]??0)}})),
   setDraft:(key,source)=>set(state=>({drafts:{...state.drafts,[key]:source}})),
   toggleBookmark:(type,targetId)=>set(state=>{const id=`${type}:${targetId}`;const exists=state.bookmarks.some(bookmark=>bookmark.id===id);return {bookmarks:exists?state.bookmarks.filter(bookmark=>bookmark.id!==id):[...state.bookmarks,{id,type,targetId,createdAt:new Date().toISOString()}]};}),
