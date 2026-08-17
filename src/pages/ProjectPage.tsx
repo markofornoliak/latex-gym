@@ -128,7 +128,7 @@ export function ProjectPage(){
           </aside>
           <div className="project-source-editor">
             <div className="editor-status-line"><span className={`compile-state compile-state--${state}`}>{projectStateLabel(state)}</span><span>{activeFile?.path} · {saved?'сохранено локально':'сохранение…'}</span></div>
-            <Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={setProjectSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onReset={resetWorkspace} onCompile={()=>{void runCompile();}} onSave={saveNow} diagnostics={editorDiagnostics}/></Suspense>
+            <Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={setProjectSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onReset={resetWorkspace} onCompile={()=>{void runCompile();}} onSave={saveNow} diagnostics={editorDiagnostics} projectFiles={workspace.files}/></Suspense>
           </div>
         </div>
         {result&&!fullResult&&!validation&&<div className="compile-result-note" role="status" aria-live="polite"><h3>{result.ok?'Быстрый предпросмотр построен.':'Быстрый предпросмотр остановлен.'}</h3><p>{result.ok?'Это учебный preview, а не доказательство реальной TeX-сборки. Для проверки проекта используйте полную сборку.':'Исправьте первую содержательную ошибку перед следующей проверкой.'}</p></div>}
