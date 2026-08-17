@@ -1,0 +1,172 @@
+export type StructureNodeKind=
+  |'Document'|'Preamble'|'Package'|'Command'|'Environment'|'Section'|'Paragraph'
+  |'Math'|'Fraction'|'Superscript'|'Subscript'|'List'|'Item'|'Table'|'Row'|'Cell'
+  |'Figure'|'Caption'|'Label'|'Reference'|'Citation'|'Bibliography'|'Theorem'|'Proof'|'Macro';
+
+export type SourceRange={start:number;end:number;line:number;column:number};
+export type StructureNode={
+  kind:StructureNodeKind;
+  range:SourceRange;
+  name?:string;
+  value?:string;
+  arguments?:string[];
+  options?:string[];
+  environment?:string;
+  mathMode?:'inline'|'display';
+  meta?:Record<string,string|number|boolean>;
+};
+export type StructureProblem={kind:'environment-mismatch'|'unclosed-environment'|'unbalanced-group';line:number;message:string};
+export type LatexStructure={
+  source:string;
+  cleaned:string;
+  nodes:StructureNode[];
+  problems:StructureProblem[];
+  documentClass?:{name:string;options:string[]};
+  packages:Set<string>;
+  byKind:(kind:StructureNodeKind)=>StructureNode[];
+  commands:(name:string)=>StructureNode[];
+  environments:(name:string)=>StructureNode[];
+};
+
+type Group={value:string;start:number;end:number};
+type EnvironmentToken={kind:'begin'|'end';name:string;start:number;end:number;bodyStart?:number};
+
+const lineColumn=(source:string,index:number)=>{
+  const before=source.slice(0,Math.max(0,index));
+  const lines=before.split('\n');
+  return {line:lines.length,column:(lines.at(-1)?.length??0)+1};
+};
+const range=(source:string,start:number,end:number):SourceRange=>({start,end,...lineColumn(source,start)});
+const stripCommentsPreservingOffsets=(source:string)=>source.split('\n').map(line=>{
+  let escaped=false;
+  for(let i=0;i<line.length;i++){
+    const char=line[i];
+    if(char==='\\'){escaped=!escaped;continue;}
+    if(char==='%'&&!escaped)return line.slice(0,i)+' '.repeat(line.length-i);
+    escaped=false;
+  }
+  return line;
+}).join('\n');
+const skipSpace=(source:string,index:number)=>{while(index<source.length&&/\s/.test(source[index]))index++;return index;};
+
+function readGroup(source:string,index:number,open='{',close='}'):Group|undefined{
+  index=skipSpace(source,index);
+  if(source[index]!==open)return undefined;
+  const start=index;let depth=0;let escaped=false;
+  for(;index<source.length;index++){
+    const char=source[index];
+    if(char==='\\'){escaped=!escaped;continue;}
+    if(!escaped&&char===open)depth++;
+    if(!escaped&&char===close){depth--;if(depth===0)return {value:source.slice(start+1,index),start,end:index+1};}
+    escaped=false;
+  }
+  return undefined;
+}
+
+function readOptional(source:string,index:number){return readGroup(source,index,'[',']');}
+function splitComma(value:string){return value.split(',').map(item=>item.trim()).filter(Boolean);}
+
+export function parseLatexStructure(source:string):LatexStructure{
+  const cleaned=stripCommentsPreservingOffsets(source);
+  const nodes:StructureNode[]=[];
+  const problems:StructureProblem[]=[];
+  const packages=new Set<string>();
+  let documentClass:LatexStructure['documentClass'];
+
+  const commandPattern=/\\([A-Za-z@]+\*?|.)/g;
+  for(const match of cleaned.matchAll(commandPattern)){
+    const start=match.index??0;const rawName=match[1];
+    if(rawName==='begin'||rawName==='end')continue;
+    const name=rawName.replace(/\*$/,'');
+    let cursor=start+match[0].length;
+    const option=readOptional(cleaned,cursor);if(option)cursor=option.end;
+    const args:Group[]=[];
+    const maxArgs=name==='frac'?2:2;
+    for(let i=0;i<maxArgs;i++){
+      const group=readGroup(cleaned,cursor);if(!group)break;args.push(group);cursor=group.end;
+      if(!['frac','newcommand','renewcommand','providecommand'].includes(name))break;
+    }
+    const base:StructureNode={kind:'Command',name,range:range(source,start,Math.max(cursor,start+match[0].length)),arguments:args.map(arg=>arg.value),options:option?splitComma(option.value):[]};
+    nodes.push(base);
+    if(name==='documentclass'&&args[0]){documentClass={name:args[0].value.trim(),options:option?splitComma(option.value):[]};nodes.push({...base,kind:'Document',value:args[0].value.trim()});}
+    if(name==='usepackage'&&args[0])for(const item of splitComma(args[0].value)){packages.add(item);nodes.push({...base,kind:'Package',name:item,value:item});}
+    if(['section','subsection','subsubsection','chapter','part'].includes(name)&&args[0])nodes.push({...base,kind:'Section',name,value:args[0].value.trim(),meta:{level:sectionLevel(name),starred:rawName.endsWith('*')}});
+    if(name==='frac'&&args.length===2)nodes.push({...base,kind:'Fraction',arguments:[args[0].value,args[1].value]});
+    if(name==='item')nodes.push({...base,kind:'Item'});
+    if(name==='caption'&&args[0])nodes.push({...base,kind:'Caption',value:args[0].value});
+    if(name==='label'&&args[0])nodes.push({...base,kind:'Label',value:args[0].value.trim()});
+    if(['ref','eqref','pageref','autoref','cref','Cref'].includes(name)&&args[0])nodes.push({...base,kind:'Reference',name,value:args[0].value.trim()});
+    if(['cite','parencite','textcite','autocite'].includes(name)&&args[0])for(const key of splitComma(args[0].value))nodes.push({...base,kind:'Citation',name,value:key});
+    if(['bibliography','addbibresource','printbibliography'].includes(name))nodes.push({...base,kind:'Bibliography',name,value:args[0]?.value});
+    if(['newcommand','renewcommand','providecommand'].includes(name))nodes.push({...base,kind:'Macro',name,value:args[0]?.value,arguments:args.map(arg=>arg.value)});
+  }
+
+  const environmentTokens:EnvironmentToken[]=[];
+  for(const match of cleaned.matchAll(/\\(begin|end)\s*\{([^}]+)\}/g))environmentTokens.push({kind:match[1] as 'begin'|'end',name:match[2].trim(),start:match.index??0,end:(match.index??0)+match[0].length});
+  const stack:EnvironmentToken[]=[];
+  for(const token of environmentTokens){
+    if(token.kind==='begin'){token.bodyStart=token.end;stack.push(token);continue;}
+    const top=stack.at(-1);
+    if(!top||top.name!==token.name){problems.push({kind:'environment-mismatch',line:lineColumn(source,token.start).line,message:`Expected ${top?`\\end{${top.name}}`:'an opening environment'} before \\end{${token.name}}.`});continue;}
+    stack.pop();
+    const bodyStart=top.bodyStart??top.end;const body=cleaned.slice(bodyStart,token.start);
+    const envNode:StructureNode={kind:'Environment',name:top.name,value:body,range:range(source,top.start,token.end),environment:top.name};
+    nodes.push(envNode);
+    if(['itemize','enumerate','description'].includes(top.name))nodes.push({...envNode,kind:'List'});
+    if(top.name==='tabular'||top.name==='tabularx'||top.name==='array')addTableNodes(nodes,source,cleaned,top,token,body);
+    if(top.name==='figure')nodes.push({...envNode,kind:'Figure'});
+    if(top.name==='proof')nodes.push({...envNode,kind:'Proof'});
+    if(/^(theorem|lemma|proposition|corollary|definition|remark|example)$/i.test(top.name))nodes.push({...envNode,kind:'Theorem'});
+  }
+  for(const open of stack)problems.push({kind:'unclosed-environment',line:lineColumn(source,open.start).line,message:`\\begin{${open.name}} has no matching \\end{${open.name}}.`});
+
+  addMathNodes(nodes,source,cleaned);
+  addParagraphNodes(nodes,source,cleaned);
+  const groupProblem=findUnbalancedGroup(cleaned,source);if(groupProblem)problems.push(groupProblem);
+
+  const byKind=(kind:StructureNodeKind)=>nodes.filter(node=>node.kind===kind);
+  const commands=(name:string)=>nodes.filter(node=>node.kind==='Command'&&node.name===name);
+  const environments=(name:string)=>nodes.filter(node=>node.kind==='Environment'&&node.name===name);
+  return {source,cleaned,nodes,problems,documentClass,packages,byKind,commands,environments};
+}
+
+function sectionLevel(name:string){return ({part:0,chapter:1,section:2,subsection:3,subsubsection:4} as Record<string,number>)[name]??2;}
+function addMathNodes(nodes:StructureNode[],source:string,cleaned:string){
+  const ranges:Array<{start:number;end:number;contentStart:number;contentEnd:number;mode:'inline'|'display'}>=[];
+  for(const match of cleaned.matchAll(/\\\[([\s\S]*?)\\\]/g))ranges.push({start:match.index??0,end:(match.index??0)+match[0].length,contentStart:(match.index??0)+2,contentEnd:(match.index??0)+match[0].length-2,mode:'display'});
+  for(const match of cleaned.matchAll(/(?<!\\)\$([^$\n]*?)(?<!\\)\$/g))ranges.push({start:match.index??0,end:(match.index??0)+match[0].length,contentStart:(match.index??0)+1,contentEnd:(match.index??0)+match[0].length-1,mode:'inline'});
+  for(const node of nodes.filter(node=>node.kind==='Environment'&&/^(equation|equation\*|align|align\*|gather|gather\*|multline|multline\*)$/.test(node.name??'')))ranges.push({start:node.range.start,end:node.range.end,contentStart:node.range.start,contentEnd:node.range.end,mode:'display'});
+  for(const item of ranges){
+    nodes.push({kind:'Math',mathMode:item.mode,value:cleaned.slice(item.contentStart,item.contentEnd),range:range(source,item.start,item.end)});
+    const fragment=cleaned.slice(item.contentStart,item.contentEnd);
+    for(let i=0;i<fragment.length;i++){
+      const char=fragment[i];if((char!=='^'&&char!=='_')||fragment[i-1]==='\\')continue;
+      const absolute=item.contentStart+i;let end=absolute+1;const grouped=readGroup(cleaned,end);if(grouped)end=grouped.end;else end=Math.min(cleaned.length,end+1);
+      nodes.push({kind:char==='^'?'Superscript':'Subscript',mathMode:item.mode,value:grouped?.value??cleaned.slice(absolute+1,end),range:range(source,absolute,end)});
+    }
+  }
+  for(const fraction of nodes.filter(node=>node.kind==='Fraction')){
+    const math=ranges.find(item=>fraction.range.start>=item.start&&fraction.range.end<=item.end);
+    if(math)fraction.mathMode=math.mode;
+  }
+}
+function addTableNodes(nodes:StructureNode[],source:string,cleaned:string,open:EnvironmentToken,close:EnvironmentToken,body:string){
+  const tableRange=range(source,open.start,close.end);const rows=splitUnescapedRows(body);nodes.push({kind:'Table',name:open.name,range:tableRange,meta:{rows:rows.length,columns:Math.max(0,...rows.map(row=>splitUnescaped(row,'&').length))}});
+  let searchFrom=open.bodyStart??open.end;
+  for(const row of rows){const rowStart=cleaned.indexOf(row,searchFrom);if(rowStart<0)continue;const cells=splitUnescaped(row,'&');nodes.push({kind:'Row',environment:open.name,value:row,range:range(source,rowStart,rowStart+row.length),meta:{cells:cells.length}});let cellFrom=rowStart;for(const cell of cells){const cellStart=cleaned.indexOf(cell,cellFrom);nodes.push({kind:'Cell',environment:open.name,value:cell.trim(),range:range(source,cellStart,cellStart+cell.length)});cellFrom=cellStart+cell.length+1;}searchFrom=rowStart+row.length;}
+}
+function splitUnescapedRows(value:string){return value.split(/(?<!\\)\\\\/).map(row=>row.trim()).filter(Boolean);}
+function splitUnescaped(value:string,delimiter:string){const result:string[]=[];let current='';for(let i=0;i<value.length;i++){if(value[i]===delimiter&&value[i-1]!=='\\'){result.push(current);current='';}else current+=value[i];}result.push(current);return result.map(item=>item.trim());}
+function addParagraphNodes(nodes:StructureNode[],source:string,cleaned:string){
+  const document=nodes.find(node=>node.kind==='Environment'&&node.name==='document');if(!document?.value)return;
+  const bodyStart=cleaned.indexOf(document.value,document.range.start);if(bodyStart<0)return;
+  for(const match of document.value.matchAll(/(?:^|\n\s*\n)([\s\S]*?)(?=\n\s*\n|$)/g)){
+    const text=(match[1]??'').trim();if(!text||/^\\(?:begin|end|section|chapter|subsection)\b/.test(text))continue;
+    const offset=(match.index??0)+(match[0].indexOf(match[1]??''));nodes.push({kind:'Paragraph',value:text,range:range(source,bodyStart+offset,bodyStart+offset+text.length)});
+  }
+}
+function findUnbalancedGroup(cleaned:string,source:string):StructureProblem|undefined{
+  const stack:number[]=[];for(let i=0;i<cleaned.length;i++){if(cleaned[i]==='{'&&cleaned[i-1]!=='\\')stack.push(i);else if(cleaned[i]==='}'&&cleaned[i-1]!=='\\'){if(!stack.length)return {kind:'unbalanced-group',line:lineColumn(source,i).line,message:'Closing brace has no matching opening brace.'};stack.pop();}}const open=stack.at(-1);return open===undefined?undefined:{kind:'unbalanced-group',line:lineColumn(source,open).line,message:'Opening brace has no matching closing brace.'};
+}
+
+export function nodeInside(node:StructureNode,container:StructureNode){return node.range.start>=container.range.start&&node.range.end<=container.range.end;}
