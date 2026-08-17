@@ -30,21 +30,28 @@ await command('Page.enable');
 await command('Runtime.enable');
 await command('Page.navigate',{url:targetUrl});
 
-let last='';
+let last={status:'',text:''};
 while(Date.now()<deadline){
-  const result=await command('Runtime.evaluate',{expression:'document.body ? document.body.textContent : ""',returnByValue:true});
-  last=String(result?.result?.value??'').trim();
-  if(last.includes('FULL_TEX_OK')){
-    console.log(last);
+  const result=await command('Runtime.evaluate',{
+    expression:`(()=>({
+      status:document.body?.dataset?.status??'',
+      text:document.body?.innerText?.trim()??''
+    }))()`,
+    returnByValue:true
+  });
+  const value=result?.result?.value??{};
+  last={status:String(value.status??''),text:String(value.text??'')};
+  if(last.status==='success'){
+    console.log(last.text||'FULL_TEX_OK');
     socket.close();
     process.exit(0);
   }
-  if(last.includes('FULL_TEX_FAILED')){
+  if(last.status==='failed'){
     socket.close();
-    throw new Error(last);
+    throw new Error(last.text||'Full TeX smoke failed.');
   }
   await new Promise(resolve=>setTimeout(resolve,500));
 }
 
 socket.close();
-throw new Error(`Full TeX smoke timed out after 120s. Last page state: ${last}`);
+throw new Error(`Full TeX smoke timed out after 120s. Last page status=${last.status||'unset'} text=${last.text.slice(0,2000)}`);
