@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { concepts } from '../data/concepts';
 import { exercises, lessons } from '../data/courses';
@@ -23,14 +23,20 @@ export default function CommandPalette({onClose}:{onClose:()=>void}){
   const navigate=useNavigate();
   const [query,setQuery]=useState('');
   const [active,setActive]=useState(0);
+  const dialogRef=useRef<HTMLElement>(null);
   const inputRef=useRef<HTMLInputElement>(null);
+  const restoreFocus=useRef<HTMLElement|null>(null);
   const results=useMemo(()=>collectResults(query),[query]);
   const groups=useMemo(()=>kindOrder.map(kind=>({kind,items:results.filter(item=>item.kind===kind)})).filter(group=>group.items.length),[results]);
-  useEffect(()=>{inputRef.current?.focus();},[]);
+  useEffect(()=>{
+    restoreFocus.current=document.activeElement instanceof HTMLElement?document.activeElement:null;
+    inputRef.current?.focus();
+    return()=>restoreFocus.current?.focus();
+  },[]);
   useEffect(()=>{setActive(0);},[query]);
   const choose=(item:PaletteResult)=>{onClose();navigate(item.to);};
   return <div className="palette-backdrop" role="presentation" onMouseDown={onClose}>
-    <section className="command-palette command-palette--deep" role="dialog" aria-modal="true" aria-label="Поиск по LaTeX gym" onMouseDown={event=>event.stopPropagation()}>
+    <section ref={dialogRef} className="command-palette command-palette--deep" role="dialog" aria-modal="true" aria-label="Поиск по LaTeX gym" onMouseDown={event=>event.stopPropagation()} onKeyDown={event=>{if(event.key==='Tab')trapTab(event,dialogRef.current);}}>
       <div className="palette-search"><SearchIcon/><input ref={inputRef} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Урок, понятие, команда, пакет или ошибка…" autoComplete="off" aria-activedescendant={results[active]?`palette-${results[active].id}`:undefined} onKeyDown={event=>{
         if(event.key==='Escape'){event.preventDefault();onClose();}
         if(event.key==='ArrowDown'){event.preventDefault();setActive(value=>Math.min(results.length-1,value+1));}
@@ -80,3 +86,11 @@ function normalize(value:string){return value.toLocaleLowerCase('ru').replace(/^
 function rank(value:string,q:string){if(!q)return 0;const text=normalize(value);if(text===q)return 80;if(text.startsWith(q))return 55;if(text.includes(q))return 30;const tokens=q.split(' ');return tokens.every(token=>text.includes(token))?18:0;}
 function referenceRank(command:string,title:string,aliases:string[],q:string){if(!q)return 25;const normalizedCommand=normalize(command);if(normalizedCommand===q)return 100;if(aliases.map(normalize).includes(q))return 92;return rank(`${command} ${title} ${aliases.join(' ')}`,q)+10;}
 function dedupe(items:PaletteResult[]){const seen=new Set<string>();return items.filter(item=>{const key=`${item.kind}:${item.to}:${item.title}`;if(seen.has(key))return false;seen.add(key);return true;});}
+function trapTab(event:ReactKeyboardEvent,container:HTMLElement|null){
+  if(!container)return;
+  const focusable=[...container.querySelectorAll<HTMLElement>('input,button,a[href],[tabindex]:not([tabindex="-1"])')].filter(element=>!element.hasAttribute('disabled')&&element.getAttribute('aria-hidden')!=='true');
+  if(focusable.length===0){event.preventDefault();return;}
+  const first=focusable[0];const last=focusable[focusable.length-1];
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+}
