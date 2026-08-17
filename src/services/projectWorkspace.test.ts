@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addProjectFile, createProjectWorkspace, referencedProjectFiles, restoreProjectWorkspace, serializeProjectWorkspace, workspaceRequirements } from './projectWorkspace';
+import { addProjectFile, createProjectWorkspace, referencedProjectFiles, restoreProjectWorkspace, rootProjectSource, serializeProjectWorkspace, workspaceRequirements } from './projectWorkspace';
 
 describe('virtual LaTeX project filesystem',()=>{
   it('creates the multi-file publication workspace with required section files',()=>{
@@ -9,6 +9,16 @@ describe('virtual LaTeX project filesystem',()=>{
     expect(paths).toContain('sections/introduction.tex');
     expect(paths).toContain('sections/method.tex');
     expect(workspaceRequirements('academic-paper','stage-10',workspace).every(item=>item.ok)).toBe(true);
+  });
+
+  it('creates a real two-file bibliography project with a compilable root',()=>{
+    const workspace=createProjectWorkspace('academic-paper','stage-8','');
+    const root=rootProjectSource(workspace);
+    expect(root).toContain('\\documentclass{article}');
+    expect(root).toContain('backend=bibtex');
+    expect(root).toContain('\\addbibresource{references.bib}');
+    expect(workspace.files.some(file=>file.path==='references.bib'&&file.content.includes('knuth1984'))).toBe(true);
+    expect(referencedProjectFiles(workspace).every(item=>item.exists)).toBe(true);
   });
 
   it('round-trips a workspace through the existing persistent drafts store',()=>{
