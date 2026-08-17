@@ -26,33 +26,56 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          head -c 9000 .bootstrap/part-03 > /tmp/part-03-head
-          tail -c +9001 .bootstrap/part-03 > /tmp/part-03-tail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, difflib, base64, tarfile, io, gzip
+          root=Path('.bootstrap')
+          allowed=set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
+          parts={p.name:p.read_text() for p in sorted(root.glob('part-*'))}
+          for name,s in parts.items():
+              bad=[(i,repr(ch)) for i,ch in enumerate(s) if ch not in allowed]
+              print(f'{name}: len={len(s)} mod4={len(s)%4} bad={bad[:8]} bad_count={len(bad)}')
+          a=parts['part-03']; b=parts['part-03a']
+          print('part-03 start/end:',repr(a[:40]),repr(a[-40:]))
+          print('part-03a start/end:',repr(b[:40]),repr(b[-40:]))
+          for size in (40,100,500):
+              print('03a prefix',size,'in 03 at',a.find(b[:size]),'suffix at',a.find(b[-size:]))
+          m=difflib.SequenceMatcher(None,a,b,autojunk=False)
+          blocks=sorted(m.get_matching_blocks(),key=lambda x:x.size,reverse=True)[:8]
+          print('largest matching blocks 03 vs 03a:',blocks)
 
-          try_archive() {
-            name="$1"
-            shift
-            echo "Trying source archive: $name"
-            cat "$@" > /tmp/latex-gym.b64
-            if base64 --decode /tmp/latex-gym.b64 > /tmp/latex-gym.tgz 2>/tmp/base64.err && tar -tzf /tmp/latex-gym.tgz >/tmp/tar-list 2>/tmp/tar.err; then
-              echo "Selected source archive: $name"
-              tar -xzf /tmp/latex-gym.tgz
-              return 0
-            fi
-            return 1
-          }
+          def valid_archive(data:str,label:str):
+              clean=''.join(ch for ch in data if ch in allowed)
+              try:
+                  raw=base64.b64decode(clean,validate=True)
+                  with tarfile.open(fileobj=io.BytesIO(raw),mode='r:gz') as tf:
+                      names=tf.getnames()
+                      if 'package.json' in names or './package.json' in names:
+                          print('VALID',label,'chars',len(clean),'bytes',len(raw),'files',len(names))
+                          Path('/tmp/latex-gym.tgz').write_bytes(raw)
+                          return True
+              except Exception as e:
+                  print('invalid',label,type(e).__name__,str(e)[:120])
+              return False
 
-          try_archive repaired-second-half \
-            .bootstrap/part-00 .bootstrap/part-01 .bootstrap/part-02 \
-            /tmp/part-03-head .bootstrap/part-03a .bootstrap/part-04 \
-          || try_archive repaired-first-half \
-            .bootstrap/part-00 .bootstrap/part-01 .bootstrap/part-02 \
-            .bootstrap/part-03a /tmp/part-03-tail .bootstrap/part-04 \
-          || try_archive legacy \
-            .bootstrap/part-00 .bootstrap/part-01 .bootstrap/part-02 \
-            .bootstrap/part-03 .bootstrap/part-04 \
-          || { echo 'Unable to reconstruct source archive'; cat /tmp/base64.err || true; cat /tmp/tar.err || true; exit 1; }
-
+          p0,p1,p2,p3,p3a,p4=[parts[n] for n in ['part-00','part-01','part-02','part-03','part-03a','part-04']]
+          candidates=[]
+          candidates.append(('legacy',p0+p1+p2+p3+p4))
+          candidates.append(('head9000+03a',p0+p1+p2+p3[:9000]+p3a+p4))
+          candidates.append(('03a+tail8999',p0+p1+p2+p3a+p3[9000:]+p4))
+          candidates.append(('only03a',p0+p1+p2+p3a+p4))
+          # Try every split where repaired 03a replaces a 9000-char window around the midpoint.
+          for split in range(8500,9501):
+              candidates.append((f'prefix{split}+03a',p0+p1+p2+p3[:split]+p3a+p4))
+              tail_start=max(0,len(p3)-split)
+              candidates.append((f'03a+suffix{split}',p0+p1+p2+p3a+p3[tail_start:]+p4))
+          for label,data in candidates:
+              if valid_archive(data,label):
+                  break
+          else:
+              raise SystemExit('No valid archive candidate found')
+          PY
+          tar -xzf /tmp/latex-gym.tgz
           test -f package.json
           rm -rf .bootstrap .init
 
@@ -66,18 +89,10 @@ jobs:
           PID=$!
           READY=0
           for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:5173/latex-gym/ >/dev/null; then
-              READY=1
-              break
-            fi
+            if curl -fsS http://127.0.0.1:5173/latex-gym/ >/dev/null; then READY=1; break; fi
             sleep 1
           done
-          if [ "$READY" -ne 1 ]; then
-            cat /tmp/vite.log
-            kill $PID || true
-            exit 1
-          fi
-          curl -fsS http://127.0.0.1:5173/latex-gym/ >/dev/null
+          if [ "$READY" -ne 1 ]; then cat /tmp/vite.log; kill $PID || true; exit 1; fi
           kill $PID
 
       - name: Typecheck
@@ -103,9 +118,4 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          if git diff --cached --quiet; then
-            echo "Nothing to commit."
-          else
-            git commit -m "Build LaTeX gym application"
-            git push origin HEAD:main
-          fi
+          if git diff --cached --quiet; then echo "Nothing to commit."; else git commit -m "Build LaTeX gym application"; git push origin HEAD:main; fi
