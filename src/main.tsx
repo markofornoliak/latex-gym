@@ -13,6 +13,7 @@ import './styles/laptopPolish.css';
 import './styles/deepProduct.css';
 import './styles/smartEditor.css';
 import './styles/projects.css';
+import './styles/projectWorkspace.css';
 import './styles/referenceDeep.css';
 import './styles/progressDeep.css';
 import './styles/interactionPolish.css';
