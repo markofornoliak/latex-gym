@@ -5,6 +5,7 @@ import './data/editorialEnhancements';
 import './data/curriculumExpansion';
 import './data/deepCurriculum';
 import './data/debuggingTrack';
+import './data/explanationElaboration';
 import { App } from './app/App';
 import './styles/index.css';
 import './styles/fidelity.css';
