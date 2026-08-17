@@ -1,0 +1,15 @@
+.hint-area--mobile{display:none}
+.practice-top .practice-bookmark.active svg{fill:rgba(6,26,58,.10)}
+
+@media (max-width:1099px){
+  .hint-area--desktop{display:none}
+  .hint-area--mobile{display:block;margin-top:20px;margin-bottom:16px}
+  .practice-workspace .editor-pane,.practice-workspace .result-pane{display:block}
+  .practice-workspace .result-pane>h2{margin-top:2px}
+  .practice-workspace .compile-button{margin-bottom:13px}
+}
+
+@media (min-width:1100px){
+  .hint-area--desktop{display:block}
+  .hint-area--mobile{display:none}
+}
