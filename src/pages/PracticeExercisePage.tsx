@@ -6,7 +6,7 @@ import { LatexPreview } from '../components/LatexPreview';
 import { getExercise, getLesson } from '../data/courses';
 import { getExerciseInteraction, initialInteractionValue, interactionLabel } from '../data/exerciseInteractions';
 import { compiler } from '../services/compiler';
-import { validateExercise, type ValidationResult } from '../services/validator';
+import { validateExercise, type ValidationLevel, type ValidationResult } from '../services/validator';
 import { useAppStore } from '../store/useAppStore';
 import type { CompilationState, CompileResult } from '../types';
 
@@ -19,6 +19,7 @@ export function PracticeExercisePage(){
   const drafts=useAppStore(state=>state.drafts);
   const setDraft=useAppStore(state=>state.setDraft);
   const recordAttempt=useAppStore(state=>state.recordExerciseAttempt);
+  const attempts=useAppStore(state=>state.attempts);
   const recordHint=useAppStore(state=>state.recordHint);
   const hintsUsed=useAppStore(state=>state.hintsUsed);
   const bookmarks=useAppStore(state=>state.bookmarks);
@@ -77,22 +78,22 @@ export function PracticeExercisePage(){
       setCompileState('error');return null;
     }
   };
+  const recordCheckedAttempt=(checked:ValidationResult)=>recordAttempt(exercise.id,checked.ok,exercise.concepts,exercise.title,{firstTry:(attempts[exercise.id]??0)===0,hintsUsed:hintLevel,solutionRevealed:solution});
   const check=async()=>{
     if(conceptual){
       const checked=validateExercise(exercise,source);
-      setValidation(checked);
-      recordAttempt(exercise.id,checked.ok,exercise.concepts,exercise.title);
-      return;
+      setValidation(checked);recordCheckedAttempt(checked);return;
     }
     const compiled=await runCompile();
     if(!compiled)return;
     const checked=validateExercise(exercise,source,compiled);
-    setValidation(checked);
-    recordAttempt(exercise.id,checked.ok,exercise.concepts,exercise.title);
+    setValidation(checked);recordCheckedAttempt(checked);
   };
   const revealHint=()=>{const next=Math.min(exercise.hints.length,hintLevel+1);recordHint(exercise.id,next);};
   const renderHints=(variant:'desktop'|'mobile')=><div className={`hint-area hint-area--${variant}`}><div className="hint-heading"><span>Подсказки</span><button onClick={revealHint} disabled={hintLevel>=exercise.hints.length}>{hintLevel>=exercise.hints.length?'Все открыты':'Открыть подсказку'}</button></div>{exercise.hints.slice(0,hintLevel).map((hint,index)=><p key={index}><b>{index+1}.</b> {hint}</p>)}{hintLevel>=exercise.hints.length&&!solution&&<button className="text-tool reveal-solution" onClick={()=>setSolution(true)}>Показать эталонное решение</button>}</div>;
-  const passed=validation?.items.filter(item=>item.ok).length??0;
+  const blockingItems=validation?.items.filter(item=>item.blocking)??[];
+  const passed=blockingItems.filter(item=>item.ok).length;
+  const advisoryCount=validation?.items.filter(item=>!item.blocking&&!item.ok).length??0;
 
   return <div className="practice-screen" data-compilation-state={compileState}>
     <header className="practice-top"><Link to="/practice" aria-label="Назад к практике"><BackIcon/></Link><strong>Практика</strong><button type="button" className={`icon-button practice-bookmark ${isSaved?'active':''}`} onClick={()=>toggleBookmark('exercise',exercise.id)} aria-label={isSaved?'Удалить задачу из закладок':'Сохранить задачу'}><BookmarkIcon/></button></header>
@@ -116,7 +117,7 @@ export function PracticeExercisePage(){
         {!conceptual&&<div className="result-frame"><LatexPreview result={result}/></div>}
         {conceptual&&!validation&&<div className="conceptual-note"><h3>Здесь компиляция не нужна.</h3><p>Задание проверяет понимание модели LaTeX, а не умение вводить ответ в редактор исходника.</p></div>}
         {!conceptual&&result&&!validation&&<div className="compile-result-note" role="status" aria-live="polite"><h3>{result.ok?'Документ собирается.':'Компиляция остановлена.'}</h3><p>{result.ok?'Задание ещё не проверено. Компиляция отвечает только на вопрос, может ли LaTeX обработать исходник.':'Исправьте первую содержательную ошибку и запустите компиляцию снова.'}</p></div>}
-        {validation&&<div className={`validation-panel ${validation.ok?'validation-panel--ok':''}`} role="status" aria-live="polite"><h3>{validation.ok?'Решение принято':`Выполнено ${passed} из ${validation.items.length} требований`}</h3>{validation.items.map((item,index)=><div className="validation-row" key={index}><span>{item.ok?'✓':'×'}</span><div><strong>{item.message}</strong>{item.line&&<small>Строка {item.line}</small>}{!item.ok&&<small>{item.hint}</small>}</div></div>)}</div>}
+        {validation&&<div className={`validation-panel ${validation.ok?'validation-panel--ok':''}`} role="status" aria-live="polite"><h3>{validation.ok?(advisoryCount?`Решение принято · замечаний: ${advisoryCount}`:'Решение принято'):`Выполнено ${passed} из ${blockingItems.length} требований`}</h3>{validation.items.map((item,index)=><div className={`validation-row validation-row--${item.level}`} key={index}><span>{item.ok?'✓':item.blocking?'×':'!'}</span><div><strong>{item.message}</strong><small>{validationLevelLabel(item.level)}{item.line?` · строка ${item.line}`:''}</small>{!item.ok&&<small>{item.hint}</small>}</div></div>)}</div>}
         {solution&&<details className="reference-solution" open><summary>Эталонное решение</summary><pre>{exercise.solution}</pre><p>Это один корректный вариант; проверка основана на требованиях, а не на полном совпадении строки.</p></details>}
         {renderHints('mobile')}
       </section>
@@ -133,4 +134,10 @@ function stateLabel(state:CompilationState){
   if(state==='warning')return 'Документ собирается с предупреждением';
   if(state==='error')return 'Компиляция остановлена';
   return 'Готов к компиляции';
+}
+function validationLevelLabel(level:ValidationLevel){
+  if(level==='warning')return 'WARNING';
+  if(level==='style')return 'STYLE';
+  if(level==='pedagogy')return 'PEDAGOGICAL NOTE';
+  return 'ТРЕБОВАНИЕ';
 }
