@@ -85,20 +85,29 @@ jobs:
           fi
 
           echo 'QA Full Compile: compile a real document in the production browser worker'
-          if ! timeout 150 "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
-            --virtual-time-budget=100000 --dump-dom \
-            'http://127.0.0.1:4173/latex-gym/full-tex-smoke.html' \
-            > /tmp/full-tex-smoke.html 2> /tmp/full-tex-smoke.browser.log; then
-            cat /tmp/full-tex-smoke.html || true
-            cat /tmp/full-tex-smoke.browser.log || true
+          "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --remote-debugging-port=9222 --user-data-dir=/tmp/latex-gym-full-tex-cdp about:blank \
+            > /tmp/full-tex-chrome.log 2>&1 &
+          SMOKE_CHROME_PID=$!
+          CDP_READY=0
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:9222/json/version >/dev/null; then
+              CDP_READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$CDP_READY" -ne 1 ]; then
+            cat /tmp/full-tex-chrome.log || true
+            kill "$SMOKE_CHROME_PID" 2>/dev/null || true
             exit 1
           fi
-          if ! grep -Fq 'FULL_TEX_OK' /tmp/full-tex-smoke.html; then
-            echo 'Real browser TeX compilation did not produce a PDF.'
-            cat /tmp/full-tex-smoke.html
-            cat /tmp/full-tex-smoke.browser.log || true
+          if ! timeout 135 node scripts/full-tex-smoke.mjs 'http://127.0.0.1:4173/latex-gym/full-tex-smoke.html'; then
+            cat /tmp/full-tex-chrome.log || true
+            kill "$SMOKE_CHROME_PID" 2>/dev/null || true
             exit 1
           fi
+          kill "$SMOKE_CHROME_PID" 2>/dev/null || true
           rm -f dist/full-tex-smoke.html
 
           mkdir -p qa-screenshots
