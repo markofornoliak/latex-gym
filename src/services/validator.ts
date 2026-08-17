@@ -5,10 +5,13 @@ export type ValidationResult = { ok:boolean; items:ValidationItem[] };
 
 const escapeRegExp=(value:string)=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 const withoutComments=(source:string)=>source.replace(/(^|[^\\])%.*$/gm,'$1');
+const normalizeGroupWhitespace=(source:string)=>source.replace(/[ \t]+}/g,'}');
 
 function countCommand(source:string,name:string){
   const escaped=escapeRegExp(name);
-  return (withoutComments(source).match(new RegExp(`\\\\${escaped}(?=\\s*\\{|\\s*\\[|\\b)`, 'g'))??[]).length;
+  // A TeX control word ends at the first non-letter token. That includes
+  // argument delimiters, whitespace, stars, subscripts and superscripts.
+  return (withoutComments(source).match(new RegExp(`\\\\${escaped}(?=[^A-Za-z@]|$)`, 'g'))??[]).length;
 }
 function hasEnvironment(source:string,name:string){
   const escaped=escapeRegExp(name);
@@ -22,6 +25,10 @@ function hasPackage(source:string,name:string){
 function hasDocumentClassOption(source:string,option:string){
   const match=withoutComments(source).match(/\\documentclass(?:\[([^\]]*)\])?\{[^}]+\}/);
   return (match?.[1]??'').split(',').map(value=>value.trim()).includes(option);
+}
+function hasStructuralText(source:string,value:string){
+  if(source.includes(value))return true;
+  return normalizeGroupWhitespace(source).includes(normalizeGroupWhitespace(value));
 }
 function hasParagraph(source:string){
   const body=source.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/)?.[1]??source;
@@ -41,8 +48,12 @@ function environmentsBalanced(source:string){
   return stack.length===0;
 }
 function firstLineContaining(source:string,value:string){
-  const index=source.indexOf(value);if(index<0)return undefined;
-  return source.slice(0,index).split('\n').length;
+  const exact=source.indexOf(value);
+  if(exact>=0)return source.slice(0,exact).split('\n').length;
+  const normalizedValue=normalizeGroupWhitespace(value);
+  const lines=source.split('\n');
+  const index=lines.findIndex(line=>normalizeGroupWhitespace(line).includes(normalizedValue));
+  return index>=0?index+1:undefined;
 }
 
 export function validateExercise(exercise:Exercise,source:string,compileResult?:CompileResult):ValidationResult{
@@ -58,7 +69,7 @@ function validateRule(rule:ValidatorRule,source:string,compileResult?:CompileRes
     case 'environment':ok=hasEnvironment(source,rule.value);break;
     case 'command':ok=countCommand(source,rule.value)>=(rule.min??1);break;
     case 'package':ok=hasPackage(source,rule.value);break;
-    case 'containsText':ok=source.includes(rule.value);line=firstLineContaining(source,rule.value);break;
+    case 'containsText':ok=hasStructuralText(source,rule.value);line=firstLineContaining(source,rule.value);break;
     case 'forbiddenText':ok=!source.includes(rule.value);line=ok?undefined:firstLineContaining(source,rule.value);break;
     case 'regex':try{ok=new RegExp(rule.value,rule.flags).test(source);}catch{ok=false;}break;
     case 'paragraph':ok=hasParagraph(source);break;
@@ -70,4 +81,4 @@ function validateRule(rule:ValidatorRule,source:string,compileResult?:CompileRes
   return {ok,message:rule.message,hint:rule.hint,line};
 }
 
-export const validatorInternals={countCommand,hasEnvironment,hasPackage,hasDocumentClassOption,environmentsBalanced};
+export const validatorInternals={countCommand,hasEnvironment,hasPackage,hasDocumentClassOption,hasStructuralText,environmentsBalanced};
