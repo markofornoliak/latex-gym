@@ -112,13 +112,14 @@ jobs:
           grep -Fq 'Что такое LaTeX' /tmp/reload.html
           ! grep -Fq 'Страница не найдена' /tmp/reload.html
 
-          echo 'QA E2E: conceptual exercise → compiler failure → repair → persistence → project acceptance'
+          echo 'QA E2E: conceptual exercise → compiler failure → repair → persistence → project acceptance → offline PWA'
           "$CHROME" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
             --remote-debugging-port=9222 --user-data-dir=/tmp/latex-gym-e2e-cdp about:blank > /tmp/e2e-chrome.log 2>&1 &
           E2E_CHROME_PID=$!
           for i in {1..30}; do if curl -fsS http://127.0.0.1:9222/json/version >/dev/null; then break; fi; sleep 1; done
           if ! timeout 120 node scripts/e2e-learning.mjs 'http://127.0.0.1:4173'; then cat /tmp/e2e-chrome.log || true; kill "$E2E_CHROME_PID" 2>/dev/null || true; exit 1; fi
           if ! timeout 240 node scripts/e2e-project.mjs 'http://127.0.0.1:4173'; then cat /tmp/e2e-chrome.log || true; kill "$E2E_CHROME_PID" 2>/dev/null || true; exit 1; fi
+          if ! timeout 90 node scripts/e2e-pwa.mjs 'http://127.0.0.1:4173'; then cat /tmp/e2e-chrome.log || true; kill "$E2E_CHROME_PID" 2>/dev/null || true; exit 1; fi
           kill "$E2E_CHROME_PID" 2>/dev/null || true
 
       - name: Find main visual baseline
