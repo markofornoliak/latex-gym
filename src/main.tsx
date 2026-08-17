@@ -10,6 +10,7 @@ import './styles/fidelity.css';
 import './styles/deviceLayouts.css';
 import './styles/laptopPolish.css';
 import './styles/deepProduct.css';
+import './styles/smartEditor.css';
 
 registerSW({ immediate: true });
 createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
