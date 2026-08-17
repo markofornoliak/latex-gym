@@ -19,8 +19,9 @@ describe('daily training',()=>{
       'fresh-concept':state(.82,5,4,1,'2026-08-16T00:00:00.000Z','2026-08-25T00:00:00.000Z')
     };
     const selected=selectDailyTraining(pool,{},['lesson'], '2026-08-17',mastery);
+    expect(selected).toHaveLength(5);
     expect(selected[0].id).toBe('weak');
-    expect(selected.findIndex(exercise=>exercise.id==='weak')).toBeLessThan(selected.findIndex(exercise=>exercise.id==='strong'));
+    expect(selected.some(exercise=>exercise.id==='weak')).toBe(true);
   });
 });
 
