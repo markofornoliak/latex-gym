@@ -1,0 +1,130 @@
+/*
+ * Device-specific layout profiles.
+ * The visual language intentionally stays unchanged: same colors, typography,
+ * rules and controls. Only information density, pane structure and readable
+ * line lengths adapt to the physical screen class.
+ */
+
+:root{
+  --layout-gutter:18px;
+  --reading-width:760px;
+  --workspace-max:1520px;
+}
+
+/* PHONE — 320–599 px: one reading column, sequential practice flow. */
+@media (max-width:599px){
+  :root{--layout-gutter:18px;--reading-width:100%}
+  .page{width:calc(100% - (var(--layout-gutter) * 2));padding-top:30px}
+  .page-intro{margin-bottom:26px}.page-intro h1{font-size:34px}
+  .lesson-page{display:block;background:var(--surface)}
+  .lesson-sidebar,.lesson-context{display:none!important}
+  .lesson-center{width:100%;max-width:none;margin:0}
+  .lesson-hero{padding:18px var(--layout-gutter) 24px}
+  .lesson-hero h1{font-size:36px;max-width:330px}
+  .lesson-content{padding:25px var(--layout-gutter) 16px;min-height:390px}
+  .theory-block>p{font-size:13.5px;line-height:1.72}
+  .lesson-pagination{width:calc(100% - (var(--layout-gutter) * 2))}
+  .lesson-neighbors{margin-left:var(--layout-gutter);margin-right:var(--layout-gutter)}
+  .practice-workspace{width:calc(100% - (var(--layout-gutter) * 2));display:block}
+  .task-pane{padding-top:21px}.task-pane h1{font-size:15px;line-height:1.55}
+  .editor-pane,.result-pane{width:100%;min-width:0}
+  .editor-frame{min-height:300px}.result-frame{min-height:150px}
+  .practice-action{padding-left:var(--layout-gutter);padding-right:var(--layout-gutter)}
+  .playground-page{width:calc(100% - (var(--layout-gutter) * 2))}
+  .reference-row{grid-template-columns:88px 1fr 18px}
+}
+
+/* TABLET — 600–1023 px: wide reading canvas, touch navigation, no cramped rails. */
+@media (min-width:600px) and (max-width:1023px){
+  :root{--layout-gutter:32px;--reading-width:780px;--workspace-max:920px}
+  .page{width:min(calc(100% - 64px),900px);padding-top:44px}
+  .page-intro{max-width:760px}.page-intro h1{font-size:44px}
+  .home-page{max-width:820px}.continue-card{min-height:106px}
+  .lesson-page{display:block;background:var(--bg)}
+  .lesson-sidebar,.lesson-context{display:none!important}
+  .lesson-center{width:min(100%,860px);margin:auto;background:var(--surface);border-left:1px solid var(--soft-border);border-right:1px solid var(--soft-border)}
+  .lesson-hero{padding:30px 42px 30px}.lesson-hero h1{font-size:46px;max-width:600px}.lesson-hero p{font-size:14px;max-width:560px}
+  .lesson-content{padding:34px 42px 24px;min-height:480px}.theory-block{max-width:720px}.theory-block>p{font-size:15px;line-height:1.76}
+  .lesson-pagination{width:calc(100% - 84px)}.lesson-neighbors{margin-left:42px;margin-right:42px}
+  .practice-workspace{width:min(calc(100% - 64px),900px)}
+  .task-pane{padding:30px 0 18px}.task-pane h1{font-size:17px}.task-pane ul{font-size:13px}
+  .editor-frame{min-height:430px}.result-frame{min-height:230px}
+  .practice-action{padding-left:32px;padding-right:32px}.practice-action .primary-button{max-width:720px}
+  .playground-page{width:min(calc(100% - 64px),930px)}
+  .playground-preview{min-height:560px}
+  .reference-search{max-width:760px}.course-list,.reference-list{max-width:840px}
+}
+
+/* LAPTOP — 1024–1279 px: left course rail + main reading canvas. */
+@media (min-width:1024px) and (max-width:1279px){
+  :root{--layout-gutter:34px;--reading-width:740px;--workspace-max:1180px}
+  .topbar{height:70px;padding:0 28px}.topbar-logo{min-width:165px}
+  .desktop-nav{display:flex;align-self:stretch}.desktop-nav a{display:flex;align-items:center;gap:6px;padding:0 12px;color:var(--secondary);font-size:11px;position:relative}.desktop-nav a svg{width:16px}.desktop-nav a.active{color:var(--navy)}.desktop-nav a.active:after{content:"";position:absolute;bottom:0;left:12px;right:12px;height:2px;background:var(--navy)}
+  .search-trigger{display:flex}.settings-link{display:grid}.bottom-nav{display:none}.app--mobile-nav main{padding-bottom:0}
+  .page{width:min(calc(100% - 68px),1040px);padding-top:48px}
+  .lesson-page{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:100dvh;background:var(--bg)}
+  .lesson-sidebar{display:flex!important;flex-direction:column;position:sticky;top:0;height:100dvh;overflow:auto;border-right:1px solid var(--soft-border);padding:26px 18px;background:#f8f8f5}
+  .lesson-context{display:none!important}.lesson-center{background:var(--surface);border-right:0;min-width:0}
+  .lesson-hero{padding:28px 38px}.lesson-hero h1{font-size:46px;max-width:560px}.lesson-content{padding:32px 38px 22px;min-height:470px}
+  .theory-block{max-width:700px}.theory-block>p{font-size:14px;line-height:1.74}
+  .lesson-pagination{width:calc(100% - 76px)}
+  .practice-screen{padding-bottom:0}.practice-top{display:none}
+  .practice-workspace{width:100%;display:grid;grid-template-columns:290px minmax(0,1fr);grid-template-rows:auto auto;align-items:start;border-bottom:1px solid var(--border)}
+  .task-pane{grid-row:1 / span 2;width:auto;min-width:0;height:calc(100dvh - 72px);position:sticky;top:0;overflow:auto;padding:28px 24px;border-right:1px solid var(--border)}
+  .editor-pane,.result-pane{display:block!important;width:auto;min-width:0;max-width:none;resize:none;padding:22px 28px;background:var(--surface)}
+  .editor-pane{border-right:0;border-bottom:1px solid var(--border)}.result-pane{background:var(--bg)}
+  .mobile-editor-tabs{display:none}.editor-frame{min-height:380px}.result-frame{min-height:230px}
+  .practice-action{position:static;height:70px;padding:10px 28px;display:flex;justify-content:flex-end}.practice-action .primary-button{width:260px;margin:0}
+  .playground-page{width:min(calc(100% - 68px),1160px)}.playground-workspace{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr);min-height:620px}.playground-workspace>section{display:block!important}
+}
+
+/* DESKTOP — 1280–1919 px: full three-pane academic workspace. */
+@media (min-width:1280px) and (max-width:1919px){
+  :root{--layout-gutter:44px;--reading-width:820px;--workspace-max:1660px}
+  .page{width:min(calc(100% - 88px),1240px)}
+  .lesson-page{grid-template-columns:230px minmax(0,820px) minmax(230px,1fr)}
+  .lesson-hero{padding-left:44px;padding-right:44px}.lesson-content{padding-left:44px;padding-right:44px}
+  .theory-block>p{font-size:14.5px;line-height:1.76}
+  .practice-workspace{max-width:var(--workspace-max)}.task-pane{width:330px}.result-pane{width:35%}
+  .playground-page{max-width:var(--workspace-max)}
+}
+
+/* TV / LARGE DESKTOP — 1920–2559 px: larger targets and controlled line length. */
+@media (min-width:1920px) and (max-width:2559px){
+  :root{--layout-gutter:64px;--reading-width:980px;--workspace-max:1880px}
+  .app{font-size:calc(17px * var(--text-scale,1))}
+  .topbar{height:84px;padding:0 64px}.topbar-logo{min-width:230px}.desktop-nav a{padding-left:22px;padding-right:22px;font-size:13px}.search-trigger{height:40px}.progress-ring{width:46px;height:46px}
+  .page{width:min(calc(100% - 128px),1500px);padding-top:62px}.page-intro{max-width:820px}.page-intro h1{font-size:54px}.page-intro p{font-size:17px;max-width:760px}
+  .home-page{max-width:1120px}.section-title{font-size:23px}.toc-row{min-height:72px}.toc-copy strong{font-size:17px}
+  .lesson-page{grid-template-columns:300px minmax(880px,1060px) minmax(320px,1fr);min-height:100dvh}
+  .lesson-sidebar{padding:38px 30px}.lesson-sidebar>a:not(.lesson-side-brand){font-size:14px;padding-top:11px;padding-bottom:11px;grid-template-columns:34px 1fr}
+  .lesson-hero{padding:40px 58px 34px}.lesson-hero h1{font-size:56px;max-width:700px}.lesson-hero p{font-size:16px;max-width:680px}
+  .lesson-content{padding:42px 58px 28px;min-height:560px}.theory-block{max-width:860px}.theory-block h2{font-size:29px}.theory-block>p{font-size:17px;line-height:1.78}.explanation-note{font-size:14px}
+  .lesson-tabs{height:64px}.lesson-tabs button{font-size:16px}.lesson-context{padding:42px 38px}.lesson-context h3{font-size:21px}.lesson-context code{font-size:13px}
+  .lesson-pagination{height:66px;width:calc(100% - 116px)}.lesson-neighbors{margin-left:58px;margin-right:58px}
+  .practice-workspace{max-width:var(--workspace-max);height:calc(100dvh - 84px)}.task-pane{width:400px;padding:38px 32px}.task-pane h1{font-size:18px}.task-pane ul{font-size:14px}.editor-pane{padding:32px}.result-pane{width:37%;padding:32px}.editor-frame{min-height:520px}.result-frame{min-height:420px}.practice-action{height:84px;padding:14px 40px}.practice-action .primary-button{width:310px;height:54px}
+  .playground-page{width:min(calc(100% - 128px),var(--workspace-max));padding-top:48px}.playground-workspace{min-height:720px}
+  .reference-list,.course-list{max-width:1120px}.reference-row{min-height:76px}.reference-row strong{font-size:18px}
+}
+
+/* 4K / TV — 2560 px+: deliberate TV layout, not a stretched 1440p page. */
+@media (min-width:2560px){
+  :root{--layout-gutter:92px;--reading-width:1120px;--workspace-max:2320px}
+  .app{font-size:calc(19px * var(--text-scale,1))}
+  .topbar{height:96px;padding:0 92px}.latex-mark{font-size:34px}.gym-mark{font-size:26px}.desktop-nav a{font-size:15px;padding:0 28px}.desktop-nav a svg{width:21px}.search-trigger{height:46px;padding:0 14px}.search-trigger span{font-size:11px}.progress-ring{width:52px;height:52px}
+  .page{width:min(calc(100% - 184px),1800px);padding-top:76px}.page-intro{max-width:980px}.page-intro h1{font-size:66px}.page-intro p{font-size:20px;line-height:1.72;max-width:900px}.section-title{font-size:27px}
+  .home-page{max-width:1380px}.continue-card{min-height:128px;grid-template-columns:104px 1fr 38px}.continue-number{font-size:42px}.continue-body strong{font-size:21px}.toc-row{min-height:82px}.toc-number{font-size:28px}.toc-copy strong{font-size:20px}.toc-copy small{font-size:13px}
+  .lesson-page{grid-template-columns:360px minmax(1040px,1260px) minmax(420px,1fr);min-height:100dvh}.lesson-sidebar{padding:48px 36px}.lesson-side-brand{font-size:25px}.lesson-sidebar>a:not(.lesson-side-brand){font-size:16px;line-height:1.32;padding:13px 10px;grid-template-columns:42px 1fr}
+  .lesson-hero{padding:52px 72px 42px}.lesson-hero h1{font-size:68px;max-width:860px}.lesson-hero p{font-size:20px;line-height:1.65;max-width:820px}.lesson-tabs{height:74px}.lesson-tabs button{font-size:19px}
+  .lesson-content{padding:54px 72px 34px;min-height:680px}.theory-block{max-width:1040px}.theory-block h2{font-size:36px}.theory-block>p{font-size:20px;line-height:1.82}.code-block pre{font-size:14px}.explanation-note{font-size:16px;line-height:1.65}.lesson-context{padding:52px 46px}.lesson-context h3{font-size:25px}.lesson-context code{font-size:15px;padding:11px 0}.lesson-context p{font-size:14px}.lesson-pagination{height:76px;width:calc(100% - 144px)}.lesson-pagination span{font-size:16px}.lesson-neighbors{margin:24px 72px 44px}.lesson-neighbors a{font-size:13px}
+  .practice-workspace{max-width:var(--workspace-max);height:calc(100dvh - 96px)}.task-pane{width:480px;padding:48px 40px}.task-progress>span{font-size:13px}.task-pane h1{font-size:22px;line-height:1.55}.requirements-title,.task-pane ul{font-size:16px}.hint-heading span{font-size:18px}.hint-heading button,.hint-area p{font-size:14px}.editor-pane{padding:40px}.result-pane{width:38%;padding:40px}.editor-frame{min-height:660px}.editor-toolbar{height:52px}.text-tool{font-size:13px}.compile-button{height:54px;font-size:16px}.result-pane>h2{font-size:22px}.result-frame{min-height:540px}.practice-action{height:96px;padding:16px 54px}.practice-action .primary-button{width:360px;height:62px;font-size:19px}
+  .playground-page{width:min(calc(100% - 184px),var(--workspace-max));padding-top:60px}.workspace-heading h1{font-size:46px}.playground-workspace{min-height:900px;grid-template-columns:minmax(0,1.2fr) minmax(700px,.8fr)}
+  .reference-list,.course-list{max-width:1320px}.reference-row{min-height:88px;grid-template-columns:170px 1fr 30px}.reference-row>code{font-size:15px}.reference-row strong{font-size:22px}.reference-row small{font-size:14px}.course-row{padding:26px 0}.course-number{font-size:31px}.course-main strong{font-size:23px}.course-main small{font-size:15px}
+}
+
+/* Landscape tablets get more horizontal breathing room without switching to laptop UI. */
+@media (min-width:800px) and (max-width:1023px) and (orientation:landscape){
+  .lesson-center{width:min(92vw,900px)}
+  .practice-workspace{width:min(92vw,960px)}
+  .playground-page{width:min(92vw,980px)}
+}
