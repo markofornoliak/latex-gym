@@ -4,6 +4,7 @@ import { BackIcon, ChevronIcon, PlayIcon } from '../components/Icons';
 import { LatexPreview } from '../components/LatexPreview';
 import { getProject } from '../data/projects';
 import { compiler } from '../services/compiler';
+import { validateProjectStage, type ProjectValidationResult } from '../services/projectValidator';
 import { useAppStore } from '../store/useAppStore';
 import type { CompilationState, CompileResult } from '../types';
 
@@ -25,12 +26,13 @@ export function ProjectPage(){
   const key=project&&stage?`project:${project.id}:${stage.id}`:'';
   const [source,setSource]=useState('');
   const [result,setResult]=useState<CompileResult|null>(null);
+  const [validation,setValidation]=useState<ProjectValidationResult|null>(null);
   const [state,setState]=useState<CompilationState>('ready');
   const [saved,setSaved]=useState(true);
 
   useEffect(()=>{
     if(!project||!stage)return;
-    setSource(drafts[key]??stage.starterCode);setResult(null);setState('ready');setSaved(true);
+    setSource(drafts[key]??stage.starterCode);setResult(null);setValidation(null);setState('ready');setSaved(true);
   },[project?.id,stage?.id,key]);
   useEffect(()=>{
     if(!key)return;
@@ -43,14 +45,20 @@ export function ProjectPage(){
   const busy=state==='queued'||state==='compiling';
   const currentDone=projectProgress.includes(stage.id);
   const next=project.stages[index+1];
-  const runCompile=async()=>{
-    setState('queued');await Promise.resolve();setState('compiling');
-    try{const compiled=await compiler.compile(source);setResult(compiled);setState(!compiled.ok?'error':compiled.diagnostics.some(item=>item.severity==='warning')?'warning':'success');}
-    catch{setState('error');}
+  const setProjectSource=(value:string)=>{setSource(value);setResult(null);setValidation(null);setState('ready');};
+  const runCompile=async():Promise<CompileResult|null>=>{
+    setState('queued');setValidation(null);await Promise.resolve();setState('compiling');
+    try{const compiled=await compiler.compile(source);setResult(compiled);setState(!compiled.ok?'error':compiled.diagnostics.some(item=>item.severity==='warning')?'warning':'success');return compiled;}
+    catch{setState('error');return null;}
   };
-  const finish=()=>{
+  const finish=async()=>{
+    if(currentDone){if(next)navigate(`/project/${project.id}/${next.id}`);return;}
+    const requiresCompilation=/\\documentclass\b/.test(source);
+    const compiled=requiresCompilation?(result??await runCompile()):result;
+    const checked=validateProjectStage(stage,source,compiled??undefined);
+    setValidation(checked);
+    if(!checked.ok)return;
     completeStage(project.id,stage.id,`${project.title}: ${stage.title}`);
-    if(next)navigate(`/project/${project.id}/${next.id}`);
   };
 
   return <div className="project-workspace">
@@ -58,12 +66,15 @@ export function ProjectPage(){
     <main className="project-main">
       <header className="project-header"><span className="eyebrow">ПРОЕКТ · ЭТАП {index+1} ИЗ {project.stages.length}</span><h1>{stage.title}</h1><p>{stage.objective}</p></header>
       <section className="project-requirements"><span className="eyebrow">КРИТЕРИИ ЭТАПА</span><ul>{stage.requirements.map(requirement=><li key={requirement}>{requirement}</li>)}</ul></section>
-      <section className="project-editor"><div className="editor-status-line"><span className={`compile-state compile-state--${state}`}>{projectStateLabel(state)}</span><span>{saved?'Сохранено локально':'Сохранение…'}</span></div><Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={setSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onReset={()=>setSource(stage.starterCode)} onCompile={()=>{void runCompile();}} onSave={()=>{setDraft(key,source);setSaved(true);}} diagnostics={result?.diagnostics??[]}/></Suspense><div className="project-editor-actions"><button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy}><PlayIcon/>{busy?'Компиляция…':'Скомпилировать'}</button><button className="primary-button" onClick={finish}>{currentDone?'Этап пройден':next?'Завершить и продолжить':'Завершить проект'}{next&&<ChevronIcon/>}</button></div></section>
+      <section className="project-editor"><div className="editor-status-line"><span className={`compile-state compile-state--${state}`}>{projectStateLabel(state)}</span><span>{saved?'Сохранено локально':'Сохранение…'}</span></div><Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={setProjectSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onReset={()=>setProjectSource(stage.starterCode)} onCompile={()=>{void runCompile();}} onSave={()=>{setDraft(key,source);setSaved(true);}} diagnostics={result?.diagnostics??[]}/></Suspense>
+        {result&&!validation&&<div className="compile-result-note" role="status" aria-live="polite"><h3>{result.ok?'Документ собирается.':'Компиляция остановлена.'}</h3><p>{result.ok?'Этап ещё не проверен по критериям приёмки.':'Исправьте первую содержательную ошибку перед проверкой этапа.'}</p></div>}
+        {validation&&<div className={`validation-panel project-validation ${validation.ok?'validation-panel--ok':''}`} role="status" aria-live="polite"><h3>{validation.ok?'Критерии этапа выполнены':'Этап ещё не принят'}</h3>{validation.items.map((item,index)=><div className="validation-row" key={`${item.label}-${index}`}><span>{item.ok?'✓':item.blocking?'×':'!'}</span><div><strong>{item.label}</strong><small>{item.blocking?'Критерий приёмки':'Редакторская проверка'}</small>{!item.ok&&<small>{item.hint}</small>}</div></div>)}</div>}
+        <div className="project-editor-actions"><button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy}><PlayIcon/>{busy?'Компиляция…':'Скомпилировать'}</button><button className="primary-button" onClick={()=>{void finish();}} disabled={busy||Boolean(currentDone&&!next)}>{currentDone?(next?'Продолжить':'Этап принят'):'Проверить этап'}{currentDone&&next&&<ChevronIcon/>}</button></div></section>
     </main>
-    <aside className="project-preview"><span className="eyebrow">РЕЗУЛЬТАТ</span><div className="project-paper"><LatexPreview result={result}/></div><p>Предпросмотр показывает поддерживаемый учебный поднабор. Полный TeX не имитируется, если конструкция недоступна текущему движку.</p></aside>
+    <aside className="project-preview"><span className="eyebrow">РЕЗУЛЬТАТ</span><div className="project-paper"><LatexPreview result={result}/></div><p>Быстрый предпросмотр показывает поддерживаемый учебный поднабор. Он отвечает за мгновенную обратную связь; критерии этапа проверяются отдельно.</p></aside>
   </div>;
 }
 
 function projectStateLabel(state:CompilationState){
-  if(state==='queued')return 'В очереди';if(state==='compiling')return 'Компиляция';if(state==='success')return 'Готово';if(state==='warning')return 'Есть предупреждение';if(state==='error')return 'Ошибка';return 'Готов к компиляции';
+  if(state==='queued')return 'В очереди';if(state==='compiling')return 'Компиляция';if(state==='success')return 'Документ собирается';if(state==='warning')return 'Есть предупреждение';if(state==='error')return 'Компиляция остановлена';return 'Готов к компиляции';
 }
