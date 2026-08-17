@@ -4,8 +4,14 @@ export type WorkspaceRequirement={path:string;reason:string};
 
 const profiles:Record<string,{rootFile?:string;files:Array<ProjectFile>;required:WorkspaceRequirement[]}>= {
   'academic-paper:stage-8':{
-    files:[{path:'references.bib',content:'@book{knuth1984,\n  author = {Donald E. Knuth},\n  title = {The TeXbook},\n  year = {1984}\n}\n'}],
-    required:[{path:'references.bib',reason:'Библиография этапа должна находиться в отдельном .bib-файле.'}]
+    files:[
+      {path:'main.tex',content:'\\documentclass{article}\n\\usepackage[backend=bibtex]{biblatex}\n\\addbibresource{references.bib}\n\n\\begin{document}\nA stable citation: \\cite{knuth1984}.\n\n\\printbibliography\n\\end{document}\n'},
+      {path:'references.bib',content:'@book{knuth1984,\n  author = {Donald E. Knuth},\n  title = {The TeXbook},\n  year = {1984}\n}\n'}
+    ],
+    required:[
+      {path:'main.tex',reason:'Этап библиографии должен собираться как настоящий корневой документ.'},
+      {path:'references.bib',reason:'Библиография этапа должна находиться в отдельном .bib-файле.'}
+    ]
   },
   'academic-paper:stage-10':{
     files:[
