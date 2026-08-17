@@ -1,15 +1,17 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BackIcon, ChevronIcon, PlayIcon } from '../components/Icons';
 import { LatexPreview } from '../components/LatexPreview';
 import { getProject } from '../data/projects';
 import { compiler } from '../services/compiler';
 import { validateProjectStage, type ProjectValidationResult } from '../services/projectValidator';
+import { activeProjectFile, activateProjectFile, addProjectFile, combinedProjectSource, createProjectWorkspace, referencedProjectFiles, removeProjectFile, restoreProjectWorkspace, rootProjectSource, serializeProjectWorkspace, updateProjectFile, workspaceRequirements, type ProjectWorkspace } from '../services/projectWorkspace';
 import { useAppStore } from '../store/useAppStore';
 import type { CompilationState, CompileResult } from '../types';
 
 const CodeEditor=lazy(()=>import('../components/CodeEditor').then(module=>({default:module.CodeEditor})));
 const EMPTY_PROJECT_PROGRESS:string[]=[];
+const EMPTY_WORKSPACE:ProjectWorkspace={version:1,rootFile:'main.tex',activeFile:'main.tex',files:[{path:'main.tex',content:''}]};
 
 export function ProjectPage(){
   const {projectId,stageId}=useParams();
@@ -24,41 +26,63 @@ export function ProjectPage(){
   const index=useMemo(()=>project?Math.max(0,stageId?project.stages.findIndex(stage=>stage.id===stageId):0):0,[project,stageId]);
   const stage=project?.stages[index];
   const key=project&&stage?`project:${project.id}:${stage.id}`:'';
-  const [source,setSource]=useState('');
+  const [workspace,setWorkspace]=useState<ProjectWorkspace>(EMPTY_WORKSPACE);
   const [result,setResult]=useState<CompileResult|null>(null);
   const [validation,setValidation]=useState<ProjectValidationResult|null>(null);
   const [state,setState]=useState<CompilationState>('ready');
   const [saved,setSaved]=useState(true);
+  const [newFile,setNewFile]=useState('');
+  const [fileError,setFileError]=useState('');
 
   useEffect(()=>{
     if(!project||!stage)return;
-    setSource(drafts[key]??stage.starterCode);setResult(null);setValidation(null);setState('ready');setSaved(true);
+    setWorkspace(restoreProjectWorkspace(drafts[key],project.id,stage.id,stage.starterCode));
+    setResult(null);setValidation(null);setState('ready');setSaved(true);setNewFile('');setFileError('');
   },[project?.id,stage?.id,key]);
   useEffect(()=>{
-    if(!key)return;
+    if(!key||!project||!stage)return;
     setSaved(false);
-    const timeout=window.setTimeout(()=>{setDraft(key,source);setSaved(true);},300);
+    const timeout=window.setTimeout(()=>{setDraft(key,serializeProjectWorkspace(workspace));setSaved(true);},300);
     return()=>window.clearTimeout(timeout);
-  },[key,source,setDraft]);
+  },[key,workspace,setDraft,project?.id,stage?.id]);
 
   if(!project||!stage)return <div className="page empty-state"><h1>Проект не найден</h1><Link to="/projects">Вернуться к проектам</Link></div>;
   const busy=state==='queued'||state==='compiling';
   const currentDone=projectProgress.includes(stage.id);
   const next=project.stages[index+1];
-  const setProjectSource=(value:string)=>{setSource(value);setResult(null);setValidation(null);setState('ready');};
+  const activeFile=activeProjectFile(workspace);
+  const source=activeFile?.content??'';
+  const setProjectSource=(value:string)=>{if(!activeFile)return;setWorkspace(current=>updateProjectFile(current,activeFile.path,value));setResult(null);setValidation(null);setState('ready');};
+  const saveNow=()=>{setDraft(key,serializeProjectWorkspace(workspace));setSaved(true);};
+  const resetWorkspace=()=>{setWorkspace(createProjectWorkspace(project.id,stage.id,stage.starterCode));setResult(null);setValidation(null);setState('ready');};
   const runCompile=async():Promise<CompileResult|null>=>{
     setState('queued');setValidation(null);await Promise.resolve();setState('compiling');
-    try{const compiled=await compiler.compile(source);setResult(compiled);setState(!compiled.ok?'error':compiled.diagnostics.some(item=>item.severity==='warning')?'warning':'success');return compiled;}
+    try{const compiled=await compiler.compile(rootProjectSource(workspace));setResult(compiled);setState(!compiled.ok?'error':compiled.diagnostics.some(item=>item.severity==='warning')?'warning':'success');return compiled;}
     catch{setState('error');return null;}
   };
   const finish=async()=>{
     if(currentDone){if(next)navigate(`/project/${project.id}/${next.id}`);return;}
-    const requiresCompilation=/\\documentclass\b/.test(source);
+    const rootSource=rootProjectSource(workspace);
+    const requiresCompilation=/\\documentclass\b/.test(rootSource);
     const compiled=requiresCompilation?(result??await runCompile()):result;
-    const checked=validateProjectStage(stage,source,compiled??undefined);
+    const base=validateProjectStage(stage,combinedProjectSource(workspace),compiled??undefined);
+    const fileItems=workspaceRequirements(project.id,stage.id,workspace);
+    const referenceItems=referencedProjectFiles(workspace).filter(item=>!item.exists).map(item=>({label:`Файл для ${item.reference}`,ok:false,hint:`Корневой файл ссылается на «${item.reference}», но соответствующего файла в проекте нет.`,blocking:true}));
+    const checked:ProjectValidationResult={items:[...base.items,...fileItems,...referenceItems],ok:base.ok&&fileItems.every(item=>item.ok)&&referenceItems.length===0};
     setValidation(checked);
     if(!checked.ok)return;
     completeStage(project.id,stage.id,`${project.title}: ${stage.title}`);
+  };
+  const submitNewFile=(event:FormEvent)=>{
+    event.preventDefault();
+    const created=addProjectFile(workspace,newFile);
+    if(created.error){setFileError(created.error);return;}
+    setWorkspace(created.workspace);setNewFile('');setFileError('');setResult(null);setValidation(null);
+  };
+  const removeFile=(path:string)=>{
+    const removed=removeProjectFile(workspace,path);
+    if(removed.error){setFileError(removed.error);return;}
+    setWorkspace(removed.workspace);setFileError('');setResult(null);setValidation(null);
   };
 
   return <div className="project-workspace">
@@ -66,15 +90,28 @@ export function ProjectPage(){
     <main className="project-main">
       <header className="project-header"><span className="eyebrow">ПРОЕКТ · ЭТАП {index+1} ИЗ {project.stages.length}</span><h1>{stage.title}</h1><p>{stage.objective}</p></header>
       <section className="project-requirements"><span className="eyebrow">КРИТЕРИИ ЭТАПА</span><ul>{stage.requirements.map(requirement=><li key={requirement}>{requirement}</li>)}</ul></section>
-      <section className="project-editor"><div className="editor-status-line"><span className={`compile-state compile-state--${state}`}>{projectStateLabel(state)}</span><span>{saved?'Сохранено локально':'Сохранение…'}</span></div><Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={setProjectSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onReset={()=>setProjectSource(stage.starterCode)} onCompile={()=>{void runCompile();}} onSave={()=>{setDraft(key,source);setSaved(true);}} diagnostics={result?.diagnostics??[]}/></Suspense>
-        {result&&!validation&&<div className="compile-result-note" role="status" aria-live="polite"><h3>{result.ok?'Документ собирается.':'Компиляция остановлена.'}</h3><p>{result.ok?'Этап ещё не проверен по критериям приёмки.':'Исправьте первую содержательную ошибку перед проверкой этапа.'}</p></div>}
+      <section className="project-editor">
+        <div className="project-source-workspace">
+          <aside className="project-file-tree" aria-label="Файлы LaTeX-проекта">
+            <div className="project-file-heading"><span className="eyebrow">ФАЙЛЫ</span><small>{workspace.rootFile}</small></div>
+            <div className="project-file-list">{workspace.files.map(file=><div className={`project-file-row ${file.path===workspace.activeFile?'active':''}`} key={file.path}><button type="button" onClick={()=>setWorkspace(current=>activateProjectFile(current,file.path))}><code>{file.path}</code>{file.path===workspace.rootFile&&<span>root</span>}</button>{file.path!==workspace.rootFile&&<button className="project-file-remove" type="button" onClick={()=>removeFile(file.path)} aria-label={`Удалить ${file.path}`}>×</button>}</div>)}</div>
+            <form className="project-file-add" onSubmit={submitNewFile}><input value={newFile} onChange={event=>setNewFile(event.target.value)} placeholder="sections/new.tex" aria-label="Путь нового файла"/><button type="submit">Добавить</button></form>
+            {fileError&&<p className="project-file-error" role="alert">{fileError}</p>}
+          </aside>
+          <div className="project-source-editor">
+            <div className="editor-status-line"><span className={`compile-state compile-state--${state}`}>{projectStateLabel(state)}</span><span>{activeFile?.path} · {saved?'сохранено локально':'сохранение…'}</span></div>
+            <Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={setProjectSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onReset={resetWorkspace} onCompile={()=>{void runCompile();}} onSave={saveNow} diagnostics={workspace.activeFile===workspace.rootFile?(result?.diagnostics??[]):[]}/></Suspense>
+          </div>
+        </div>
+        {result&&!validation&&<div className="compile-result-note" role="status" aria-live="polite"><h3>{result.ok?'Корневой документ собирается.':'Компиляция остановлена.'}</h3><p>{result.ok?'Этап ещё не проверен по критериям приёмки.':'Исправьте первую содержательную ошибку перед проверкой этапа.'}</p></div>}
         {validation&&<div className={`validation-panel project-validation ${validation.ok?'validation-panel--ok':''}`} role="status" aria-live="polite"><h3>{validation.ok?'Критерии этапа выполнены':'Этап ещё не принят'}</h3>{validation.items.map((item,index)=><div className="validation-row" key={`${item.label}-${index}`}><span>{item.ok?'✓':item.blocking?'×':'!'}</span><div><strong>{item.label}</strong><small>{item.blocking?'Критерий приёмки':'Редакторская проверка'}</small>{!item.ok&&<small>{item.hint}</small>}</div></div>)}</div>}
-        <div className="project-editor-actions"><button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy}><PlayIcon/>{busy?'Компиляция…':'Скомпилировать'}</button><button className="primary-button" onClick={()=>{void finish();}} disabled={busy||Boolean(currentDone&&!next)}>{currentDone?(next?'Продолжить':'Этап принят'):'Проверить этап'}{currentDone&&next&&<ChevronIcon/>}</button></div></section>
+        <div className="project-editor-actions"><button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy}><PlayIcon/>{busy?'Компиляция…':'Скомпилировать root'}</button><button className="primary-button" onClick={()=>{void finish();}} disabled={busy||Boolean(currentDone&&!next)}>{currentDone?(next?'Продолжить':'Этап принят'):'Проверить этап'}{currentDone&&next&&<ChevronIcon/>}</button></div>
+      </section>
     </main>
-    <aside className="project-preview"><span className="eyebrow">РЕЗУЛЬТАТ</span><div className="project-paper"><LatexPreview result={result}/></div><p>Быстрый предпросмотр показывает поддерживаемый учебный поднабор. Он отвечает за мгновенную обратную связь; критерии этапа проверяются отдельно.</p></aside>
+    <aside className="project-preview"><span className="eyebrow">РЕЗУЛЬТАТ</span><div className="project-paper"><LatexPreview result={result}/></div><p>Быстрый предпросмотр компилирует корневой файл. Файловая структура и критерии проекта проверяются отдельно; полноценный TeX-движок подключается как ленивый Full Compile слой.</p></aside>
   </div>;
 }
 
 function projectStateLabel(state:CompilationState){
-  if(state==='queued')return 'В очереди';if(state==='compiling')return 'Компиляция';if(state==='success')return 'Документ собирается';if(state==='warning')return 'Есть предупреждение';if(state==='error')return 'Компиляция остановлена';return 'Готов к компиляции';
+  if(state==='queued')return 'В очереди';if(state==='compiling')return 'Компиляция';if(state==='success')return 'Root собирается';if(state==='warning')return 'Есть предупреждение';if(state==='error')return 'Компиляция остановлена';return 'Готов к компиляции';
 }
