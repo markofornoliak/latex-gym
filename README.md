@@ -13,11 +13,26 @@ LaTeX gym is a static, local-first educational web application for learning LaTe
 - Educational diagnostics for mismatched environments, unbalanced braces, common command typos, missing packages, duplicate labels, and math-mode errors.
 - Searchable Russian/LaTeX command reference with `Ctrl/Cmd + K` search.
 - Playground with local drafts, templates, compilation, and `.tex` download.
-- Bookmarks, learning history, progress, attempts, hints, deterministic spaced repetition, daily training, and streaks.
+- Bookmarks for lessons, exercises and reference entries, plus learning history, progress, attempts, hints, deterministic spaced repetition, daily training, and streaks.
 - Versioned local persistence through Zustand/localStorage, with JSON export/import.
 - Responsive mobile navigation and desktop lesson/practice workspaces; practical panes are resizable on desktop.
 - PWA caching for the application shell, lesson data, and essential assets.
 - GitHub Pages-safe routing with `HashRouter` and Vite `base: '/latex-gym/'`.
+
+## Screenshots and visual QA
+
+The primary visual benchmark is the four-screen mobile flow: onboarding, home, lesson and practice. The production deployment workflow captures the real built application in headless Chrome on every release so visual checks are performed against production assets rather than a separate mockup.
+
+The `latex-gym-visual-qa` Actions artifact contains:
+
+- `onboarding-390.png`;
+- `home-320.png` and `home-390.png`;
+- `lesson-390.png`;
+- `home-768.png`;
+- `lesson-1440.png`;
+- `practice-390.png` and `practice-1920.png`.
+
+The QA step also opens each corresponding hash route, checks for expected page content and fails if the application renders the not-found fallback. This keeps the reference mobile proportions under test while also checking tablet and desktop breakpoints at 320, 390, 768, 1440 and 1920 pixels.
 
 ## Technology
 
@@ -62,11 +77,13 @@ The workflow in `.github/workflows/deploy.yml` runs on pushes to `main`:
 2. setup Node;
 3. `npm ci`;
 4. typecheck;
-5. tests;
+5. unit tests;
 6. production build;
-7. configure Pages;
-8. upload `dist`;
-9. deploy to GitHub Pages.
+7. production route and responsive screenshot QA in headless Chrome;
+8. upload the visual-QA artifact;
+9. configure Pages;
+10. upload `dist` as the Pages artifact;
+11. deploy to GitHub Pages.
 
 In the repository settings, Pages must use **GitHub Actions** as its source.
 
@@ -76,7 +93,7 @@ In the repository settings, Pages must use **GitHub Actions** as its source.
 src/
   app/             routing and application composition
   components/      reusable UI, editor, preview and shell
-  data/            curriculum and reference data
+  data/            curriculum, editorial content and reference data
   pages/           route-level screens
   services/        compiler, validation, spaced repetition
   store/           versioned local learning state
@@ -84,7 +101,7 @@ src/
   types/           shared domain types
 ```
 
-Course content is independent of page components. `src/data/courses.ts` exports modules, lessons, and exercises as structured data, allowing hundreds of lessons to be added without rewriting the frontend.
+Course content is independent of page components. `src/data/courses.ts` exports modules, lessons, and exercises as structured data, allowing hundreds of lessons to be added without rewriting the frontend. Small benchmark-specific editorial refinements are also kept in the data layer rather than presentation components.
 
 ## Adding a lesson
 
