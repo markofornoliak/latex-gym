@@ -35,7 +35,7 @@ describe('curriculum quality gate',()=>{
   });
 
   it('contains no curriculum integrity errors',()=>{
-    const issues=lintCurriculum(lessons,exercises,referenceEntries);
+    const issues=lintCurriculum(lessons,exercises,referenceEntries,projects);
     const errors=issues.filter(issue=>issue.severity==='error');
     expect(errors,errors.map(issue=>`${issue.code}: ${issue.lessonId??issue.exerciseId??''} ${issue.message}`).join('\n')).toEqual([]);
   });
