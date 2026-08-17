@@ -42,6 +42,15 @@ jobs:
       - name: Curriculum integrity
         run: npm run validate:curriculum
 
+      - name: Cache pinned browser TeX assets
+        uses: actions/cache@v4
+        with:
+          path: public/full-tex
+          key: busytex-build-b16fdf28019d93ccfd8f09776e4191835acea5dc-release-88f12c721278c652c9fb69c6a097af9481a2ae7e
+
+      - name: Install pinned browser TeX assets
+        run: npm run install:full-tex
+
       - name: Build
         run: npm run build
 
@@ -65,6 +74,8 @@ jobs:
             cat /tmp/latex-gym-preview.log
             exit 1
           fi
+
+          curl -fsS http://127.0.0.1:4173/latex-gym/full-tex/manifest.json | grep -Fq 'build_b16fdf28019d93ccfd8f09776e4191835acea5dc'
 
           CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
           if [ -z "$CHROME" ]; then
