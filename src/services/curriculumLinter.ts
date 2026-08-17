@@ -1,4 +1,4 @@
-import type { Exercise, Lesson, ReferenceEntry, ValidatorRule } from '../types';
+import type { Exercise, LearningProject, Lesson, ReferenceEntry, ValidatorRule } from '../types';
 import { conceptById } from '../data/concepts';
 
 export type CurriculumIssue={severity:'error'|'warning';code:string;message:string;lessonId?:string;exerciseId?:string};
@@ -6,8 +6,15 @@ export type CurriculumIssue={severity:'error'|'warning';code:string;message:stri
 const unique=(values:string[])=>new Set(values).size===values.length;
 const normalizeGroupWhitespace=(source:string)=>source.replace(/[ \t]+}/g,'}');
 const hasStructuralText=(source:string,value:string)=>source.includes(value)||normalizeGroupWhitespace(source).includes(normalizeGroupWhitespace(value));
+const mechanicalPhrases=[
+  'Практически здесь важно',
+  'В общей логике урока этот шаг нужен',
+  'Критерий понимания после этого шага',
+  'Связывайте этот принцип с общей задачей урока',
+  'Практически этот принцип помогает применять тему'
+];
 
-export function lintCurriculum(lessons:Lesson[],exercises:Exercise[],references:ReferenceEntry[]):CurriculumIssue[]{
+export function lintCurriculum(lessons:Lesson[],exercises:Exercise[],references:ReferenceEntry[],projects:LearningProject[]=[]):CurriculumIssue[]{
   const issues:CurriculumIssue[]=[];
   const lessonIds=lessons.map(lesson=>lesson.id);
   const exerciseIds=exercises.map(exercise=>exercise.id);
@@ -22,6 +29,11 @@ export function lintCurriculum(lessons:Lesson[],exercises:Exercise[],references:
   for(const lesson of lessons){
     if(!lesson.title.trim())issues.push({severity:'error',code:'empty-title',lessonId:lesson.id,message:'Lesson title is empty.'});
     if(lesson.exercises.length===0)issues.push({severity:'warning',code:'no-practice',lessonId:lesson.id,message:'Lesson has no practice.'});
+
+    for(const text of visibleLessonText(lesson)){
+      const phrase=mechanicalPhrases.find(candidate=>text.includes(candidate));
+      if(phrase)issues.push({severity:'error',code:'mechanical-explanation',lessonId:lesson.id,message:`Mechanical explanation phrase detected: ${phrase}`});
+    }
 
     const pedagogy=lesson.pedagogy;
     if(pedagogy){
@@ -54,12 +66,38 @@ export function lintCurriculum(lessons:Lesson[],exercises:Exercise[],references:
       }
     }
     if(!exercise.solution.trim())issues.push({severity:'error',code:'empty-solution',exerciseId:exercise.id,message:'Exercise solution is empty.'});
+    if(exercise.validators.length===0)issues.push({severity:'error',code:'no-validators',exerciseId:exercise.id,message:'Exercise has no acceptance criteria.'});
     for(const rule of exercise.validators){
       if(rule.type==='compiles')continue;
       if(!ruleSatisfiedBySolution(rule,exercise.solution))issues.push({severity:'error',code:'solution-fails-rule',exerciseId:exercise.id,message:`Reference solution does not satisfy: ${rule.message}`});
     }
   }
+
+  const projectStageIds:string[]=[];
+  for(const project of projects){
+    if(project.stages.length===0)issues.push({severity:'error',code:'project-without-stages',message:`Project ${project.id} has no stages.`});
+    for(const stage of project.stages){
+      const scopedId=`${project.id}:${stage.id}`;
+      projectStageIds.push(scopedId);
+      if(stage.requirements.length===0)issues.push({severity:'error',code:'project-stage-without-criteria',message:`Project stage ${scopedId} has no acceptance criteria.`});
+      if(!stage.objective.trim())issues.push({severity:'error',code:'project-stage-without-objective',message:`Project stage ${scopedId} has no objective.`});
+      if(!stage.starterCode.trim())issues.push({severity:'warning',code:'project-stage-empty-starter',message:`Project stage ${scopedId} has an empty starter.`});
+    }
+  }
+  if(!unique(projectStageIds))issues.push({severity:'error',code:'duplicate-project-stage-id',message:'Project stage IDs must be unique inside their project scope.'});
   return issues;
+}
+
+function visibleLessonText(lesson:Lesson){
+  const theory=lesson.theory.flatMap(block=>[block.body,block.note??'']);
+  const content=(lesson.content??[]).flatMap(block=>{
+    if(block.type==='checkpoint')return [block.prompt,block.answer];
+    if(block.type==='anatomy')return [block.body??'',...block.parts.map(part=>part.description)];
+    if(block.type==='flow')return [block.body??'',...block.steps.map(step=>step.detail)];
+    if(block.type==='comparison')return [block.body??'',block.left.note,block.right.note];
+    return 'body' in block?[block.body]:[];
+  });
+  return [...theory,...content];
 }
 
 function ruleSatisfiedBySolution(rule:ValidatorRule,source:string):boolean{
