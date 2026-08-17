@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import '../data/editorialEnhancements';
 import '../data/curriculumExpansion';
 import '../data/deepCurriculum';
+import '../data/debuggingTrack';
 import { exercises, lessons, modules } from '../data/courses';
 import { concepts, conceptById } from '../data/concepts';
 import { projects } from '../data/projects';
@@ -9,6 +10,7 @@ import { referenceEntries } from '../data/reference';
 import { lintCurriculum } from './curriculumLinter';
 
 const foundationOrder=['what-is-latex','compilation-model','tex-source','commands-foundation','arguments-foundation','environments-foundation','document-structure-foundation','preamble-body-foundation','packages-foundation','errors-foundation','first-document-foundation'];
+const debuggingIds=['debug-undefined-control','debug-missing-brace','debug-alignment-tab','debug-missing-math','debug-undefined-environment','debug-file-not-found'];
 
 describe('curriculum quality gate',()=>{
   it('meets the substantial content floor without filler modules',()=>{
@@ -25,6 +27,11 @@ describe('curriculum quality gate',()=>{
     expect(firstWholeDocument).toBe(foundationOrder.length-1);
     expect(lessons[firstWholeDocument].pedagogy?.prerequisites).toContain('package-model');
     expect(lessons[firstWholeDocument].pedagogy?.prerequisites).toContain('compile-error');
+  });
+
+  it('contains the dedicated realistic debugging progression',()=>{
+    const ids=new Set(lessons.map(lesson=>lesson.id));
+    for(const id of debuggingIds)expect(ids.has(id),id).toBe(true);
   });
 
   it('contains no curriculum integrity errors',()=>{
