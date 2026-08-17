@@ -6,9 +6,10 @@ import { bracketMatching, defaultHighlightStyle, StreamLanguage, syntaxHighlight
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, snippetCompletion, type Completion, type CompletionContext } from '@codemirror/autocomplete';
 import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { ExpandIcon } from './Icons';
-import { commandKnowledge, commandPriority, environmentKnowledge, findLabels, getCommandKnowledge, getEnvironmentKnowledge, packageNames } from '../data/latexKnowledge';
+import { commandKnowledge, commandPriority, environmentKnowledge, findBibKeys, findLabels, getCommandKnowledge, getEnvironmentKnowledge, packageNames } from '../data/latexKnowledge';
 import type { Diagnostic } from '../types';
 
+type ProjectSourceFile={path:string;content:string};
 type EditorProps={
   value:string;
   onChange:(value:string)=>void;
@@ -21,6 +22,7 @@ type EditorProps={
   onSave?:()=>void;
   onShowShortcuts?:()=>void;
   diagnostics?:Diagnostic[];
+  projectFiles?:readonly ProjectSourceFile[];
 };
 
 const snippetCompletions:Completion[]=[
@@ -33,14 +35,24 @@ const snippetCompletions:Completion[]=[
   snippetCompletion('\\begin{figure}\n  \\centering\n  \\includegraphics[width=\\linewidth]{${file}}\n  \\caption{${caption}}\n  \\label{fig:${key}}\n\\end{figure}',{label:'fig',type:'text',detail:'snippet → figure · graphicx'})
 ];
 
-function latexCompletion(context:CompletionContext){
+function latexCompletion(context:CompletionContext,projectFiles:readonly ProjectSourceFile[]=[]){
   const source=context.state.doc.toString();
   const before=source.slice(0,context.pos);
+  const projectSource=projectFiles.length?projectFiles.map(file=>file.content).join('\n'):source;
 
   const labelWord=context.matchBefore(/\\(?:ref|pageref|autoref|eqref)\{[^}]*$/);
   if(labelWord){
     const open=labelWord.text.lastIndexOf('{');
-    return {from:labelWord.from+open+1,options:findLabels(source).map(label=>({label,type:'variable',detail:'label'})),validFor:/^[^}]*$/};
+    const labels=[...new Set(findLabels(projectSource))];
+    return {from:labelWord.from+open+1,options:labels.map(label=>({label,type:'variable',detail:'label проекта'})),validFor:/^[^}]*$/};
+  }
+
+  const citationWord=context.matchBefore(/\\(?:cite|parencite|textcite|autocite)\{[^}]*$/);
+  if(citationWord){
+    const open=citationWord.text.lastIndexOf('{');
+    const bibliography=projectFiles.filter(file=>file.path.endsWith('.bib')).map(file=>file.content).join('\n');
+    const keys=[...new Set(findBibKeys(bibliography))];
+    return {from:citationWord.from+open+1,options:keys.map(label=>({label,type:'variable',detail:'bibliography key'})),validFor:/^[^},]*$/};
   }
 
   const environmentWord=context.matchBefore(/\\(?:begin|end)\{[A-Za-z*]*$/);
@@ -52,9 +64,10 @@ function latexCompletion(context:CompletionContext){
   const commandWord=context.matchBefore(/\\[a-zA-Z@]*$/);
   if(commandWord){
     const documentStart=source.indexOf('\\begin{document}');
-    const preamble=documentStart<0||context.pos<documentStart;
+    const rootLike=/\\documentclass\b/.test(source);
+    const preamble=rootLike&&(documentStart<0||context.pos<documentStart);
     const mathMode=isMathMode(before);
-    const packages=packageNames(source);
+    const packages=packageNames(projectSource);
     const options:Completion[]=commandKnowledge.map(item=>{
       const missingPackage=Boolean(item.entry.package&&!packages.has(item.entry.package));
       const detail=missingPackage?`${item.detail} · пакет не подключён`:item.detail;
@@ -87,20 +100,22 @@ const commandHover=hoverTooltip((view,pos)=>{
   return null;
 });
 
-export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,autoClose=true,minHeight=290,onReset,onCompile,onSave,onShowShortcuts,diagnostics=[]}:EditorProps){
+export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,autoClose=true,minHeight=290,onReset,onCompile,onSave,onShowShortcuts,diagnostics=[],projectFiles=[]}:EditorProps){
   const host=useRef<HTMLDivElement>(null);
   const viewRef=useRef<EditorView|null>(null);
   const callbacks=useRef({onChange,onCompile,onSave,onShowShortcuts});
+  const projectFilesRef=useRef<readonly ProjectSourceFile[]>(projectFiles);
   const [fullscreen,setFullscreen]=useState(false);
   const settingsCompartment=useMemo(()=>new Compartment(),[]);
   const diagnosticsCompartment=useMemo(()=>new Compartment(),[]);
   callbacks.current={onChange,onCompile,onSave,onShowShortcuts};
+  projectFilesRef.current=projectFiles;
 
   useEffect(()=>{
     if(!host.current)return;
     const state=EditorState.create({doc:value,extensions:[
       history(),drawSelection(),dropCursor(),rectangularSelection(),crosshairCursor(),highlightActiveLine(),bracketMatching(),StreamLanguage.define(stex),syntaxHighlighting(defaultHighlightStyle),commandHover,
-      autocompletion({override:[latexCompletion],activateOnTyping:true}),
+      autocompletion({override:[context=>latexCompletion(context,projectFilesRef.current)],activateOnTyping:true}),
       keymap.of([
         {key:'Mod-Enter',run:()=>{callbacks.current.onCompile?.();return Boolean(callbacks.current.onCompile);}},
         {key:'Mod-s',run:()=>{callbacks.current.onSave?.();return Boolean(callbacks.current.onSave);}},
