@@ -1,0 +1,22 @@
+/* Laptop-only density correction for the expanded 31-lesson curriculum. */
+@media (min-width:1024px) and (max-width:1279px){
+  .lesson-page{grid-template-columns:248px minmax(0,1fr)}
+  .lesson-sidebar{padding:26px 14px}
+  .lesson-side-brand{margin-left:4px}
+  .lesson-sidebar>a:not(.lesson-side-brand){
+    grid-template-columns:30px minmax(0,1fr);
+    gap:4px;
+    min-width:0;
+    padding:8px 6px;
+    font-size:11px;
+    line-height:1.2;
+    overflow:hidden;
+    white-space:nowrap;
+    text-overflow:ellipsis;
+  }
+  .lesson-sidebar>a:not(.lesson-side-brand)>span{min-width:0}
+  .lesson-hero{padding-left:34px;padding-right:34px}
+  .lesson-content{padding-left:34px;padding-right:34px}
+  .lesson-pagination{width:calc(100% - 68px)}
+  .lesson-neighbors{margin-left:34px;margin-right:34px}
+}
