@@ -1,0 +1,26 @@
+.project-source-workspace{display:grid;grid-template-columns:minmax(150px,210px) minmax(0,1fr);border:1px solid var(--soft-border);background:rgba(255,255,255,.18)}
+.project-file-tree{min-width:0;border-right:1px solid var(--soft-border);padding:13px 10px;background:rgba(6,26,58,.012)}
+.project-file-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:0 4px 10px;border-bottom:1px solid var(--soft-border)}
+.project-file-heading small{font-family:var(--font-mono);font-size:9px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.project-file-list{display:flex;flex-direction:column;padding:8px 0}
+.project-file-row{display:grid;grid-template-columns:minmax(0,1fr) 24px;align-items:center;border-left:1px solid transparent}
+.project-file-row.active{border-left-color:var(--navy);background:rgba(6,26,58,.035)}
+.project-file-row>button:first-child{min-width:0;display:flex;align-items:center;gap:6px;border:0;background:transparent;text-align:left;padding:8px 7px;cursor:pointer;color:var(--secondary)}
+.project-file-row>button:first-child:hover,.project-file-row>button:first-child:focus-visible{color:var(--navy)}
+.project-file-row code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);font-size:10.5px}
+.project-file-row span{font-size:8px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.project-file-remove{border:0;background:transparent;color:var(--muted);font-size:16px;cursor:pointer;width:24px;height:30px}
+.project-file-remove:hover,.project-file-remove:focus-visible{color:var(--navy)}
+.project-file-add{display:grid;gap:6px;margin-top:6px;padding-top:10px;border-top:1px solid var(--soft-border)}
+.project-file-add input{width:100%;min-width:0;border:1px solid var(--soft-border);background:rgba(255,255,255,.55);padding:7px 8px;color:var(--ink);font-family:var(--font-mono);font-size:10px;outline:none}
+.project-file-add input:focus{border-color:rgba(6,26,58,.36)}
+.project-file-add button{border:0;background:transparent;padding:3px 0;text-align:left;color:var(--secondary);font-size:10px;cursor:pointer}
+.project-file-add button:hover,.project-file-add button:focus-visible{color:var(--navy);text-decoration:underline;text-underline-offset:3px}
+.project-file-error{font-size:9.5px;line-height:1.45;color:var(--danger,#8b2b2b);margin:7px 2px 0}
+.project-source-editor{min-width:0}
+.project-source-editor .editor-status-line{padding-inline:12px;border-bottom:1px solid var(--soft-border)}
+.project-source-editor .editor-frame{border:0}
+.project-editor>.compile-result-note,.project-editor>.validation-panel{margin-top:12px}
+@media(max-width:767px){.project-source-workspace{grid-template-columns:1fr}.project-file-tree{border-right:0;border-bottom:1px solid var(--soft-border)}.project-file-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px}.project-file-add{grid-template-columns:minmax(0,1fr) auto;align-items:center}.project-file-add button{padding:7px}.project-source-editor .editor-status-line{flex-wrap:wrap;gap:4px}}
+@media(min-width:768px) and (max-width:1279px){.project-source-workspace{grid-template-columns:180px minmax(0,1fr)}}
+@media(min-width:2560px){.project-source-workspace{grid-template-columns:270px minmax(0,1fr)}.project-file-tree{padding:20px 16px}.project-file-row code{font-size:13px}.project-file-row>button:first-child{padding:11px 9px}.project-file-add input,.project-file-add button{font-size:12px}}
