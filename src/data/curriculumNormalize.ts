@@ -69,6 +69,10 @@ function applyPedagogyRepairs(lesson:(typeof lessons)[number]){
     lesson.pedagogy.introduces=unique([...lesson.pedagogy.introduces,'math-symbols']);
     appendBlock(lesson,{id:'math-operators-symbol-semantics',type:'comparison',title:'Имя символа и математическая роль',body:'В математическом режиме LaTeX отличает обычные буквы от математических команд. Команда сообщает роль символа или оператора и позволяет движку применить правильное начертание и интервалы.',left:{label:'Буквы',code:'$sin x$',note:'Три переменные s, i, n.'},right:{label:'Оператор',code:'$\\sin x$',note:'Один математический оператор с правильной типографикой.'}});
   }
+  if(lesson.id==='debug-missing-brace'){
+    appendBlock(lesson,{id:'debug-missing-brace-cascade',type:'comparison',title:'Одна причина — несколько сообщений',body:'TeX читает поток последовательно. Если закрывающая } потеряна, движок продолжает захватывать следующий текст в аргумент и может сообщить о нескольких проблемах далеко от места, где ошибка возникла.',left:{label:'Исходная ошибка',code:'\\section{Method\nText after the heading.\n\\textbf{Result}',note:'Первое содержательное сообщение указывает на незавершённый аргумент. Более поздние Missing }, Runaway argument или Emergency stop могут быть следствием той же причины.'},right:{label:'После первой правки',code:'\\section{Method}\nText after the heading.\n\\textbf{Result}',note:'После восстановления одной границы группы вторичные сообщения исчезают. Поэтому сначала исправляют самую раннюю содержательную ошибку, а затем компилируют заново.'}});
+    appendBlock(lesson,{id:'debug-missing-brace-checkpoint',type:'checkpoint',title:'Как читать каскад',prompt:'Компилятор показывает пять ошибок. После исправления самой ранней содержательной ошибки четыре исчезли. Нужно ли отдельно «чинить» оставшиеся четыре старых сообщения?',answer:'Нет. Диагностика относится к предыдущему запуску. Сначала пересоберите документ и работайте только с теми сообщениями, которые остаются после первой правки.'});
+  }
 }
 
 function appendBlock(lesson:(typeof lessons)[number],block:LearningBlock){
