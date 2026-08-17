@@ -1,0 +1,154 @@
+/* Deep product layer: preserve the approved visual language while making reading intentional. */
+:root{
+  --reading-width:710px;
+  --reading-narrow:640px;
+  --code-width:940px;
+  --space-related:10px;
+  --space-block:28px;
+  --space-concept:42px;
+  --rule-strong:#D9DDE2;
+}
+
+.lesson-content{display:flex;justify-content:center;align-items:flex-start}
+.lesson-content>.learning-block,.lesson-content>.theory-block,.lesson-content>.lesson-practice-card{width:min(100%,var(--reading-width))}
+.learning-block{font-family:var(--font-ui);color:var(--text);padding:3px 0 12px}
+.learning-block h2{font-family:var(--font-serif);font-weight:500;font-size:clamp(23px,3.8vw,31px);line-height:1.12;letter-spacing:-.018em;margin:0 0 16px;color:var(--navy)}
+.learning-block>p,.learning-block dd,.learning-block li p{font-size:15px;line-height:1.76;color:#424852}
+.learning-block>p{max-width:var(--reading-narrow);margin-bottom:20px}
+.learning-block .code-block{margin-top:18px}
+.learning-details,.checkpoint-answer{border-top:1px solid var(--soft-border);margin-top:24px;padding-top:12px}
+.learning-details summary,.checkpoint-answer summary{display:inline-block;cursor:pointer;font-size:12px;color:var(--navy);border-bottom:1px solid rgba(6,26,58,.25);list-style:none}
+.learning-details summary::-webkit-details-marker,.checkpoint-answer summary::-webkit-details-marker{display:none}
+.learning-details p,.checkpoint-answer p{font-size:13.5px;line-height:1.7;color:var(--secondary);margin:14px 0 0;max-width:620px}
+.learning-note{font-size:13px!important;color:var(--secondary)!important;border-left:2px solid var(--rule-strong);padding-left:13px;margin-top:16px!important}
+.learning-kicker{display:block;font-size:10px;letter-spacing:.1em;font-weight:650;color:var(--secondary);margin-bottom:9px}
+
+/* Signature syntax anatomy: information is grouped by rules and rhythm, not card shells. */
+.anatomy-source{padding:18px 0 16px;border-top:1px solid var(--rule-strong);border-bottom:1px solid var(--rule-strong);overflow-x:auto;overscroll-behavior-inline:contain}
+.anatomy-source code{font-size:15px;line-height:1.6;color:var(--navy);white-space:pre}
+.anatomy-parts{margin:18px 0 0;padding:0}
+.anatomy-parts>div{display:grid;grid-template-columns:minmax(130px,210px) 1fr;gap:22px;padding:12px 0;border-bottom:1px solid var(--soft-border)}
+.anatomy-parts dt{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:0}
+.anatomy-parts dt code{font-size:13px;color:var(--navy);word-break:break-word}
+.anatomy-parts dt span{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.anatomy-parts dd{margin:0;font-size:13px;line-height:1.55;color:var(--secondary)}
+
+/* Compilation/source flow is deliberately diagrammatic but typographically quiet. */
+.learning-flow{list-style:none;padding:0;margin:24px 0 0;display:grid;grid-template-columns:1fr}
+.learning-flow li{display:grid;grid-template-columns:32px 1fr;gap:13px;position:relative;padding:0 0 22px}
+.learning-flow li:not(:last-child):before{content:"";position:absolute;left:15px;top:30px;bottom:2px;border-left:1px solid var(--rule-strong)}
+.learning-flow li>span{width:31px;height:31px;border:1px solid var(--navy);display:grid;place-items:center;font-family:var(--font-serif);font-size:13px;color:var(--navy);border-radius:50%}
+.learning-flow strong{font-family:var(--font-serif);font-weight:500;font-size:16px;color:var(--navy)}
+.learning-flow p{margin:4px 0 0!important;font-size:13px!important;line-height:1.55!important;color:var(--secondary)!important}
+
+.learning-comparison{display:grid;grid-template-columns:1fr;gap:28px;margin-top:26px}
+.learning-comparison section{padding-top:12px;border-top:1px solid var(--rule-strong);min-width:0}
+.comparison-label{display:block;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
+.learning-comparison section>p{font-size:13px;line-height:1.6;color:var(--secondary);margin:12px 0 0}
+.learning-comparison .code-block{margin-top:0}
+
+.learning-block--mistake,.learning-block--warning{border-top:2px solid var(--navy);padding-top:18px}
+.learning-block--mistake h2,.learning-block--warning h2{font-size:24px}
+.learning-correction{margin-top:22px;padding-top:15px;border-top:1px solid var(--soft-border)}
+.learning-correction>span{display:block;font-size:10px;letter-spacing:.09em;color:var(--success);margin-bottom:8px;text-transform:uppercase}
+.learning-correction .code-block{margin-top:0}
+
+.learning-block--checkpoint{border-top:1px solid var(--navy);padding-top:19px}
+.learning-block--checkpoint h2{font-size:22px;margin-bottom:12px}
+.checkpoint-question{font-family:var(--font-serif)!important;font-size:18px!important;line-height:1.55!important;color:var(--text)!important;max-width:610px!important}
+
+.source-output-pair{display:grid;grid-template-columns:1fr;gap:26px;margin-top:25px}
+.source-output-pair>section{min-width:0}
+.source-output-pair .mode-label{display:block;margin-bottom:10px}
+.source-output-pair .code-block{margin-top:0}
+.source-output-preview{min-height:190px;border:1px solid var(--soft-border);background:#fff;padding:20px;aspect-ratio:1/1.414;max-height:430px;overflow:auto}
+
+.lesson-context .context-concepts{display:flex;flex-direction:column;gap:7px;margin:0 0 22px}
+.lesson-context .context-concepts span{font-size:12px;line-height:1.4;color:var(--secondary);padding-left:11px;border-left:1px solid var(--rule-strong)}
+.lesson-context .context-count{border-top:1px solid var(--soft-border);padding-top:14px;margin-top:22px!important;font-size:11px!important;color:var(--muted)!important}
+.lesson-context>h3{margin-top:23px}
+
+/* Long theory prose gets a controlled measure even when peripheral panels disappear. */
+.theory-block>p,.example-mode>div:first-child>p,.lesson-practice-card>p{max-width:680px;line-height:1.74}
+.lesson-sidebar{scrollbar-width:thin;scrollbar-color:#d9dde2 transparent}
+.lesson-sidebar a{line-height:1.3}
+
+/* Code typography: restrained contrast, consistent vertical rhythm. */
+.cm-editor{font-family:var(--font-mono);font-size:13px;line-height:1.65}
+.cm-editor .cm-content{caret-color:var(--navy);padding:13px 0 20px}
+.cm-editor .cm-line{padding:0 12px}
+.cm-editor .cm-gutters{background:#f7f7f5;color:#a0a4ab;border-right:1px solid var(--soft-border)}
+.cm-editor .cm-activeLine,.cm-editor .cm-activeLineGutter{background:rgba(6,26,58,.035)}
+.cm-editor .cm-selectionBackground,.cm-editor ::selection{background:rgba(6,26,58,.12)!important}
+.cm-editor.cm-focused{outline:1px solid rgba(6,26,58,.38)}
+
+/* Phone: single focus. We keep the original screen composition and tighten reading rhythm. */
+@media (max-width:599px){
+  .lesson-content{padding-inline:20px;min-height:360px}
+  .learning-block h2{font-size:25px;line-height:1.13}
+  .learning-block>p{font-size:14.5px;line-height:1.72}
+  .anatomy-parts>div{grid-template-columns:1fr;gap:6px;padding:11px 0}
+  .anatomy-parts dt{gap:3px}
+  .learning-flow li{grid-template-columns:29px 1fr;gap:11px;padding-bottom:18px}
+  .learning-flow li>span{width:28px;height:28px}
+  .learning-flow li:not(:last-child):before{left:13px;top:27px}
+  .source-output-preview{aspect-ratio:auto;min-height:210px;max-height:360px}
+  .learning-block .code-block pre,.learning-block pre{overflow-x:auto;white-space:pre;overscroll-behavior-inline:contain}
+  .lesson-pagination{padding-bottom:max(14px,env(safe-area-inset-bottom))}
+}
+
+/* Tablet portrait: reading-first, not a stretched phone. */
+@media (min-width:600px) and (max-width:899px){
+  .lesson-content{padding:40px clamp(44px,8vw,76px) 24px;min-height:470px}
+  .lesson-hero{padding-inline:clamp(44px,8vw,76px)}
+  .lesson-tabs{padding-inline:clamp(28px,6vw,60px)}
+  .learning-block>p{font-size:15.5px}
+  .learning-comparison{grid-template-columns:1fr 1fr;gap:24px}
+  .source-output-pair{grid-template-columns:1fr 1fr;align-items:start;gap:24px}
+  .source-output-preview{min-height:240px}
+}
+
+/* Tablet landscape / small laptop: two-pane teaching components fit without exposing desktop chrome. */
+@media (min-width:900px) and (max-width:1279px){
+  .lesson-content{padding:42px clamp(46px,6vw,78px) 28px}
+  .learning-comparison,.source-output-pair{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:30px}
+  .source-output-preview{max-height:400px}
+}
+
+/* Desktop workspace: controlled prose width inside the existing three-column layout. */
+@media (min-width:1280px){
+  .lesson-content{padding:48px clamp(42px,4.4vw,76px) 28px}
+  .learning-block h2{font-size:31px}
+  .learning-comparison,.source-output-pair{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:36px}
+  .learning-block--anatomy,.learning-block--source-output,.learning-block--comparison{width:min(100%,820px)}
+}
+
+/* Large monitors/TV: enlarge peripheral scale, never the prose measure. */
+@media (min-width:1920px){
+  :root{--reading-width:740px;--reading-narrow:680px}
+  .learning-block>p{font-size:16px;line-height:1.78}
+  .learning-block h2{font-size:34px}
+  .lesson-content{padding-top:58px}
+  .anatomy-source code{font-size:16px}
+}
+@media (min-width:2560px){
+  .learning-block h2{font-size:37px}
+  .learning-block>p{font-size:17px}
+  .learning-block--anatomy,.learning-block--source-output,.learning-block--comparison{width:min(100%,900px)}
+  .lesson-context .context-concepts span{font-size:13px}
+}
+@media (min-width:3400px){
+  :root{--reading-width:780px;--reading-narrow:710px}
+  .learning-block>p{font-size:18px;line-height:1.8}
+  .learning-block h2{font-size:40px}
+  .source-output-pair{gap:46px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
+}
+
+@media (forced-colors:active){
+  .learning-flow li>span,.learning-block--checkpoint,.learning-block--mistake,.learning-block--warning{border-color:CanvasText}
+}
