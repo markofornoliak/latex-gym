@@ -29,6 +29,16 @@ describe('semantic validation',()=>{
     expect(validatorInternals.environmentsBalanced('\\begin{document}\n\\begin{itemize}\n\\end{document}')).toBe(false);
   });
 
+  it('recognizes TeX control words before subscripts, superscripts and stars',()=>{
+    expect(validatorInternals.countCommand('$\\lim_{n\\to\\infty} a_n$','lim')).toBe(1);
+    expect(validatorInternals.countCommand('\\section*{Unnumbered}','section')).toBe(1);
+    expect(validatorInternals.countCommand('\\sectional{Wrong}','section')).toBe(0);
+  });
+
+  it('treats trailing whitespace inside a group as structurally equivalent for containsText checks',()=>{
+    expect(validatorInternals.hasStructuralText('$x=1, \\text{если } y=0$','\\text{если}')).toBe(true);
+  });
+
   it('reports the approximate line for a failed forbidden-text rule',()=>{
     const exercise:Exercise={id:'synthetic',lessonId:'synthetic',category:'Отладка',difficulty:'Начальный',mode:'Рефакторинг',title:'No manual break',instructions:'Remove manual break.',requirements:['No \\\\'],starterCode:'First.\\\\\nSecond.',validators:[{type:'forbiddenText',value:'\\\\',message:'Ручной перенос удалён.',hint:'Используйте пустую строку.'}],hints:[],solution:'First.\n\nSecond.',concepts:['paragraph']};
     const result=validateExercise(exercise,'First.\nSecond.\\\\',compiled);
