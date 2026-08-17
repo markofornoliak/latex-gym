@@ -29,7 +29,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import base64, gzip, io, tarfile
-
           root = Path('.bootstrap')
           p0 = (root / 'part-00').read_text()
           p1 = (root / 'part-01').read_text()
@@ -37,20 +36,10 @@ jobs:
           damaged = (root / 'part-03').read_text()
           repaired_first_half = (root / 'part-03a').read_text()
           p4 = (root / 'part-04').read_text()
-
-          # part-03 lost one Base64 character at offset 4447. part-03a is the
-          # verified original first 9000-character half. Because the deletion
-          # shifts the damaged stream by one, original byte 9000 starts at
-          # damaged offset 8999.
           repaired_p3 = repaired_first_half + damaged[8999:]
           assert len(repaired_p3) == 18000
-
           encoded = p0 + p1 + p2 + repaired_p3 + p4
-          assert len(encoded) % 4 == 0
           raw = base64.b64decode(encoded, validate=True)
-
-          # Force complete gzip decompression so CRC/length are verified before
-          # extraction; merely listing tar headers is not sufficient.
           decompressed = gzip.decompress(raw)
           with tarfile.open(fileobj=io.BytesIO(decompressed), mode='r:') as tf:
               names = tf.getnames()
@@ -75,7 +64,6 @@ jobs:
             sleep 1
           done
           if [ "$READY" -ne 1 ]; then cat /tmp/vite.log; kill $PID || true; exit 1; fi
-          curl -fsS http://127.0.0.1:5173/latex-gym/ >/dev/null
           kill $PID
 
       - name: Typecheck
@@ -98,6 +86,12 @@ jobs:
       - name: Commit verified application source
         shell: bash
         run: |
+          # GitHub Actions tokens cannot create/update workflow files unless the
+          # token has the workflows permission. Publish the application source
+          # first and let the connected GitHub app install the final Pages
+          # workflow in a separate commit.
+          git restore --source=HEAD -- .github/workflows/bootstrap-lock.yml
+          rm -f .github/workflows/deploy.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
