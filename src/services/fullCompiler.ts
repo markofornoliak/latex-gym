@@ -4,6 +4,7 @@ import { educateDiagnostic } from './diagnosticEducation';
 export type FullCompileFile={path:string;contents:string|Uint8Array};
 export type FullCompileStatus='loading-engine'|'ready'|'compiling';
 export type FullCompileResult={ok:boolean;pdf?:Uint8Array;log:string;exitCode:number;elapsedMs:number;diagnostics:Diagnostic[]};
+type BusyTexInputFile={path:string;contents:string|Uint8Array|null};
 type BusyTexMessage={print?:string;pdf?:Uint8Array|null;log?:string|null};
 type PendingCompilation={resolve:(result:FullCompileResult)=>void;reject:(error:Error)=>void;started:number;logLines:string[];timer:number};
 const FULL_TEX_DIR='full-tex/';
@@ -32,7 +33,7 @@ export class FullCompiler{
         reject(new Error('Полная TeX-сборка превысила допустимое время. Движок был перезапущен; повторите сборку.'));
       },COMPILE_TIMEOUT_MS);
       this.pending={resolve,reject,started:performance.now(),logLines:[],timer};
-      worker.postMessage({files:files.map(file=>({path:file.path,contents:file.contents})),main_tex_path:mainFile,verbose:'silent',bibtex:null});
+      worker.postMessage({files:prepareBusyTexFiles(files),main_tex_path:mainFile,verbose:'silent',bibtex:null});
     }).finally(()=>{this.statusListener=undefined;});
   }
 
@@ -83,6 +84,18 @@ export class FullCompiler{
 }
 
 export const fullCompiler=new FullCompiler();
+
+export function prepareBusyTexFiles(files:FullCompileFile[]):BusyTexInputFile[]{
+  const directories=new Set<string>();
+  for(const file of files){
+    const parts=file.path.replace(/\\/g,'/').split('/').filter(Boolean);
+    for(let index=1;index<parts.length;index++)directories.add(parts.slice(0,index).join('/'));
+  }
+  const directoryEntries=[...directories].sort((left,right)=>left.split('/').length-right.split('/').length||left.localeCompare(right)).map(path=>({path,contents:null as null}));
+  const fileEntries=files.map(file=>({path:file.path.replace(/\\/g,'/').replace(/^\.\//,''),contents:file.contents}));
+  return [...directoryEntries,...fileEntries];
+}
+
 export function fullTexBaseUrl(){const base=import.meta.env.BASE_URL.endsWith('/')?import.meta.env.BASE_URL:`${import.meta.env.BASE_URL}/`;return `${base}${FULL_TEX_DIR}`;}
 export async function fullTexAssetsAvailable(base=fullTexBaseUrl()){try{const response=await fetch(`${base}manifest.json`,{method:'GET',cache:'force-cache'});if(!response.ok)return false;const manifest=await response.json() as {assets?:Record<string,{size?:number}>};return RELEASE_ASSETS.every(name=>(manifest.assets?.[name]?.size??0)>0);}catch{return false;}}
 
