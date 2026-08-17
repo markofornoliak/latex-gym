@@ -5,7 +5,6 @@ import './data/editorialEnhancements';
 import './data/curriculumExpansion';
 import './data/deepCurriculum';
 import './data/debuggingTrack';
-import './data/explanationElaboration';
 import { App } from './app/App';
 import './styles/index.css';
 import './styles/fidelity.css';
@@ -17,6 +16,7 @@ import './styles/projects.css';
 import './styles/referenceDeep.css';
 import './styles/progressDeep.css';
 import './styles/interactionPolish.css';
+import './styles/conceptExercises.css';
 
 registerSW({ immediate: true });
 createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
