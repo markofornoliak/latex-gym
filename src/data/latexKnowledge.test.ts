@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commandKnowledge, commandPriority, findLabels, getCommandKnowledge, packageNames } from './latexKnowledge';
+import { commandKnowledge, commandPriority, findBibKeys, findLabels, getCommandKnowledge, packageNames } from './latexKnowledge';
 
 describe('canonical LaTeX knowledge model',()=>{
   it('derives editor documentation from Reference entries',()=>{
@@ -20,5 +20,10 @@ describe('canonical LaTeX knowledge model',()=>{
     const source='\\usepackage{amsmath,graphicx}\n\\begin{document}\n\\section{A}\\label{sec:a}\n\\end{document}';
     expect(findLabels(source)).toEqual(['sec:a']);
     expect([...packageNames(source)].sort()).toEqual(['amsmath','graphicx']);
+  });
+
+  it('extracts citation keys from a project bibliography',()=>{
+    const bibliography='@article{einstein1905,\n  title={On the electrodynamics of moving bodies}\n}\n@book{knuth1984, title={The TeXbook}}';
+    expect(findBibKeys(bibliography)).toEqual(['einstein1905','knuth1984']);
   });
 });
