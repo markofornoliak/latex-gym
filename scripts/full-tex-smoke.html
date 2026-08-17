@@ -8,11 +8,10 @@
   const body=document.body;
   const fail=(message)=>{body.dataset.status='failed';body.textContent=`FULL_TEX_FAILED: ${message}`;};
   const worker=new Worker(`${root}busytex_worker.js`);
-  const timeout=setTimeout(()=>{worker.terminate();fail('timeout');},90000);
-  worker.onerror=(event)=>{clearTimeout(timeout);fail(event.message||'worker error');};
+  worker.onerror=(event)=>fail(event.message||'worker error');
   worker.onmessage=(event)=>{
     const message=event.data||{};
-    if(message.exception){clearTimeout(timeout);fail(message.exception);return;}
+    if(message.exception){fail(message.exception);worker.terminate();return;}
     if(message.initialized){
       body.dataset.status='compiling';body.textContent='compiling';
       worker.postMessage({
@@ -22,10 +21,9 @@
       return;
     }
     if(message.exit_code===undefined)return;
-    clearTimeout(timeout);
     const length=message.pdf?.byteLength||0;
     if(message.exit_code===0&&length>1000){body.dataset.status='success';body.textContent=`FULL_TEX_OK PDF_BYTES=${length}`;}
-    else fail(`exit=${message.exit_code} pdf=${length} log=${String(message.log||'').slice(0,800)}`);
+    else fail(`exit=${message.exit_code} pdf=${length} log=${String(message.log||'').slice(0,1200)}`);
     worker.terminate();
   };
   const packages=[`${root}texlive-basic.js`,`${root}ubuntu-texlive-latex-base.js`,`${root}ubuntu-texlive-latex-recommended.js`,`${root}ubuntu-texlive-latex-extra.js`];
