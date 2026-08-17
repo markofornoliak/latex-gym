@@ -24,8 +24,13 @@ export class EducationalCompiler implements LatexCompiler {
       this.pending.delete(event.data.id);
     };
     this.worker.onerror = () => {
-      for (const item of this.pending.values()) item.reject(new Error('Compiler worker failed'));
+      for (const item of this.pending.values()) {
+        window.clearTimeout(item.timer);
+        item.reject(new Error('Compiler worker failed'));
+      }
       this.pending.clear();
+      this.worker?.terminate();
+      this.worker = null;
     };
     return this.worker;
   }
