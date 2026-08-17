@@ -6,6 +6,7 @@ import { bracketMatching, defaultHighlightStyle, StreamLanguage, syntaxHighlight
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, snippetCompletion, type Completion, type CompletionContext } from '@codemirror/autocomplete';
 import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { ExpandIcon } from './Icons';
+import { commandKnowledge, commandPriority, environmentKnowledge, findLabels, getCommandKnowledge, getEnvironmentKnowledge, packageNames } from '../data/latexKnowledge';
 import type { Diagnostic } from '../types';
 
 type EditorProps={
@@ -22,28 +23,6 @@ type EditorProps={
   diagnostics?:Diagnostic[];
 };
 
-type CommandDoc={syntax:string;summary:string;package?:string};
-const commandDocs:Record<string,CommandDoc>={
-  section:{syntax:'\\section{title}',summary:'Создаёт нумеруемый раздел документа.'},
-  subsection:{syntax:'\\subsection{title}',summary:'Создаёт подраздел внутри текущего раздела.'},
-  emph:{syntax:'\\emph{text}',summary:'Смысловое выделение текста.'},
-  textbf:{syntax:'\\textbf{text}',summary:'Набирает текст полужирным начертанием.'},
-  frac:{syntax:'\\frac{numerator}{denominator}',summary:'Создаёт дробь в математическом режиме.',package:'amsmath для расширенной математики'},
-  sqrt:{syntax:'\\sqrt[n]{expression}',summary:'Создаёт квадратный или n-й корень.'},
-  label:{syntax:'\\label{key}',summary:'Назначает устойчивый ключ нумеруемому объекту.'},
-  ref:{syntax:'\\ref{key}',summary:'Подставляет номер объекта по его label.'},
-  cite:{syntax:'\\cite{key}',summary:'Создаёт ссылку на библиографическую запись.'},
-  includegraphics:{syntax:'\\includegraphics[options]{file}',summary:'Вставляет графический файл.',package:'graphicx'},
-  usepackage:{syntax:'\\usepackage[options]{package}',summary:'Подключает пакет в преамбуле.'},
-  documentclass:{syntax:'\\documentclass[options]{class}',summary:'Выбирает базовый класс документа.'},
-  begin:{syntax:'\\begin{name} … \\end{name}',summary:'Открывает структурное окружение.'},
-  item:{syntax:'\\item text',summary:'Начинает элемент списка внутри list environment.'}
-};
-
-const commandCompletions:Completion[]=[
-  ['\\documentclass{}','Класс документа'],['\\usepackage{}','Пакет'],['\\begin{}','Окружение'],['\\end{}','Окружение'],['\\section{}','Раздел'],['\\subsection{}','Подраздел'],['\\emph{}','Смысловой акцент'],['\\textbf{}','Полужирный'],['\\frac{}{}','Дробь · math'],['\\sqrt{}','Корень · math'],['\\label{}','Метка'],['\\ref{}','Ссылка'],['\\cite{}','Цитирование'],['\\item','Пункт списка'],['\\includegraphics{}','Изображение · graphicx'],['\\alpha','α · math'],['\\beta','β · math'],['\\leq','≤ · math'],['\\sin','sin · math'],['\\log','log · math']
-].map(([label,detail])=>({label,type:'keyword',detail,apply:label}));
-
 const snippetCompletions:Completion[]=[
   snippetCompletion('\\section{${title}}',{label:'sec',type:'text',detail:'snippet → \\section{}'}),
   snippetCompletion('\\subsection{${title}}',{label:'subsec',type:'text',detail:'snippet → \\subsection{}'}),
@@ -55,18 +34,35 @@ const snippetCompletions:Completion[]=[
 ];
 
 function latexCompletion(context:CompletionContext){
-  const commandWord=context.matchBefore(/\\[a-zA-Z]*$/);
-  if(commandWord){
-    const preamble=context.state.doc.sliceString(0,Math.min(context.state.doc.length,context.state.doc.toString().indexOf('\\begin{document}')>=0?context.state.doc.toString().indexOf('\\begin{document}'):context.state.doc.length));
-    const hasAmsmath=/\\usepackage(?:\[[^\]]*\])?\{[^}]*amsmath[^}]*\}/.test(preamble);
-    const hasGraphicx=/\\usepackage(?:\[[^\]]*\])?\{[^}]*graphicx[^}]*\}/.test(preamble);
-    const options=commandCompletions.map(item=>{
-      const detail=item.detail??'';
-      const unavailable=(detail.includes('amsmath')&&!hasAmsmath)||(detail.includes('graphicx')&&!hasGraphicx);
-      return unavailable?{...item,detail:`${detail} · пакет не подключён`,boost:-1}:item;
-    });
-    return {from:commandWord.from,options,validFor:/^\\[a-zA-Z]*$/};
+  const source=context.state.doc.toString();
+  const before=source.slice(0,context.pos);
+
+  const labelWord=context.matchBefore(/\\(?:ref|pageref|autoref|eqref)\{[^}]*$/);
+  if(labelWord){
+    const open=labelWord.text.lastIndexOf('{');
+    return {from:labelWord.from+open+1,options:findLabels(source).map(label=>({label,type:'variable',detail:'label'})),validFor:/^[^}]*$/};
   }
+
+  const environmentWord=context.matchBefore(/\\(?:begin|end)\{[A-Za-z*]*$/);
+  if(environmentWord){
+    const open=environmentWord.text.lastIndexOf('{');
+    return {from:environmentWord.from+open+1,options:environmentKnowledge.map(item=>({label:item.name,type:'keyword',detail:item.entry.title,apply:item.name})),validFor:/^[A-Za-z*]*$/};
+  }
+
+  const commandWord=context.matchBefore(/\\[a-zA-Z@]*$/);
+  if(commandWord){
+    const documentStart=source.indexOf('\\begin{document}');
+    const preamble=documentStart<0||context.pos<documentStart;
+    const mathMode=isMathMode(before);
+    const packages=packageNames(source);
+    const options:Completion[]=commandKnowledge.map(item=>{
+      const missingPackage=Boolean(item.entry.package&&!packages.has(item.entry.package));
+      const detail=missingPackage?`${item.detail} · пакет не подключён`:item.detail;
+      return {label:`\\${item.name}`,type:'keyword',detail,apply:item.insert,boost:commandPriority(item,{mathMode,preamble,packages})};
+    });
+    return {from:commandWord.from,options,validFor:/^\\[a-zA-Z@]*$/};
+  }
+
   const snippetWord=context.matchBefore(/[a-zA-Z]+$/);
   if(snippetWord&&(context.explicit||snippetWord.text.length>=2))return {from:snippetWord.from,options:snippetCompletions,validFor:/^[a-zA-Z]+$/};
   return null;
@@ -75,24 +71,20 @@ function latexCompletion(context:CompletionContext){
 const commandHover=hoverTooltip((view,pos)=>{
   const line=view.state.doc.lineAt(pos);
   const relative=pos-line.from;
-  const matches=[...line.text.matchAll(/\\([a-zA-Z]+)\b/g)];
-  const match=matches.find(candidate=>candidate.index!==undefined&&relative>=candidate.index&&relative<=candidate.index+candidate[0].length);
-  if(!match||match.index===undefined)return null;
-  const doc=commandDocs[match[1]];
-  if(!doc)return null;
-  return {
-    pos:line.from+match.index,
-    end:line.from+match.index+match[0].length,
-    above:true,
-    create(){
-      const dom=document.createElement('div');
-      dom.className='cm-command-doc';
-      const syntax=document.createElement('code');syntax.textContent=doc.syntax;dom.append(syntax);
-      const summary=document.createElement('p');summary.textContent=doc.summary;dom.append(summary);
-      if(doc.package){const meta=document.createElement('span');meta.textContent=`Пакет: ${doc.package}`;dom.append(meta);}
-      return {dom};
-    }
-  };
+  const commandMatches=[...line.text.matchAll(/\\([a-zA-Z@]+)\b/g)];
+  const commandMatch=commandMatches.find(candidate=>candidate.index!==undefined&&relative>=candidate.index&&relative<=candidate.index+candidate[0].length);
+  if(commandMatch&&commandMatch.index!==undefined){
+    const knowledge=getCommandKnowledge(commandMatch[1]);
+    if(knowledge)return tooltip(line.from+commandMatch.index,line.from+commandMatch.index+commandMatch[0].length,knowledge.entry.syntax,knowledge.entry.description,knowledge.entry.package);
+  }
+
+  const environmentMatches=[...line.text.matchAll(/\\(?:begin|end)\{([A-Za-z*]+)\}/g)];
+  const environmentMatch=environmentMatches.find(candidate=>candidate.index!==undefined&&relative>=candidate.index&&relative<=candidate.index+candidate[0].length);
+  if(environmentMatch&&environmentMatch.index!==undefined){
+    const knowledge=getEnvironmentKnowledge(environmentMatch[1]);
+    if(knowledge)return tooltip(line.from+environmentMatch.index,line.from+environmentMatch.index+environmentMatch[0].length,knowledge.entry.syntax,knowledge.entry.description,knowledge.entry.package);
+  }
+  return null;
 });
 
 export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,autoClose=true,minHeight=290,onReset,onCompile,onSave,onShowShortcuts,diagnostics=[]}:EditorProps){
@@ -149,6 +141,29 @@ export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,au
     </div>
     <div ref={host} className="editor-host" />
   </div>;
+}
+
+function tooltip(pos:number,end:number,syntax:string,summary:string,packageName?:string){
+  return {
+    pos,end,above:true,
+    create(){
+      const dom=document.createElement('div');
+      dom.className='cm-command-doc';
+      const code=document.createElement('code');code.textContent=syntax;dom.append(code);
+      const description=document.createElement('p');description.textContent=summary;dom.append(description);
+      if(packageName){const meta=document.createElement('span');meta.textContent=`Пакет: ${packageName}`;dom.append(meta);}
+      return {dom};
+    }
+  };
+}
+
+function isMathMode(sourceBeforeCursor:string){
+  const clean=sourceBeforeCursor.replace(/(^|[^\\])%.*$/gm,'$1');
+  const displayOpen=clean.lastIndexOf('\\[')>clean.lastIndexOf('\\]');
+  const environmentOpen=Math.max(clean.lastIndexOf('\\begin{equation}'),clean.lastIndexOf('\\begin{equation*}'),clean.lastIndexOf('\\begin{align}'),clean.lastIndexOf('\\begin{align*}'));
+  const environmentClose=Math.max(clean.lastIndexOf('\\end{equation}'),clean.lastIndexOf('\\end{equation*}'),clean.lastIndexOf('\\end{align}'),clean.lastIndexOf('\\end{align*}'));
+  if(displayOpen||environmentOpen>environmentClose)return true;
+  return (clean.match(/(?<!\\)\$/g)?.length??0)%2===1;
 }
 
 function editorSettings(wordWrap:boolean,showLineNumbers:boolean,autoClose:boolean){return [showLineNumbers?lineNumbers():[],wordWrap?EditorView.lineWrapping:[],autoClose?closeBrackets():[]];}
