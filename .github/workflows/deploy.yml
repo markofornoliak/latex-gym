@@ -71,38 +71,38 @@ jobs:
           capture() {
             local name="$1" route="$2" width="$3" height="$4" expected="$5"
             local url="http://127.0.0.1:4173/latex-gym/#${route}"
+            local browser_log="/tmp/${name}.browser.log"
             "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars \
               --force-device-scale-factor=1 --run-all-compositor-stages-before-draw \
-              --virtual-time-budget=2600 --window-size="${width},${height}" \
-              --dump-dom "$url" > "/tmp/${name}.html"
+              --virtual-time-budget=2400 --window-size="${width},${height}" \
+              --dump-dom "$url" > "/tmp/${name}.html" 2> "$browser_log"
             grep -Fq "$expected" "/tmp/${name}.html"
             ! grep -Fq 'Страница не найдена' "/tmp/${name}.html"
+            ! grep -Eq 'Uncaught (TypeError|ReferenceError|SyntaxError)|CONSOLE.*ERROR' "$browser_log"
             "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars \
               --force-device-scale-factor=1 --run-all-compositor-stages-before-draw \
-              --virtual-time-budget=2600 --window-size="${width},${height}" \
-              --screenshot="qa-screenshots/${name}.png" "$url"
+              --virtual-time-budget=2400 --window-size="${width},${height}" \
+              --screenshot="qa-screenshots/${name}.png" "$url" 2>> "$browser_log"
           }
 
-          # Phone profiles
-          capture onboarding-390 / 390 844 'Тренируйся.'
-          capture home-320 /home 320 780 'Продолжить обучение'
-          capture home-390 /home 390 844 'План обучения'
-          capture lesson-390 /lesson/document-structure 390 844 'Структура документа'
-          capture practice-390 /practice/e01 390 844 'ЗАДАНИЕ 1 ИЗ 3'
+          # Intentional device matrix: phone, tablet, laptop, desktop and TV/4K.
+          capture phone-320-foundation /lesson/what-is-latex 320 568 'Что такое LaTeX'
+          capture phone-360-practice /practice/deep-001 360 800 'ЗАДАНИЕ 1 ИЗ 3'
+          capture phone-390-command /lesson/commands-foundation 390 844 'Команды'
+          capture phone-430-first-document /lesson/first-document-foundation 430 932 'Первый документ'
+          capture tablet-768-reference /reference/frac 768 1024 'Дробь'
+          capture tablet-1024-project /project/academic-paper/stage-4 1024 1366 'Математическая модель'
+          capture laptop-1280-lesson /lesson/table-anatomy 1280 800 'Анатомия tabular'
+          capture desktop-1440-practice /practice/e01 1440 900 'Проверить решение'
+          capture desktop-1920-project /project/academic-paper/stage-10 1920 1080 'Архитектура публикации'
+          capture tv-2560-debug /lesson/debug-alignment-tab 2560 1440 'Extra alignment tab'
+          capture tv-3840-project /project/technical-report/build 3840 2160 'Сборка'
 
-          # Tablet profile
-          capture home-768 /home 768 1024 'План обучения'
-          capture lesson-834 /lesson/packages-preamble 834 1112 'Пакеты и архитектура преамбулы'
-          capture practice-834 /practice/x16-1 834 1112 'geometry'
-
-          # Laptop and desktop profiles
-          capture lesson-1024 /lesson/packages-preamble 1024 800 'Пакеты и архитектура преамбулы'
-          capture lesson-1440 /lesson/document-structure 1440 1000 'Структура документа'
-          capture practice-1440 /practice/x16-1 1440 900 'Проверить решение'
-
-          # TV / large-screen profiles
-          capture practice-1920 /practice/e01 1920 1080 'Проверить решение'
-          capture lesson-2560 /lesson/unicode-engines 2560 1440 'XeLaTeX, LuaLaTeX'
+          # A second load of the same deep route exercises reload/direct-route behavior.
+          "$CHROME" --headless --no-sandbox --disable-gpu --virtual-time-budget=1600 \
+            --dump-dom 'http://127.0.0.1:4173/latex-gym/#/lesson/what-is-latex' > /tmp/reload.html 2>/tmp/reload.browser.log
+          grep -Fq 'Что такое LaTeX' /tmp/reload.html
+          ! grep -Fq 'Страница не найдена' /tmp/reload.html
 
       - name: Upload visual QA screenshots
         uses: actions/upload-artifact@v6
