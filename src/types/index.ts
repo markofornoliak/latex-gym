@@ -167,6 +167,10 @@ export type ConceptMastery = {
   lastPracticed:string|null;
   stability:number;
   nextReview:string|null;
+  firstTrySuccesses?:number;
+  hintedSuccesses?:number;
+  solutionReveals?:number;
+  applications?:number;
 };
 
 export type Bookmark = { id: string; type: 'lesson' | 'exercise' | 'reference'; targetId: string; createdAt: string };
