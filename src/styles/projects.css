@@ -56,14 +56,48 @@
   .project-header h1{font-size:48px}
   .project-paper{min-height:560px}
 }
+
 @media(min-width:2560px){
-  .project-workspace{grid-template-columns:320px minmax(760px,1fr) 520px}
-  .project-main{padding-top:58px}
-  .project-header h1{font-size:52px}
-  .project-stage-nav nav a strong{font-size:13px}
+  .project-workspace{grid-template-columns:360px minmax(960px,1fr) 600px}
+  .project-stage-nav{padding:44px 34px;top:96px;max-height:calc(100dvh - 96px)}
+  .project-stage-nav>.eyebrow{font-size:13px}
+  .project-back{font-size:14px;margin-bottom:38px}
+  .project-stage-nav nav{margin-top:20px}
+  .project-stage-nav nav a{grid-template-columns:38px minmax(0,1fr) 18px;padding:13px 9px;gap:9px}
+  .project-stage-nav nav a>span{font-size:14px}
+  .project-stage-nav nav a strong{font-size:15px;line-height:1.4}
+  .project-main{padding:64px clamp(92px,5vw,160px) 100px}
+  .project-header,.project-requirements{max-width:900px}
+  .project-header h1{font-size:60px}
+  .project-header p{font-size:17px;line-height:1.72;max-width:820px}
+  .project-requirements{margin-top:32px;padding-bottom:28px}
+  .project-requirements ul{font-size:15px;line-height:1.8}
+  .project-editor{max-width:1180px;margin-top:36px}
+  .project-editor .cm-editor{font-size:15px}
+  .project-editor .cm-line{padding-inline:15px}
+  .project-editor-actions{margin-top:18px}
+  .project-preview{top:96px;max-height:calc(100dvh - 96px);padding:48px 38px}
+  .project-preview>.eyebrow{font-size:13px}
+  .project-paper{min-height:680px;padding:24px}
+  .project-preview>p{font-size:13px;line-height:1.65;margin-top:18px}
 }
+
 @media(min-width:3400px){
-  .project-workspace{grid-template-columns:390px minmax(900px,1fr) 620px}
-  .project-main{padding-left:140px}
-  .project-paper{min-height:700px}
+  .project-workspace{grid-template-columns:480px minmax(1500px,1fr) 780px}
+  .project-stage-nav{padding:58px 46px}
+  .project-stage-nav>.eyebrow{font-size:15px}
+  .project-back{font-size:16px}
+  .project-stage-nav nav a{grid-template-columns:44px minmax(0,1fr) 20px;padding:16px 11px}
+  .project-stage-nav nav a>span{font-size:16px}
+  .project-stage-nav nav a strong{font-size:17px}
+  .project-main{padding:84px clamp(180px,7vw,290px) 120px}
+  .project-header,.project-requirements{max-width:1100px}
+  .project-header h1{font-size:72px}
+  .project-header p{font-size:20px;max-width:980px}
+  .project-requirements ul{font-size:18px}
+  .project-editor{max-width:1450px;margin-top:44px}
+  .project-editor .cm-editor{font-size:17px}
+  .project-paper{min-height:880px;padding:30px}
+  .project-preview{padding:62px 50px}
+  .project-preview>p{font-size:15px}
 }
