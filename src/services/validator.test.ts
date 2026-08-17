@@ -45,4 +45,18 @@ describe('semantic validation',()=>{
     expect(result.ok).toBe(false);
     expect(result.items[0].line).toBe(2);
   });
+
+  it('reports style feedback without turning a valid solution into a failed requirement',()=>{
+    const exercise:Exercise={id:'style',lessonId:'style',category:'Математика',difficulty:'Базовый',mode:'Улучшить код',title:'Typography',instructions:'Improve typography.',requirements:['math'],starterCode:'',validators:[{type:'inlineMath',message:'Есть формула.',hint:'Добавьте math mode.'}],hints:[],solution:'$\\sin x$',concepts:['math-operator']};
+    const result=validateExercise(exercise,'$sin x$',compiled);
+    expect(result.ok).toBe(true);
+    expect(result.items.some(item=>item.level==='style'&&!item.ok)).toBe(true);
+  });
+
+  it('distinguishes a missing package warning from acceptance criteria',()=>{
+    const exercise:Exercise={id:'graphics',lessonId:'graphics',category:'Графика',difficulty:'Базовый',mode:'Написать код',title:'Image',instructions:'Insert image.',requirements:['image'],starterCode:'',validators:[{type:'command',value:'includegraphics',message:'Есть изображение.',hint:'Используйте includegraphics.'}],hints:[],solution:'\\includegraphics{a.pdf}',concepts:['figure']};
+    const result=validateExercise(exercise,'\\includegraphics{a.pdf}',compiled);
+    expect(result.ok).toBe(true);
+    expect(result.items.find(item=>item.level==='warning')?.blocking).toBe(false);
+  });
 });
