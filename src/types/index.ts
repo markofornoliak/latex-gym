@@ -103,5 +103,5 @@ export type ReferenceEntry = {
   related: string[];
 };
 
-export type Bookmark = { id: string; type: 'lesson' | 'reference'; targetId: string; createdAt: string };
+export type Bookmark = { id: string; type: 'lesson' | 'exercise' | 'reference'; targetId: string; createdAt: string };
 export type HistoryEntry = { id: string; at: string; text: string; kind: 'lesson' | 'exercise' | 'reference' };
