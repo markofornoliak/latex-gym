@@ -73,24 +73,36 @@ jobs:
             local url="http://127.0.0.1:4173/latex-gym/#${route}"
             "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars \
               --force-device-scale-factor=1 --run-all-compositor-stages-before-draw \
-              --virtual-time-budget=2200 --window-size="${width},${height}" \
+              --virtual-time-budget=2600 --window-size="${width},${height}" \
               --dump-dom "$url" > "/tmp/${name}.html"
             grep -Fq "$expected" "/tmp/${name}.html"
             ! grep -Fq 'Страница не найдена' "/tmp/${name}.html"
             "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars \
               --force-device-scale-factor=1 --run-all-compositor-stages-before-draw \
-              --virtual-time-budget=2200 --window-size="${width},${height}" \
+              --virtual-time-budget=2600 --window-size="${width},${height}" \
               --screenshot="qa-screenshots/${name}.png" "$url"
           }
 
+          # Phone profiles
           capture onboarding-390 / 390 844 'Тренируйся.'
           capture home-320 /home 320 780 'Продолжить обучение'
           capture home-390 /home 390 844 'План обучения'
           capture lesson-390 /lesson/document-structure 390 844 'Структура документа'
           capture practice-390 /practice/e01 390 844 'ЗАДАНИЕ 1 ИЗ 3'
+
+          # Tablet profile
           capture home-768 /home 768 1024 'План обучения'
+          capture lesson-834 /lesson/packages-preamble 834 1112 'Пакеты и архитектура преамбулы'
+          capture practice-834 /practice/x16-1 834 1112 'geometry'
+
+          # Laptop and desktop profiles
+          capture lesson-1024 /lesson/packages-preamble 1024 800 'Пакеты и архитектура преамбулы'
           capture lesson-1440 /lesson/document-structure 1440 1000 'Структура документа'
+          capture practice-1440 /practice/x16-1 1440 900 'Проверить решение'
+
+          # TV / large-screen profiles
           capture practice-1920 /practice/e01 1920 1080 'Проверить решение'
+          capture lesson-2560 /lesson/unicode-engines 2560 1440 'XeLaTeX, LuaLaTeX'
 
       - name: Upload visual QA screenshots
         uses: actions/upload-artifact@v6
