@@ -28,23 +28,30 @@ const evaluate=async(expression)=>{
   return result.result?.value;
 };
 const delay=(ms)=>new Promise(resolve=>setTimeout(resolve,ms));
+const pageState=async()=>String(await evaluate(`(()=>{
+  const validation=document.querySelector('.validation-panel')?.innerText?.trim();
+  const compile=document.querySelector('.compile-result-note')?.innerText?.trim();
+  const editor=document.querySelector('.cm-content')?.textContent?.trim();
+  const body=document.body?.innerText?.trim()?.slice(0,2400);
+  return [validation&&'VALIDATION:\n'+validation,compile&&'COMPILE:\n'+compile,editor&&'EDITOR:\n'+editor,'BODY:\n'+body].filter(Boolean).join('\n\n');
+})()`));
 const waitFor=async(expression,label,timeout=20_000)=>{
   const deadline=Date.now()+timeout;
   while(Date.now()<deadline){if(await evaluate(expression))return;await delay(150);}
-  throw new Error(`Timed out waiting for ${label}`);
+  throw new Error(`Timed out waiting for ${label}.\n${await pageState()}`);
 };
 const navigate=async(route)=>{
   await command('Page.navigate',{url:`${appBase}/#${route}`});
   await waitFor("document.readyState === 'complete'",`page load ${route}`);
   await waitFor("Boolean(document.querySelector('#root')?.textContent?.trim())",`app render ${route}`);
-  if(await evaluate("document.body.textContent.includes('Страница не найдена')"))throw new Error(`Route not found: ${route}`);
+  if(await evaluate("document.body.innerText.includes('Страница не найдена')"))throw new Error(`Route not found: ${route}`);
 };
 const clickText=async(selector,text)=>{
-  const source=JSON.stringify(text);
-  const selectorJson=JSON.stringify(selector);
-  const clicked=await evaluate(`(()=>{const target=[...document.querySelectorAll(${selectorJson})].find(el=>el.textContent?.trim().includes(${source}));if(!target)return false;target.click();return true;})()`);
-  if(!clicked)throw new Error(`Cannot find ${selector} containing ${text}`);
+  const source=JSON.stringify(text);const selectorJson=JSON.stringify(selector);
+  const clicked=await evaluate(`(()=>{const target=[...document.querySelectorAll(${selectorJson})].find(el=>el.textContent?.trim().includes(${source})&&!el.disabled);if(!target)return false;target.click();return true;})()`);
+  if(!clicked)throw new Error(`Cannot find enabled ${selector} containing ${text}.\n${await pageState()}`);
 };
+const waitForEnabledButton=(text)=>waitFor(`[...document.querySelectorAll('button')].some(el=>el.textContent?.trim().includes(${JSON.stringify(text)})&&!el.disabled)`,`enabled button ${text}`);
 const screenshot=async(name,width=1280,height=800)=>{
   await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
   const capture=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false,fromSurface:true});
@@ -58,7 +65,7 @@ const focusAndReplace=async(selector,text)=>{
   await command('Input.dispatchKeyEvent',{type:'keyUp',key:'a',code:'KeyA',modifiers:2});
   await command('Input.dispatchKeyEvent',{type:'keyUp',key:'Control',code:'ControlLeft'});
   await command('Input.insertText',{text});
-  await delay(200);
+  await delay(250);
 };
 
 await command('Page.enable');
@@ -71,27 +78,31 @@ await navigate('/lesson/what-is-latex');
 await waitFor("document.querySelector('h1')?.textContent?.includes('Что такое LaTeX')",'foundation lesson');
 
 await navigate('/practice/deep-001');
-await waitFor("document.body.textContent.includes('Ответ без компиляции')",'conceptual exercise mode');
+await waitFor("document.body.innerText.includes('Ответ без компиляции')",'conceptual exercise mode');
 const conceptualSelected=await evaluate(`(()=>{const label=[...document.querySelectorAll('.concept-choice')].find(el=>el.textContent?.includes('source.tex'));if(!label)return false;label.click();return true;})()`);
 if(!conceptualSelected)throw new Error('Conceptual exercise did not expose source.tex selection.');
+await waitForEnabledButton('Проверить ответ');
 await clickText('button','Проверить ответ');
-await waitFor("document.body.textContent.includes('Решение принято')",'conceptual exercise acceptance');
+await waitFor("document.body.innerText.includes('Решение принято')",'conceptual exercise acceptance');
 await screenshot('e2e-conceptual-pass',1280,800);
 
 await navigate('/practice/e01');
 await waitFor("Boolean(document.querySelector('.cm-content'))",'CodeMirror editor');
 const broken='\\documentclass{article}\n\\begin{document}\nТекст без закрытия окружения.';
 await focusAndReplace('.cm-content',broken);
+await waitForEnabledButton('Скомпилировать');
 await clickText('button','Скомпилировать');
-await waitFor("document.body.textContent.includes('Компиляция остановлена')",'compiler error state');
+await waitFor("document.body.innerText.includes('Компиляция остановлена')",'compiler error state');
 await screenshot('e2e-compile-error',1280,800);
 
 const fixed='\\documentclass{article}\n\\begin{document}\nДругой допустимый абзац.\n\\end{document}';
 await focusAndReplace('.cm-content',fixed);
+await waitForEnabledButton('Скомпилировать');
 await clickText('button','Скомпилировать');
-await waitFor("document.body.textContent.includes('Документ собирается')",'successful compile');
+await waitFor("document.body.innerText.includes('Документ собирается')",'successful compile');
+await waitForEnabledButton('Проверить решение');
 await clickText('button','Проверить решение');
-await waitFor("document.body.textContent.includes('Решение принято')",'solution acceptance');
+await waitFor("document.body.innerText.includes('Решение принято')",'solution acceptance');
 await screenshot('e2e-solution-pass',1280,800);
 
 const persistedBefore=await evaluate(`(()=>{const raw=localStorage.getItem('latex-gym-state');if(!raw)return false;const parsed=JSON.parse(raw);return Boolean(parsed.state?.completedExercises?.includes('e01'));})()`);
@@ -116,7 +127,7 @@ const openedSearch=await evaluate(`(()=>{const button=[...document.querySelector
 if(!openedSearch)throw new Error('Global search control not found.');
 await waitFor("Boolean(document.querySelector('.command-palette input'))",'global search dialog');
 await focusAndReplace('.command-palette input','bibliography');
-await waitFor("document.body.textContent.includes('Пакет') || document.body.textContent.includes('Команда')",'grouped search result');
+await waitFor("document.body.innerText.includes('Пакет') || document.body.innerText.includes('Команда')",'grouped search result');
 await screenshot('e2e-global-search',1280,800);
 
 console.log('E2E_LEARNING_OK conceptual → compile error → repair → submit → persistence → deep link → fullscreen → search');
