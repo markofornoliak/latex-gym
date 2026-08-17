@@ -13,6 +13,11 @@
 .route-error details{margin-top:30px;padding-top:14px;border-top:1px solid var(--soft-border);font-size:12px;color:var(--secondary)}
 .route-error details code{display:block;margin-top:10px;overflow-wrap:anywhere;color:var(--text)}
 
+.palette-results--grouped{display:block}
+.palette-result-group{display:grid}
+.palette-result-group+.palette-result-group{border-top:1px solid var(--soft-border);margin-top:5px;padding-top:5px}
+.palette-result-group-label{display:block;padding:8px 14px 4px;font-size:8px;line-height:1;letter-spacing:.11em;color:var(--muted);font-weight:650}
+
 @media(min-width:768px){
   .source-output-pair{grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr);gap:18px}
   .source-output-link{display:block;text-align:center}
