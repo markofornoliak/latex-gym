@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom';
 import { ChevronIcon } from '../components/Icons';
-import { getLesson } from '../data/courses';
+import { getExercise, getLesson } from '../data/courses';
 import { getReferenceEntry } from '../data/reference';
 import { useAppStore } from '../store/useAppStore';
 export function BookmarksPage(){
   const bookmarks=useAppStore(s=>s.bookmarks);
-  return <div className="page editorial-page"><header className="page-intro"><span className="eyebrow">СОХРАНЕНО</span><h1>Закладки</h1><p>Уроки и команды, к которым стоит вернуться без лишней навигации.</p></header>
-    {!bookmarks.length&&<div className="empty-state">Пока ничего не сохранено. Значок закладки доступен в уроках и справочнике.</div>}
-    <div className="saved-list">{bookmarks.map(b=>{const lesson=b.type==='lesson'?getLesson(b.targetId):undefined;const ref=b.type==='reference'?getReferenceEntry(b.targetId):undefined;const title=lesson?.title??ref?.title??b.targetId;const subtitle=lesson?'Урок':ref?.command??'Справочник';const to=lesson?`/lesson/${lesson.id}`:`/reference/${ref?.id}`;return <Link className="saved-row" to={to} key={b.id}><span><strong>{title}</strong><small>{subtitle}</small></span><ChevronIcon/></Link>})}</div>
+  return <div className="page editorial-page"><header className="page-intro"><span className="eyebrow">СОХРАНЕНО</span><h1>Закладки</h1><p>Уроки, задачи и команды, к которым стоит вернуться без лишней навигации.</p></header>
+    {!bookmarks.length&&<div className="empty-state">Пока ничего не сохранено. Значок закладки доступен в уроках, практических задачах и справочнике.</div>}
+    <div className="saved-list">{bookmarks.map(b=>{const lesson=b.type==='lesson'?getLesson(b.targetId):undefined;const exercise=b.type==='exercise'?getExercise(b.targetId):undefined;const ref=b.type==='reference'?getReferenceEntry(b.targetId):undefined;const title=lesson?.title??exercise?.title??ref?.title??b.targetId;const subtitle=lesson?'Урок':exercise?'Практика':ref?.command??'Справочник';const to=lesson?`/lesson/${lesson.id}`:exercise?`/practice/${exercise.id}`:`/reference/${ref?.id}`;return <Link className="saved-row" to={to} key={b.id}><span><strong>{title}</strong><small>{subtitle}</small></span><ChevronIcon/></Link>})}</div>
   </div>;
 }
