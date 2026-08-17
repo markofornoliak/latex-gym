@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import type { CompileResult, PreviewBlock } from '../types';
@@ -87,6 +87,6 @@ function targetInteraction(target:CausalTarget,causal:CausalPreview){
     onFocus:()=>causal.onActive(target.id),
     onBlur:()=>causal.onActive(null),
     onClick:()=>causal.onActive(target.id),
-    onKeyDown:(event:React.KeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();causal.onActive(target.id);}}
+    onKeyDown:(event:ReactKeyboardEvent)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();causal.onActive(target.id);}}
   } as const;
 }
