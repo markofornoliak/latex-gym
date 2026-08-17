@@ -54,6 +54,17 @@ export function getExerciseInteraction(exercise:Exercise):ExerciseInteraction{
   return interactions[`${exercise.lessonId}:${exercise.title}`]??{kind:'code'};
 }
 
+export function initialInteractionValue(exercise:Exercise,interaction:ExerciseInteraction,draft?:string){
+  if(interaction.kind==='code')return draft??exercise.starterCode;
+  if(draft!==undefined&&draft!==exercise.starterCode)return draft;
+  if(interaction.kind==='ordering'){
+    const candidates=exercise.starterCode.split(interaction.separator).map(item=>item.trim()).filter(Boolean);
+    if(candidates.length===interaction.items.length&&interaction.items.every(item=>candidates.includes(item)))return candidates.join(interaction.separator);
+    return interaction.items.join(interaction.separator);
+  }
+  return '';
+}
+
 export function interactionLabel(interaction:ExerciseInteraction, fallback:string){
   if(interaction.kind==='selection')return 'Выбор';
   if(interaction.kind==='ordering')return 'Порядок';
