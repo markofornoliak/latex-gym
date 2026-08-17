@@ -11,6 +11,7 @@ import './styles/deviceLayouts.css';
 import './styles/laptopPolish.css';
 import './styles/deepProduct.css';
 import './styles/smartEditor.css';
+import './styles/projects.css';
 
 registerSW({ immediate: true });
 createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
