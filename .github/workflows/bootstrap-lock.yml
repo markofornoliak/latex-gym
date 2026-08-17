@@ -25,9 +25,35 @@ jobs:
       - name: Reconstruct source tree
         shell: bash
         run: |
-          cat .bootstrap/part-* > /tmp/latex-gym.b64
-          base64 --decode /tmp/latex-gym.b64 > /tmp/latex-gym.tgz
-          tar -xzf /tmp/latex-gym.tgz
+          set -euo pipefail
+          head -c 9000 .bootstrap/part-03 > /tmp/part-03-head
+          tail -c +9001 .bootstrap/part-03 > /tmp/part-03-tail
+
+          try_archive() {
+            name="$1"
+            shift
+            echo "Trying source archive: $name"
+            cat "$@" > /tmp/latex-gym.b64
+            if base64 --decode /tmp/latex-gym.b64 > /tmp/latex-gym.tgz 2>/tmp/base64.err && tar -tzf /tmp/latex-gym.tgz >/tmp/tar-list 2>/tmp/tar.err; then
+              echo "Selected source archive: $name"
+              tar -xzf /tmp/latex-gym.tgz
+              return 0
+            fi
+            return 1
+          }
+
+          try_archive repaired-second-half \
+            .bootstrap/part-00 .bootstrap/part-01 .bootstrap/part-02 \
+            /tmp/part-03-head .bootstrap/part-03a .bootstrap/part-04 \
+          || try_archive repaired-first-half \
+            .bootstrap/part-00 .bootstrap/part-01 .bootstrap/part-02 \
+            .bootstrap/part-03a /tmp/part-03-tail .bootstrap/part-04 \
+          || try_archive legacy \
+            .bootstrap/part-00 .bootstrap/part-01 .bootstrap/part-02 \
+            .bootstrap/part-03 .bootstrap/part-04 \
+          || { echo 'Unable to reconstruct source archive'; cat /tmp/base64.err || true; cat /tmp/tar.err || true; exit 1; }
+
+          test -f package.json
           rm -rf .bootstrap .init
 
       - name: Install dependencies and create lockfile
