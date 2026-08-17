@@ -1,4 +1,5 @@
 import { exercises, lessons } from './courses';
+import { referenceEntries } from './reference';
 
 /**
  * Small editorial refinements that mirror the product's primary visual benchmark.
@@ -36,4 +37,9 @@ if(firstExercise){
     concepts:['documentclass','environment','section','paragraph'],
     mode:'Собрать документ'
   });
+}
+
+const fractionReference=referenceEntries.find(entry=>entry.id==='frac');
+if(fractionReference){
+  fractionReference.description='Дробь: набирает числитель над знаменателем и сохраняет математические интервалы.';
 }
