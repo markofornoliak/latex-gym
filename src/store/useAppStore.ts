@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { Bookmark, ConceptMastery, HistoryEntry, MasteryEvidence } from '../types';
+import { createProjectWorkspace, normalizeProjectWorkspace } from '../services/projectWorkspace';
+import type { Bookmark, ConceptMastery, HistoryEntry, MasteryEvidence, ProjectWorkspace } from '../types';
 
 type Settings={textSize:'small'|'medium'|'large';wordWrap:boolean;autoClose:boolean;lineNumbers:boolean};
 type ProjectProgress=Record<string,string[]>;
@@ -15,6 +16,7 @@ type AppState={
   completedLessons:string[];
   completedExercises:string[];
   completedProjectStages:ProjectProgress;
+  projectWorkspaces:Record<string,ProjectWorkspace>;
   currentLessonId:string;
   bookmarks:Bookmark[];
   attempts:Record<string,number>;
@@ -33,7 +35,9 @@ type AppState={
   setCurrentLesson:(id:string)=>void;
   completeLesson:(id:string,title:string)=>void;
   recordExerciseAttempt:(exerciseId:string,ok:boolean,concepts:string[],title:string,evidence?:AttemptEvidence)=>void;
-  completeProjectStage:(projectId:string,stageId:string,title:string)=>void;
+  completeProjectStage:(projectId:string,stageId:string,title:string,concepts?:string[],realCompile?:boolean)=>void;
+  ensureProjectWorkspace:(projectId:string,initialSource:string,legacySource?:string)=>void;
+  saveProjectWorkspace:(workspace:ProjectWorkspace)=>void;
   recordHint:(exerciseId:string,level:number)=>void;
   recordSolutionReveal:(exerciseId:string)=>void;
   setDraft:(key:string,source:string)=>void;
@@ -127,10 +131,21 @@ export function updateConceptMastery(previous:ConceptMastery|undefined,ok:boolea
   };
 }
 
+function normalizeProjectWorkspaces(raw:unknown,drafts:Record<string,string>){
+  const source=raw&&typeof raw==='object'?raw as Record<string,Partial<ProjectWorkspace>>:{};
+  const workspaces:Record<string,ProjectWorkspace>={};
+  for(const [projectId,value] of Object.entries(source))workspaces[projectId]=normalizeProjectWorkspace(value,projectId,'');
+  for(const [key,legacySource] of Object.entries(drafts)){
+    const match=key.match(/^project:([^:]+):workspace$/);
+    if(match&&!workspaces[match[1]])workspaces[match[1]]=createProjectWorkspace(match[1],legacySource);
+  }
+  return workspaces;
+}
+
 export const useAppStore=create<AppState>()(persist((set)=>({
-  version:3,
+  version:4,
   onboarded:false,onboarding:defaultOnboarding,
-  completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null},settings:defaultSettings,
+  completedLessons:[],completedExercises:[],completedProjectStages:{},projectWorkspaces:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null},settings:defaultSettings,
   setOnboarded:()=>set({onboarded:true}),
   completeOnboarding:(profile)=>set(state=>{
     const conceptMastery={...state.conceptMastery};
@@ -158,7 +173,13 @@ export const useAppStore=create<AppState>()(persist((set)=>({
     }
     return {attempts,successfulAttempts,conceptScores,conceptMastery,completedExercises:ok?unique(state.completedExercises,exerciseId):state.completedExercises,history:ok?[historyItem(`Решена задача «${title}»`,'exercise'),...state.history].slice(0,100):state.history,streak:nextStreak(state.streak)};
   }),
-  completeProjectStage:(projectId,stageId,title)=>set(state=>({completedProjectStages:{...state.completedProjectStages,[projectId]:unique(state.completedProjectStages[projectId]??[],stageId)},history:[historyItem(`Завершён этап проекта «${title}»`,'exercise'),...state.history].slice(0,100),streak:nextStreak(state.streak)})),
+  completeProjectStage:(projectId,stageId,title,concepts=[],realCompile=false)=>set(state=>{
+    const conceptScores={...state.conceptScores};const conceptMastery={...state.conceptMastery};const now=new Date();
+    for(const conceptId of concepts){conceptScores[conceptId]=(conceptScores[conceptId]??0)+1;conceptMastery[conceptId]=updateConceptMastery(conceptMastery[conceptId],true,now,{independence:'independent',context:'project',realCompile});}
+    return {completedProjectStages:{...state.completedProjectStages,[projectId]:unique(state.completedProjectStages[projectId]??[],stageId)},conceptScores,conceptMastery,history:[historyItem(`Завершён этап проекта «${title}»`,'exercise'),...state.history].slice(0,100),streak:nextStreak(state.streak)};
+  }),
+  ensureProjectWorkspace:(projectId,initialSource,legacySource)=>set(state=>state.projectWorkspaces[projectId]?{}:{projectWorkspaces:{...state.projectWorkspaces,[projectId]:createProjectWorkspace(projectId,legacySource??initialSource)}}),
+  saveProjectWorkspace:(workspace)=>set(state=>({projectWorkspaces:{...state.projectWorkspaces,[workspace.projectId]:normalizeProjectWorkspace(workspace,workspace.projectId,'')}})),
   recordHint:(exerciseId,level)=>set(state=>({hintsUsed:{...state.hintsUsed,[exerciseId]:Math.max(level,state.hintsUsed[exerciseId]??0)}})),
   recordSolutionReveal:(exerciseId)=>set(state=>({solutionReveals:{...state.solutionReveals,[exerciseId]:(state.solutionReveals[exerciseId]??0)+1}})),
   setDraft:(key,source)=>set(state=>({drafts:{...state.drafts,[key]:source}})),
@@ -170,35 +191,40 @@ export const useAppStore=create<AppState>()(persist((set)=>({
       const parsed=JSON.parse(raw) as Record<string,unknown>;
       if(!parsed||typeof parsed!=='object')throw new Error('invalid');
       const progress=(parsed.progress&&typeof parsed.progress==='object'?parsed.progress:parsed) as Partial<AppState>;
-      const projects=(parsed.projects&&typeof parsed.projects==='object'?parsed.projects:{}) as {completedStages?:ProjectProgress;drafts?:Record<string,string>};
+      const projects=(parsed.projects&&typeof parsed.projects==='object'?parsed.projects:{}) as {completedStages?:ProjectProgress;drafts?:Record<string,string>;workspaces?:Record<string,ProjectWorkspace>};
       const importedMastery=progress.conceptMastery??{};
       const conceptMastery=Object.fromEntries(Object.entries(importedMastery).map(([id,value])=>[id,normalizeMastery(value)]));
+      const mergedDrafts={...((progress.drafts??{}) as Record<string,string>),...(projects.drafts??{})};
+      const projectWorkspaces=normalizeProjectWorkspaces(projects.workspaces??progress.projectWorkspaces,mergedDrafts);
       set(state=>({
         onboarded:progress.onboarded??state.onboarded,
         onboarding:progress.onboarding??state.onboarding,
         completedLessons:Array.isArray(progress.completedLessons)?progress.completedLessons:state.completedLessons,
         completedExercises:Array.isArray(progress.completedExercises)?progress.completedExercises:state.completedExercises,
         completedProjectStages:projects.completedStages??progress.completedProjectStages??state.completedProjectStages,
+        projectWorkspaces:{...state.projectWorkspaces,...projectWorkspaces},
         currentLessonId:typeof progress.currentLessonId==='string'?progress.currentLessonId:state.currentLessonId,
         bookmarks:Array.isArray(progress.bookmarks)?progress.bookmarks:state.bookmarks,
         attempts:progress.attempts??state.attempts,successfulAttempts:progress.successfulAttempts??state.successfulAttempts,
         hintsUsed:progress.hintsUsed??state.hintsUsed,solutionReveals:progress.solutionReveals??state.solutionReveals,
-        drafts:{...state.drafts,...(progress.drafts??{}),...(projects.drafts??{})},conceptScores:progress.conceptScores??state.conceptScores,conceptMastery,
+        drafts:{...state.drafts,...mergedDrafts},conceptScores:progress.conceptScores??state.conceptScores,conceptMastery,
         history:Array.isArray(progress.history)?progress.history:state.history,streak:progress.streak??state.streak,settings:{...state.settings,...((parsed.settings??progress.settings) as Partial<Settings>|undefined)}
       }));
       return {ok:true,message:'Прогресс импортирован.'};
     }catch{return {ok:false,message:'Файл прогресса имеет неверный формат.'};}
   },
-  resetProgress:()=>set({onboarded:false,onboarding:{...defaultOnboarding,placementEvidence:{}},completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null}})
+  resetProgress:()=>set({onboarded:false,onboarding:{...defaultOnboarding,placementEvidence:{}},completedLessons:[],completedExercises:[],completedProjectStages:{},projectWorkspaces:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null}})
 }),{
-  name:'latex-gym-state',version:3,storage:createJSONStorage(()=>localStorage),
-  migrate:(persisted,version)=>{
+  name:'latex-gym-state',version:4,storage:createJSONStorage(()=>localStorage),
+  migrate:(persisted)=>{
     const state=(persisted??{}) as Record<string,unknown>;
     const rawMastery=(state.conceptMastery??{}) as Record<string,Partial<ConceptMastery>>;
     const conceptMastery=Object.fromEntries(Object.entries(rawMastery).map(([id,value])=>[id,normalizeMastery(value)]));
     const oldOnboarding=(state.onboarding??{}) as Partial<OnboardingProfile>;
     const onboarding:OnboardingProfile={...defaultOnboarding,...oldOnboarding,goals:Array.isArray(oldOnboarding.goals)?oldOnboarding.goals:[],placementEvidence:oldOnboarding.placementEvidence??{}};
-    return {...state,version:3,onboarding,completedProjectStages:state.completedProjectStages??{},solutionReveals:state.solutionReveals??{},conceptMastery} as unknown as AppState;
+    const drafts=(state.drafts??{}) as Record<string,string>;
+    const projectWorkspaces=normalizeProjectWorkspaces(state.projectWorkspaces,drafts);
+    return {...state,version:4,onboarding,completedProjectStages:state.completedProjectStages??{},projectWorkspaces,solutionReveals:state.solutionReveals??{},conceptMastery} as unknown as AppState;
   }
 }));
 
@@ -207,14 +233,14 @@ export function exportProgress(){
   const projectDrafts=Object.fromEntries(Object.entries(state.drafts).filter(([key])=>key.startsWith('project:')));
   const otherDrafts=Object.fromEntries(Object.entries(state.drafts).filter(([key])=>!key.startsWith('project:')));
   return JSON.stringify({
-    schemaVersion:3,
+    schemaVersion:4,
     exportedAt:new Date().toISOString(),
     progress:{
       onboarded:state.onboarded,onboarding:state.onboarding,completedLessons:state.completedLessons,completedExercises:state.completedExercises,currentLessonId:state.currentLessonId,
       bookmarks:state.bookmarks,attempts:state.attempts,successfulAttempts:state.successfulAttempts,hintsUsed:state.hintsUsed,solutionReveals:state.solutionReveals,
       drafts:otherDrafts,conceptScores:state.conceptScores,conceptMastery:state.conceptMastery,history:state.history,streak:state.streak
     },
-    projects:{completedStages:state.completedProjectStages,drafts:projectDrafts},
+    projects:{completedStages:state.completedProjectStages,drafts:projectDrafts,workspaces:state.projectWorkspaces},
     settings:state.settings
   },null,2);
 }
