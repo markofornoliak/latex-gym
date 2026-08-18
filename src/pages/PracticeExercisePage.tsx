@@ -58,7 +58,8 @@ export function PracticeExercisePage(){
 
   const isSaved=bookmarks.some(item=>item.type==='exercise'&&item.targetId===exercise.id);
   const busy=isCompilationBusy(compileState);
-  const setEditorSource=(value:string)=>{setSource(value);if(validation)setValidation(null);};
+  const setEditorSource=(value:string)=>{setSource(value);if(validation)setValidation(null);if(result)setResult(null);if(compileState!=='ready')setCompileState('ready');};
+  const resetEditor=()=>{setEditorSource(exercise.starterCode);};
   const saveNow=()=>{setDraft(`exercise:${exercise.id}`,source);setSaved(true);};
   const runCompile=async()=>{
     setCompileState('queued');setValidation(null);
@@ -100,7 +101,7 @@ export function PracticeExercisePage(){
       <section className="editor-pane mobile-active">
         <div className="editor-pane-inner">
           <div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${compileState}`}>{compilationStateLabel(compileState)}</span><span>{result?engineLabel(result):saved?'Сохранено локально':'Сохранение…'}</span></div>
-          <Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={setEditorSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={235} onReset={()=>setSource(exercise.starterCode)} onCompile={()=>{void runCompile();}} onSave={saveNow} onShowShortcuts={()=>setShortcutsOpen(true)} diagnostics={result?.diagnostics??[]}/></Suspense>
+          <Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={setEditorSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={235} onReset={resetEditor} onCompile={()=>{void runCompile();}} onSave={saveNow} onShowShortcuts={()=>setShortcutsOpen(true)} diagnostics={result?.diagnostics??[]}/></Suspense>
           <button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy}><PlayIcon/>{busy?compilationStateLabel(compileState):'Скомпилировать'}</button>
         </div>
       </section>
