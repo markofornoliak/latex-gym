@@ -83,7 +83,7 @@ type BusyTexRawResult={
   pdf?:Uint8Array|null;
   log?:string;
   exit_code?:number;
-  logs?:Array<{cmd?:string;log?:string;stdout?:string;stderr?:string;exit_code?:number}>;
+  logs?:Array<{cmd?:string;log?:string;stdout?:string;stderr?:string;aux?:string;exit_code?:number}>;
 };
 
 type BusyTexWorkerMessage=
@@ -294,7 +294,7 @@ class CompilerManager implements LatexCompiler {
 
   private async compileFallback(project:CompilerProject,options:CompileOptions,error:unknown){
     options.onPhase?.('compiling');
-    const fallback=await this.fallback.compile(project,options);
+    const fallback=await this.fallback.compile(project);
     const fallbackReason=error instanceof Error?error.message:String(error);
     const diagnostic={
       severity:'info' as const,line:1,message:'Использован учебный предпросмотр',
