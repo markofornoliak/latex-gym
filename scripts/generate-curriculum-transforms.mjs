@@ -12,6 +12,12 @@ function requireMarker(source,marker,label){const index=source.indexOf(marker);i
 function replaceOnce(source,from,to,label){const index=source.indexOf(from);if(index<0)fail(`Missing ${label}`);if(source.indexOf(from,index+from.length)>=0)fail(`Ambiguous ${label}`);return source.slice(0,index)+to+source.slice(index+from.length);}
 function indent(source,spaces=2){const prefix=' '.repeat(spaces);return source.split('\n').map(line=>line?prefix+line:line).join('\n');}
 function writeGenerated(path,content){mkdirSync(dirname(path),{recursive:true});writeFileSync(path,content.endsWith('\n')?content:`${content}\n`,'utf8');}
+function redirectCatalogs(source){
+  return source
+    .replace(/(?<![\w.])modules\./g,'draft.modules.')
+    .replace(/(?<![\w.])lessons\./g,'draft.lessons.')
+    .replace(/(?<![\w.])exercises\./g,'draft.exercises.');
+}
 
 function generateExpansion(source){
   let text=replaceOnce(source,"import { exercises, lessonIndex, lessons, modules } from './courses';","import { cloneCurriculumDraft, type CurriculumDraft } from './curriculumDraft';",'expansion seed import');
@@ -27,7 +33,7 @@ function generateExpansion(source){
 
   guides=replaceOnce(guides,'for(const lesson of lessons){','for(const lesson of draft.lessons){','expansion draft guide loop');
   append=append.replace(/\n\s*lessonIndex\.set\(lesson\.id,lessons\.length\);/,'');
-  append=append.replaceAll('modules.','draft.modules.').replaceAll('lessons.','draft.lessons.').replaceAll('exercises.','draft.exercises.');
+  append=redirectCatalogs(append);
 
   const generated=`${prefix}${staticTopics}\nexport function applyCurriculumExpansion(input:CurriculumDraft):CurriculumDraft{\n  const draft=cloneCurriculumDraft(input);\n${indent(guides)}\n\n${indent(append)}\n  return draft;\n}\n`;
   if(generated.includes("from './courses'"))fail('Generated expansion still imports course seeds');
@@ -45,7 +51,7 @@ function generateDeep(source){
 
   body=replaceOnce(body,'for(const lesson of lessons){','for(const lesson of draft.lessons){','deep draft lesson loop');
   body=body.replace(/\nlessonIndex\.clear\(\);lessons\.forEach\(\(lesson,index\)=>lessonIndex\.set\(lesson\.id,index\)\);?\s*$/,'');
-  body=body.replaceAll('modules.','draft.modules.').replaceAll('lessons.','draft.lessons.').replaceAll('exercises.','draft.exercises.');
+  body=redirectCatalogs(body);
 
   const generated=`${prefix}export function applyDeepCurriculum(input:CurriculumDraft):CurriculumDraft{\n  const draft=cloneCurriculumDraft(input);\n  if(draft.modules.some(module=>module.id==='foundation'))return draft;\n${indent(body)}\n  return draft;\n}\n`;
   if(generated.includes("from './courses'"))fail('Generated deep curriculum still imports course seeds');
