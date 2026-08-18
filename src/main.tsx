@@ -13,6 +13,7 @@ import './styles/deviceLayouts.css';
 import './styles/laptopPolish.css';
 import './styles/deepProduct.css';
 import './styles/smartEditor.css';
+import './styles/editorReference.css';
 import './styles/projects.css';
 import './styles/projectWorkspace.css';
 import './styles/referenceDeep.css';

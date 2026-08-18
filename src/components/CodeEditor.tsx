@@ -5,8 +5,10 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { bracketMatching, defaultHighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, snippetCompletion, type Completion, type CompletionContext } from '@codemirror/autocomplete';
 import { stex } from '@codemirror/legacy-modes/mode/stex';
+import { getReferenceEntry, referenceEntries } from '../data/reference';
+import { analyzeLatexContext, environmentSuggestions, insertPackageIntoPreamble, packageSuggestions, referenceSuggestions } from '../services/editorIntelligence';
 import { ExpandIcon } from './Icons';
-import type { Diagnostic } from '../types';
+import type { Diagnostic, ReferenceEntry } from '../types';
 
 type EditorProps={
   value:string;
@@ -21,28 +23,6 @@ type EditorProps={
   onShowShortcuts?:()=>void;
   diagnostics?:Diagnostic[];
 };
-
-type CommandDoc={syntax:string;summary:string;package?:string};
-const commandDocs:Record<string,CommandDoc>={
-  section:{syntax:'\\section{title}',summary:'Создаёт нумеруемый раздел документа.'},
-  subsection:{syntax:'\\subsection{title}',summary:'Создаёт подраздел внутри текущего раздела.'},
-  emph:{syntax:'\\emph{text}',summary:'Смысловое выделение текста.'},
-  textbf:{syntax:'\\textbf{text}',summary:'Набирает текст полужирным начертанием.'},
-  frac:{syntax:'\\frac{numerator}{denominator}',summary:'Создаёт дробь в математическом режиме.',package:'amsmath для расширенной математики'},
-  sqrt:{syntax:'\\sqrt[n]{expression}',summary:'Создаёт квадратный или n-й корень.'},
-  label:{syntax:'\\label{key}',summary:'Назначает устойчивый ключ нумеруемому объекту.'},
-  ref:{syntax:'\\ref{key}',summary:'Подставляет номер объекта по его label.'},
-  cite:{syntax:'\\cite{key}',summary:'Создаёт ссылку на библиографическую запись.'},
-  includegraphics:{syntax:'\\includegraphics[options]{file}',summary:'Вставляет графический файл.',package:'graphicx'},
-  usepackage:{syntax:'\\usepackage[options]{package}',summary:'Подключает пакет в преамбуле.'},
-  documentclass:{syntax:'\\documentclass[options]{class}',summary:'Выбирает базовый класс документа.'},
-  begin:{syntax:'\\begin{name} … \\end{name}',summary:'Открывает структурное окружение.'},
-  item:{syntax:'\\item text',summary:'Начинает элемент внутри окружения списка.'}
-};
-
-const commandCompletions:Completion[]=[
-  ['\\documentclass{}','Класс документа'],['\\usepackage{}','Пакет'],['\\begin{}','Окружение'],['\\end{}','Окружение'],['\\section{}','Раздел'],['\\subsection{}','Подраздел'],['\\emph{}','Смысловой акцент'],['\\textbf{}','Полужирный'],['\\frac{}{}','Дробь · математика'],['\\sqrt{}','Корень · математика'],['\\label{}','Метка'],['\\ref{}','Ссылка'],['\\cite{}','Цитирование'],['\\item','Пункт списка'],['\\includegraphics{}','Изображение · graphicx'],['\\alpha','α · математика'],['\\beta','β · математика'],['\\leq','≤ · математика'],['\\sin','sin · математика'],['\\log','log · математика']
-].map(([label,detail])=>({label,type:'keyword',detail,apply:label}));
 
 const snippetCompletions:Completion[]=[
   snippetCompletion('\\section{${title}}',{label:'sec',type:'text',detail:'шаблон → \\section{}'}),
@@ -69,47 +49,90 @@ const mobileAccessories=[
 ] as const;
 
 function latexCompletion(context:CompletionContext){
-  const commandWord=context.matchBefore(/\\[a-zA-Z]*$/);
-  if(commandWord){
-    const source=context.state.doc.toString();
-    const documentStart=source.indexOf('\\begin{document}');
-    const preamble=context.state.doc.sliceString(0,Math.min(context.state.doc.length,documentStart>=0?documentStart:context.state.doc.length));
-    const hasAmsmath=/\\usepackage(?:\[[^\]]*\])?\{[^}]*amsmath[^}]*\}/.test(preamble);
-    const hasGraphicx=/\\usepackage(?:\[[^\]]*\])?\{[^}]*graphicx[^}]*\}/.test(preamble);
-    const options=commandCompletions.map(item=>{
-      const detail=item.detail??'';
-      const unavailable=(detail.includes('amsmath')&&!hasAmsmath)||(detail.includes('graphicx')&&!hasGraphicx);
-      return unavailable?{...item,detail:`${detail} · пакет не подключён`,boost:-1}:item;
-    });
-    return {from:commandWord.from,options,validFor:/^\\[a-zA-Z]*$/};
+  const source=context.state.doc.toString();
+  const packageWord=context.matchBefore(/\\usepackage(?:\[[^\]]*\])?\{[A-Za-z0-9_-]*$/);
+  if(packageWord){
+    const brace=packageWord.text.lastIndexOf('{');
+    return {from:packageWord.from+brace+1,options:packageSuggestions().map(item=>({label:item.label,apply:item.apply,detail:item.detail,type:'namespace'})),validFor:/^[A-Za-z0-9_-]*$/};
   }
+
+  const environmentWord=context.matchBefore(/\\begin\{[A-Za-z*]*$/);
+  if(environmentWord){
+    const brace=environmentWord.text.lastIndexOf('{');
+    return {from:environmentWord.from+brace+1,options:environmentSuggestions(source,context.pos).map(item=>({label:item.label,apply:item.apply,detail:item.detail,boost:item.boost,type:'class',info:()=>completionInfo(item.referenceId)})),validFor:/^[A-Za-z*]*$/};
+  }
+
+  const commandWord=context.matchBefore(/\\[a-zA-Z@]*$/);
+  if(commandWord){
+    const options=referenceSuggestions(source,context.pos).map(item=>({
+      label:item.label,apply:item.apply,detail:item.detail,boost:item.boost,type:'function',info:()=>completionInfo(item.referenceId)
+    }));
+    return {from:commandWord.from,options,validFor:/^\\[a-zA-Z@]*$/};
+  }
+
   const snippetWord=context.matchBefore(/[a-zA-Z]+$/);
   if(snippetWord&&(context.explicit||snippetWord.text.length>=2))return {from:snippetWord.from,options:snippetCompletions,validFor:/^[a-zA-Z]+$/};
   return null;
 }
 
-const commandHover=hoverTooltip((view,pos)=>{
+function completionInfo(referenceId:string){
+  const entry=getReferenceEntry(referenceId);
+  const dom=document.createElement('div');dom.className='cm-reference-info';
+  if(!entry)return dom;
+  const title=document.createElement('strong');title.textContent=entry.title;dom.append(title);
+  const syntax=document.createElement('code');syntax.textContent=entry.syntax;dom.append(syntax);
+  const description=document.createElement('p');description.textContent=entry.description;dom.append(description);
+  if(entry.package){const meta=document.createElement('span');meta.textContent=`Пакет: ${entry.package}`;dom.append(meta);}
+  return dom;
+}
+
+function referenceHover(openReference:(id:string)=>void){
+  return hoverTooltip((view,pos)=>{
+    const found=referenceAtPosition(view,pos);
+    if(!found)return null;
+    const {entry,from,to}=found;
+    const source=view.state.doc.toString();
+    const packageMissing=Boolean(entry.package&&!analyzeLatexContext(source,pos).packages.has(entry.package));
+    return {pos:from,end:to,above:true,create(){
+      const dom=document.createElement('div');dom.className='cm-command-doc';
+      const syntax=document.createElement('code');syntax.textContent=entry.syntax;dom.append(syntax);
+      const summary=document.createElement('p');summary.textContent=entry.description;dom.append(summary);
+      if(entry.package){const meta=document.createElement('span');meta.className=packageMissing?'cm-package-missing':'';meta.textContent=packageMissing?`Требуется пакет ${entry.package}`:`Пакет: ${entry.package}`;dom.append(meta);}
+      const actions=document.createElement('div');actions.className='cm-command-actions';
+      const referenceButton=document.createElement('button');referenceButton.type='button';referenceButton.textContent='Открыть справочник';
+      referenceButton.addEventListener('mousedown',event=>{event.preventDefault();event.stopPropagation();openReference(entry.id);});actions.append(referenceButton);
+      if(packageMissing&&entry.package){
+        const packageName=entry.package;
+        const addButton=document.createElement('button');addButton.type='button';addButton.textContent=`Добавить ${packageName}`;
+        addButton.addEventListener('mousedown',event=>{event.preventDefault();event.stopPropagation();applyPackageQuickFix(view,packageName);});actions.append(addButton);
+      }
+      dom.append(actions);
+      return {dom};
+    }};
+  });
+}
+
+function referenceAtPosition(view:EditorView,pos:number){
   const line=view.state.doc.lineAt(pos);
   const relative=pos-line.from;
-  const matches=[...line.text.matchAll(/\\([a-zA-Z]+)\b/g)];
-  const match=matches.find(candidate=>candidate.index!==undefined&&relative>=candidate.index&&relative<=candidate.index+candidate[0].length);
-  if(!match||match.index===undefined)return null;
-  const doc=commandDocs[match[1]];
-  if(!doc)return null;
-  return {
-    pos:line.from+match.index,
-    end:line.from+match.index+match[0].length,
-    above:true,
-    create(){
-      const dom=document.createElement('div');
-      dom.className='cm-command-doc';
-      const syntax=document.createElement('code');syntax.textContent=doc.syntax;dom.append(syntax);
-      const summary=document.createElement('p');summary.textContent=doc.summary;dom.append(summary);
-      if(doc.package){const meta=document.createElement('span');meta.textContent=`Пакет: ${doc.package}`;dom.append(meta);}
-      return {dom};
-    }
-  };
-});
+  for(const match of line.text.matchAll(/\\([a-zA-Z@]+)\b/g)){
+    if(match.index===undefined)continue;
+    const from=match.index,to=from+match[0].length;
+    if(relative<from||relative>to)continue;
+    const entry=referenceEntries.find(item=>item.command===match[0]);
+    if(entry)return {entry,from:line.from+from,to:line.from+to};
+  }
+  for(const match of line.text.matchAll(/\\(?:begin|end)\{([^}]+)\}/g)){
+    if(match.index===undefined)continue;
+    const name=match[1];
+    const nameOffset=match[0].indexOf(name);
+    const from=match.index+nameOffset,to=from+name.length;
+    if(relative<from||relative>to)continue;
+    const entry=referenceEntries.find(item=>item.syntax.includes(`\\begin{${name}}`));
+    if(entry)return {entry,from:line.from+from,to:line.from+to};
+  }
+  return null;
+}
 
 class DiagnosticMarker extends GutterMarker {
   constructor(readonly severity:Diagnostic['severity']){super();}
@@ -122,14 +145,17 @@ export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,au
   const viewRef=useRef<EditorView|null>(null);
   const callbacks=useRef({onChange,onCompile,onSave,onShowShortcuts});
   const [fullscreen,setFullscreen]=useState(false);
+  const [referenceId,setReferenceId]=useState<string|null>(null);
+  const [cursorReferenceId,setCursorReferenceId]=useState<string|null>(null);
   const settingsCompartment=useMemo(()=>new Compartment(),[]);
   const diagnosticsCompartment=useMemo(()=>new Compartment(),[]);
+  const referenceEntry=getReferenceEntry(referenceId??undefined);
   callbacks.current={onChange,onCompile,onSave,onShowShortcuts};
 
   useEffect(()=>{
     if(!host.current)return;
     const state=EditorState.create({doc:value,extensions:[
-      history(),drawSelection(),dropCursor(),rectangularSelection(),crosshairCursor(),highlightActiveLine(),bracketMatching(),StreamLanguage.define(stex),syntaxHighlighting(defaultHighlightStyle),commandHover,
+      history(),drawSelection(),dropCursor(),rectangularSelection(),crosshairCursor(),highlightActiveLine(),bracketMatching(),StreamLanguage.define(stex),syntaxHighlighting(defaultHighlightStyle),referenceHover(setReferenceId),
       autocompletion({override:[latexCompletion],activateOnTyping:true}),
       keymap.of([
         {key:'Mod-Enter',run:()=>{callbacks.current.onCompile?.();return Boolean(callbacks.current.onCompile);}},
@@ -138,12 +164,16 @@ export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,au
         {key:'Enter',run:completeEnvironment},
         ...closeBracketsKeymap,...completionKeymap,...historyKeymap,...defaultKeymap,indentWithTab
       ]),
-      EditorView.updateListener.of(update=>{if(update.docChanged)callbacks.current.onChange(update.state.doc.toString());}),
+      EditorView.updateListener.of(update=>{
+        if(update.docChanged)callbacks.current.onChange(update.state.doc.toString());
+        if(update.docChanged||update.selectionSet)setCursorReferenceId(referenceAtPosition(update.view,update.state.selection.main.head)?.entry.id??null);
+      }),
       settingsCompartment.of(editorSettings(wordWrap,showLineNumbers,autoClose)),
       diagnosticsCompartment.of([]),
       EditorView.theme({'&':{fontSize:'13px',height:'100%'},'.cm-content':{fontFamily:'var(--font-mono)',lineHeight:'1.72',padding:'14px 0'},'.cm-gutters':{background:'transparent',borderRight:'1px solid var(--soft-border)',color:'var(--muted)'},'.cm-activeLine,.cm-activeLineGutter':{backgroundColor:'rgba(6,26,58,.035)'},'&.cm-focused':{outline:'none'}})
     ]});
     const view=new EditorView({state,parent:host.current});viewRef.current=view;
+    setCursorReferenceId(referenceAtPosition(view,view.state.selection.main.head)?.entry.id??null);
     return()=>{view.destroy();viewRef.current=null;};
   },[]);
 
@@ -165,12 +195,38 @@ export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,au
 
   return <div className={`editor-frame ${fullscreen?'editor-frame--fullscreen':''}`} style={{'--editor-min-height':`${minHeight}px`} as CSSProperties}>
     <div className="editor-toolbar">
-      <div className="editor-tools-left"><button type="button" onClick={()=>formatEditor(viewRef.current)} className="text-tool">Форматировать</button>{onReset&&<button type="button" onClick={onReset} className="text-tool">Сбросить</button>}</div>
+      <div className="editor-tools-left"><button type="button" onClick={()=>formatEditor(viewRef.current)} className="text-tool">Форматировать</button>{onReset&&<button type="button" onClick={onReset} className="text-tool">Сбросить</button>}<button type="button" onClick={()=>cursorReferenceId&&setReferenceId(cursorReferenceId)} className="text-tool" disabled={!cursorReferenceId} aria-label="Открыть справку для команды под курсором">Справка</button></div>
       <div className="editor-tools-right">{diagnostics.length>0&&<div className="editor-diagnostic-nav" aria-label="Навигация по диагностике"><span>{diagnostics.filter(item=>item.severity==='error').length} ошибок · {diagnostics.filter(item=>item.severity==='warning').length} предупреждений</span><button type="button" className="text-tool" onClick={()=>jumpDiagnostic(viewRef.current,diagnostics,-1)} aria-label="Предыдущая диагностика">↑</button><button type="button" className="text-tool" onClick={()=>jumpDiagnostic(viewRef.current,diagnostics,1)} aria-label="Следующая диагностика">↓</button></div>}<button className="icon-button" type="button" onClick={()=>setFullscreen(value=>!value)} aria-label={fullscreen?'Выйти из полноэкранного редактора':'Открыть редактор на весь экран'}><ExpandIcon/></button></div>
     </div>
     <div className="latex-mobile-accessory" aria-label="Быстрые LaTeX-вставки">{mobileAccessories.map(item=><button type="button" key={item.label} onPointerDown={event=>event.preventDefault()} onClick={()=>insertEditorText(viewRef.current,item.insert,'cursorOffset' in item?item.cursorOffset:0)}>{item.label}</button>)}</div>
-    <div ref={host} className="editor-host" />
+    <div className="editor-reference-layout">
+      <div ref={host} className="editor-host" />
+      {referenceEntry&&<EditorReferencePanel entry={referenceEntry} onClose={()=>{setReferenceId(null);requestAnimationFrame(()=>viewRef.current?.focus());}} onAddPackage={referenceEntry.package&&!analyzeLatexContext(value).packages.has(referenceEntry.package)?()=>applyPackageQuickFix(viewRef.current,referenceEntry.package!):undefined}/>} 
+    </div>
   </div>;
+}
+
+function EditorReferencePanel({entry,onClose,onAddPackage}:{entry:ReferenceEntry;onClose:()=>void;onAddPackage?:()=>void}){
+  return <aside className="editor-reference-panel" aria-label={`Справка: ${entry.title}`}>
+    <header><div><span className="eyebrow">СПРАВОЧНИК</span><h3>{entry.title}</h3></div><button type="button" onClick={onClose} aria-label="Закрыть справку">×</button></header>
+    <code>{entry.syntax}</code><p>{entry.description}</p>
+    <dl>{entry.package&&<div><dt>Пакет</dt><dd>{entry.package}</dd></div>}{entry.mathMode==='required'&&<div><dt>Контекст</dt><dd>Математический режим</dd></div>}</dl>
+    {entry.commonMistake&&<div className="editor-reference-warning"><strong>Частая ошибка</strong><p>{entry.commonMistake}</p></div>}
+    <div className="editor-reference-actions">{onAddPackage&&entry.package&&<button type="button" className="secondary-button" onClick={onAddPackage}>Добавить {entry.package}</button>}<a href={`#/reference/${entry.id}`}>Полная справка</a></div>
+  </aside>;
+}
+
+function applyPackageQuickFix(view:EditorView|null,packageName:string){
+  if(!view)return;
+  const current=view.state.doc.toString();
+  const next=insertPackageIntoPreamble(current,packageName);
+  if(next===current)return;
+  let from=0;
+  while(from<current.length&&from<next.length&&current[from]===next[from])from+=1;
+  let oldTo=current.length,newTo=next.length;
+  while(oldTo>from&&newTo>from&&current[oldTo-1]===next[newTo-1]){oldTo-=1;newTo-=1;}
+  view.dispatch({changes:{from,to:oldTo,insert:next.slice(from,newTo)},scrollIntoView:true});
+  view.focus();
 }
 
 function editorSettings(wordWrap:boolean,showLineNumbers:boolean,autoClose:boolean){return [showLineNumbers?lineNumbers():[],wordWrap?EditorView.lineWrapping:[],autoClose?closeBrackets():[]];}
