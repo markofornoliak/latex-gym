@@ -2,7 +2,8 @@ import type { CompilerProject } from '../types';
 import { toCompilerProject, type ProjectWorkspace } from './projectWorkspace';
 
 const PREFIX='__LATEX_GYM_BINARY_V1__:';
-export const PROJECT_ASSET_MAX_BYTES=5*1024*1024;
+export const PROJECT_ASSET_MAX_BYTES=1024*1024;
+export const PROJECT_ASSET_TOTAL_BYTES=Math.floor(1.5*1024*1024);
 const allowedExtensions=new Set(['pdf','png','jpg','jpeg']);
 
 export function isSupportedProjectAsset(path:string){
@@ -30,6 +31,7 @@ export function decodeProjectAsset(value:string){
 }
 
 export function encodedProjectAssetSize(value:string){return decodeProjectAsset(value)?.length??0;}
+export function workspaceAssetBytes(workspace:ProjectWorkspace){return Object.values(workspace.files).reduce((total,value)=>total+encodedProjectAssetSize(value),0);}
 
 export function toBinaryAwareCompilerProject(workspace:ProjectWorkspace):CompilerProject{
   const project=toCompilerProject(workspace);
