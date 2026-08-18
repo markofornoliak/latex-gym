@@ -6,12 +6,23 @@ import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 
 // BusyTeX no longer publishes its WASM bundle in the current native GitHub release.
-// The project's own GitHub Pages deployment still serves the browser runtime used by
-// busytex.github.io. We mirror that runtime into LaTeX Gym at build time and print
-// SHA-256 hashes; once validated, these hashes become the immutable supply-chain pin.
+// Its own GitHub Pages deployment still serves the browser runtime used by
+// busytex.github.io. LaTeX Gym mirrors those files at build time, but accepts them
+// only when their SHA-256 matches this reviewed manifest.
 const BASE = process.env.BUSYTEX_ASSET_BASE || 'https://busytex.github.io/dist';
 const destination = process.env.BUSYTEX_DEST || path.resolve('dist', 'busytex');
 const mode = process.argv[2] === 'full' ? 'full' : 'smoke';
+
+const EXPECTED_SHA256 = {
+  'busytex_pipeline.js': 'f8741cfd1fb0ac3c11daeee8386bc024f59d8b14c3000ad64b9c00dce7d61265',
+  'busytex.js': 'ef11cdc4d36f8bf9c1fd40e5779bb24ff096d0fb69cccd021b158b01e1aa874f',
+  'busytex.wasm': '44023c0197226276d61db370da15e95ec1c98fd1abf084041011d636689cdd82',
+  'texlive-basic.js': '06a7878bb0ddd650df05ac66b4872c8a37d309617ce052c7b8184042e355eaa9',
+  'texlive-basic.data': 'fa1d51b0ed1a65548232e60f9bdc3eeb3ed96bcf87250c43f2843dc64337cead',
+  'ubuntu-texlive-latex-recommended.js': '02882e14e587390c9c03bdb9df34a78512731f01c7652e5d81deb04d0124bfa2',
+  'ubuntu-texlive-latex-extra.js': '23aa09244b374c44b71e841eec9b97f22363ac5bec69c465b7f1b65253831f9f',
+  'ubuntu-texlive-science.js': '3e4fccb122c66bb80fbc82ab8f0b5a911106a141f48d9f2093630dbcf35ae304'
+};
 
 const shared = [
   'busytex_pipeline.js',
@@ -42,6 +53,16 @@ async function sha256(filePath) {
   return createHash('sha256').update(await readFile(filePath)).digest('hex');
 }
 
+async function verify(file, target) {
+  const digest = await sha256(target);
+  const expected = EXPECTED_SHA256[file];
+  if (expected && digest !== expected) {
+    throw new Error(`BusyTeX asset ${file} SHA-256 mismatch: expected ${expected}, got ${digest}`);
+  }
+  const size = (await stat(target)).size;
+  console.log(`BUSYTEX_ASSET ${file} ${size} sha256=${digest}${expected ? ' verified' : ' UNPINNED'}`);
+}
+
 async function download(file) {
   const target = path.join(destination, file);
   if (!(await existsWithContent(target))) {
@@ -59,8 +80,7 @@ async function download(file) {
     }
   }
 
-  const size = (await stat(target)).size;
-  console.log(`BUSYTEX_ASSET ${file} ${size} sha256=${await sha256(target)}`);
+  await verify(file, target);
 }
 
 await mkdir(destination, { recursive: true });
