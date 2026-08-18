@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { BackIcon, BookmarkIcon, PlayIcon } from '../components/Icons';
 import { LatexPreview } from '../components/LatexPreview';
@@ -34,12 +34,13 @@ export function PracticeExercisePage(){
   const [saved,setSaved]=useState(true);
   const [shortcutsOpen,setShortcutsOpen]=useState(false);
   const [mobileView,setMobileView]=useState<MobilePracticeView>('task');
+  const mobileScroll=useRef<Record<MobilePracticeView,number>>({task:0,code:0,result:0});
   const hintLevel=exercise?(hintsUsed[exercise.id]??0):0;
 
   useEffect(()=>{
     if(!exercise)return;
     setSource(drafts[`exercise:${exercise.id}`]??exercise.starterCode);
-    setResult(null);setValidation(null);setSolution(false);setHintOpenedThisAttempt(false);setCompileState('ready');setSaved(true);setMobileView('task');
+    setResult(null);setValidation(null);setSolution(false);setHintOpenedThisAttempt(false);setCompileState('ready');setSaved(true);setMobileView('task');mobileScroll.current={task:0,code:0,result:0};
     const key=`latex-gym:scroll:${exercise.id}`;
     const restored=Number(sessionStorage.getItem(key)??0);
     requestAnimationFrame(()=>window.scrollTo({top:restored,behavior:'auto'}));
@@ -60,6 +61,12 @@ export function PracticeExercisePage(){
 
   const isSaved=bookmarks.some(item=>item.type==='exercise'&&item.targetId===exercise.id);
   const busy=isCompilationBusy(compileState);
+  const switchMobileView=(next:MobilePracticeView)=>{
+    if(next===mobileView)return;
+    mobileScroll.current[mobileView]=window.scrollY;
+    setMobileView(next);
+    requestAnimationFrame(()=>window.scrollTo({top:mobileScroll.current[next],behavior:'auto'}));
+  };
   const setEditorSource=(value:string)=>{setSource(value);if(validation)setValidation(null);if(result)setResult(null);if(compileState!=='ready')setCompileState('ready');};
   const resetEditor=()=>{setEditorSource(exercise.starterCode);};
   const saveNow=()=>{setDraft(`exercise:${exercise.id}`,source);setSaved(true);};
@@ -67,10 +74,10 @@ export function PracticeExercisePage(){
     setCompileState('queued');setValidation(null);
     try{
       const compiled=await compiler.compile(source,{onPhase:setCompileState});
-      setResult(compiled);setMobileView('result');
+      setResult(compiled);switchMobileView('result');
       return compiled;
     }catch(error){
-      setCompileState('error');setMobileView('result');
+      setCompileState('error');switchMobileView('result');
       const message=error instanceof Error?error.message:String(error);
       setResult({ok:false,diagnostics:[{severity:'error',line:1,message:'Компилятор не завершил запрос',explanation:'Не удалось получить ни реальную TeX-сборку, ни образовательный предпросмотр.',suggestion:'Исходник сохранён локально. Повторите компиляцию; если ошибка сохраняется, откройте Playground и проверьте доступность движка.',source:'latex-gym',originalCompilerMessage:message}],blocks:[],elapsedMs:1,engine:'educational-preview',providerId:'compiler-manager'});
       return null;
@@ -93,14 +100,14 @@ export function PracticeExercisePage(){
 
   return <div className="practice-screen" data-compilation-state={compileState} data-mobile-view={mobileView}>
     <header className="practice-top"><Link to="/practice" aria-label="Назад к практике"><BackIcon/></Link><strong>Практика</strong><button type="button" className={`icon-button practice-bookmark ${isSaved?'active':''}`} onClick={()=>toggleBookmark('exercise',exercise.id)} aria-label={isSaved?'Удалить задачу из закладок':'Сохранить задачу'}><BookmarkIcon/></button></header>
-    <nav className="practice-mobile-tabs" role="tablist" aria-label="Рабочая область задачи">{([['task','Задание'],['code','Код'],['result','Результат']] as const).map(([id,label])=><button key={id} id={`practice-tab-${id}`} role="tab" aria-selected={mobileView===id} aria-controls={`practice-panel-${id}`} className={mobileView===id?'active':''} onClick={()=>setMobileView(id)}>{label}</button>)}</nav>
+    <nav className="practice-mobile-tabs" role="tablist" aria-label="Рабочая область задачи">{([['task','Задание'],['code','Код'],['result','Результат']] as const).map(([id,label])=><button key={id} id={`practice-tab-${id}`} role="tab" aria-selected={mobileView===id} aria-controls={`practice-panel-${id}`} className={mobileView===id?'active':''} onClick={()=>switchMobileView(id)}>{label}</button>)}</nav>
     <div className="practice-workspace">
       <section id="practice-panel-task" role="tabpanel" aria-labelledby="practice-tab-task" className={`task-pane ${mobileView==='task'?'mobile-active':''}`}>
         <div className="task-progress"><span>ЗАДАНИЕ {position} ИЗ {total}</span><div><i style={{width:`${(position/total)*100}%`}}/></div></div>
         <span className="practice-mode">{exercise.mode}</span>
         <h1>{exercise.instructions}</h1><p className="requirements-title">Требования:</p><ul>{exercise.requirements.map(requirement=><li key={requirement}>{requirement}</li>)}</ul>
         {renderHints('desktop')}
-        <button className="primary-button practice-mobile-start" onClick={()=>setMobileView('code')}>Перейти к коду</button>
+        <button className="primary-button practice-mobile-start" onClick={()=>switchMobileView('code')}>Перейти к коду</button>
       </section>
       <section id="practice-panel-code" role="tabpanel" aria-labelledby="practice-tab-code" className={`editor-pane ${mobileView==='code'?'mobile-active':''}`}>
         <div className="editor-pane-inner">
