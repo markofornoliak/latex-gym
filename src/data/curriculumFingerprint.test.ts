@@ -20,6 +20,6 @@ export function curriculumSemanticFingerprint(){
 
 describe('final curriculum semantic fingerprint',()=>{
   it('matches the approved pre-expansion-refactor snapshot',()=>{
-    expect(curriculumSemanticFingerprint()).toBe('PENDING_BASELINE');
+    expect(curriculumSemanticFingerprint()).toBe('a7febc2e');
   });
 });
