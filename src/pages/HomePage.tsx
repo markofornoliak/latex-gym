@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
 import { ChevronIcon, CheckIcon } from '../components/Icons';
-import { conceptById } from '../data/concepts';
-import { exercises, lessons, modules } from '../data/courses';
-import { projects } from '../data/projects';
+import { curriculum } from '../data/curriculumRuntime';
 import { buildDailyWorkout, type WorkoutReason } from '../services/spacedRepetition';
 import { useAppStore } from '../store/useAppStore';
+
+const {exercises,lessons,modules,projects}=curriculum;
 
 export function HomePage() {
   const currentId=useAppStore(state=>state.currentLessonId);
@@ -15,8 +15,8 @@ export function HomePage() {
   const projectProgress=useAppStore(state=>state.completedProjectStages);
   const streak=useAppStore(state=>state.streak);
 
-  const current=lessons.find(lesson=>lesson.id===currentId)??lessons[0];
-  const mod=modules.find(module=>module.id===current.moduleId)!;
+  const current=curriculum.lessonById[currentId]??lessons[0];
+  const mod=curriculum.moduleById[current.moduleId]!;
   const currentProgress=completed.includes(current.id)?100:Math.min(85,Math.round((exerciseDone.filter(id=>current.exercises.some(exercise=>exercise.id===id)).length/Math.max(1,current.exercises.length))*100));
   const workout=buildDailyWorkout(exercises,conceptScores,completed,undefined,mastery);
   const counts=countReasons(workout.map(item=>item.reason));
@@ -38,8 +38,8 @@ export function HomePage() {
     </section>
 
     <div className="dashboard-two-column">
-      <section className="home-section attention-section" aria-labelledby="attention-heading"><span className="eyebrow">ЗОНА ВНИМАНИЯ</span><h2 id="attention-heading" className="section-title">Нужно укрепить</h2>{weakConcepts.length?<div className="attention-list">{weakConcepts.map(([conceptId,state])=><div className="attention-row" key={conceptId}><span><strong>{conceptById.get(conceptId)?.title??conceptId}</strong><small>{masteryLabel(state.score,state.stability)}</small></span><b>{Math.round(state.score*100)}%</b></div>)}</div>:<p className="dashboard-empty">Пока недостаточно данных практики, чтобы выделить слабые концепты. Решите несколько задач — модель начнёт различать завершение и устойчивое знание.</p>}</section>
-      <section className="home-section review-section" aria-labelledby="review-heading"><span className="eyebrow">ИНТЕРВАЛЬНОЕ ПОВТОРЕНИЕ</span><h2 id="review-heading" className="section-title">Пора повторить</h2>{dueConcepts.length?<div className="review-concepts">{dueConcepts.map(([conceptId,state])=><div key={conceptId}><strong>{conceptById.get(conceptId)?.title??conceptId}</strong><span>{reviewAge(state.nextReview!)}</span></div>)}</div>:<p className="dashboard-empty">Просроченных повторений нет. Новые концепты для повторения появятся после практики и задержанного извлечения.</p>}</section>
+      <section className="home-section attention-section" aria-labelledby="attention-heading"><span className="eyebrow">ЗОНА ВНИМАНИЯ</span><h2 id="attention-heading" className="section-title">Нужно укрепить</h2>{weakConcepts.length?<div className="attention-list">{weakConcepts.map(([conceptId,state])=><div className="attention-row" key={conceptId}><span><strong>{curriculum.conceptById[conceptId]?.title??conceptId}</strong><small>{masteryLabel(state.score,state.stability)}</small></span><b>{Math.round(state.score*100)}%</b></div>)}</div>:<p className="dashboard-empty">Пока недостаточно данных практики, чтобы выделить слабые концепты. Решите несколько задач — модель начнёт различать завершение и устойчивое знание.</p>}</section>
+      <section className="home-section review-section" aria-labelledby="review-heading"><span className="eyebrow">ИНТЕРВАЛЬНОЕ ПОВТОРЕНИЕ</span><h2 id="review-heading" className="section-title">Пора повторить</h2>{dueConcepts.length?<div className="review-concepts">{dueConcepts.map(([conceptId,state])=><div key={conceptId}><strong>{curriculum.conceptById[conceptId]?.title??conceptId}</strong><span>{reviewAge(state.nextReview!)}</span></div>)}</div>:<p className="dashboard-empty">Просроченных повторений нет. Новые концепты для повторения появятся после практики и задержанного извлечения.</p>}</section>
     </div>
 
     <section className="home-section continue-section">
