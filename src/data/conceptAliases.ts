@@ -4,7 +4,7 @@
  * strings: changing this table changes mastery semantics and must be reviewed.
  */
 export const legacyConceptAliases:Readonly<Record<string,string>>=Object.freeze({
-  FloatBarrier:'float-placement',
+  floatbarrier:'float-placement',
   abstract:'document-metadata',
   acronym:'glossary',
   ampersand:'table-cell-separator',
