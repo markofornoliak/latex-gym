@@ -11,7 +11,9 @@ import {
   isEncodedProjectAsset,
   isSupportedProjectAsset,
   PROJECT_ASSET_MAX_BYTES,
-  toBinaryAwareCompilerProject
+  PROJECT_ASSET_TOTAL_BYTES,
+  toBinaryAwareCompilerProject,
+  workspaceAssetBytes
 } from '../services/projectAssets';
 import { recordProjectStageEvidence } from '../services/projectMastery';
 import {
@@ -100,7 +102,10 @@ export function ProjectPage(){
     if(!file)return;
     const path=normalizeProjectFilePath(file.name);
     if(!path||!isSupportedProjectAsset(path)){setFileError('Поддерживаются PDF, PNG и JPEG с безопасным относительным именем.');return;}
-    if(file.size>PROJECT_ASSET_MAX_BYTES){setFileError('Файл слишком большой. Для локального проекта ограничение — 5 МБ на один asset.');return;}
+    if(file.size>PROJECT_ASSET_MAX_BYTES){setFileError('Файл слишком большой. Для local-first проекта ограничение — 1 МБ на один PDF/рисунок.');return;}
+    const previous=workspace.files[path];
+    const previousBytes=previous?encodedProjectAssetSize(previous):0;
+    if(workspaceAssetBytes(workspace)-previousBytes+file.size>PROJECT_ASSET_TOTAL_BYTES){setFileError('Суммарный объём бинарных файлов проекта превышает безопасный localStorage-бюджет 1,5 МБ. Уменьшите изображения или замените существующий asset.');return;}
     try{
       const encoded=encodeProjectAsset(new Uint8Array(await file.arrayBuffer()));
       setWorkspace(current=>current?{...current,files:{...current.files,[path]:encoded}}:current);
