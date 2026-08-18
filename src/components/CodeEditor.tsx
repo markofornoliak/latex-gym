@@ -5,7 +5,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { bracketMatching, defaultHighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, snippetCompletion, type Completion, type CompletionContext } from '@codemirror/autocomplete';
 import { stex } from '@codemirror/legacy-modes/mode/stex';
-import { getReferenceEntry, referenceEntries } from '../data/reference';
+import { curriculum } from '../data/curriculumRuntime';
 import { analyzeLatexContext, environmentSuggestions, insertPackageIntoPreamble, packageSuggestions, referenceSuggestions } from '../services/editorIntelligence';
 import { ExpandIcon } from './Icons';
 import type { Diagnostic, ReferenceEntry } from '../types';
@@ -24,6 +24,8 @@ type EditorProps={
   diagnostics?:Diagnostic[];
 };
 
+const referenceEntries=curriculum.references;
+const getReferenceEntry=(id?:string)=>id?curriculum.referenceById[id]:undefined;
 const snippetCompletions:Completion[]=[
   snippetCompletion('\\section{${title}}',{label:'sec',type:'text',detail:'шаблон → \\section{}'}),
   snippetCompletion('\\subsection{${title}}',{label:'subsec',type:'text',detail:'шаблон → \\subsection{}'}),
