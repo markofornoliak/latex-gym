@@ -82,7 +82,9 @@ function deepFreeze<T>(value:T,seen=new WeakSet<object>()):T{
 
 function freezeRecord<T extends Record<string,unknown>>(record:T):Readonly<T>{return Object.freeze(record);}
 function formatCurriculumErrors(list:CurriculumIssue[]){
-  const details=list.slice(0,30).map(issue=>`- ${issue.code}${issue.lessonId?` [lesson:${issue.lessonId}]`:''}${issue.exerciseId?` [exercise:${issue.exerciseId}]`:''}${issue.projectId?` [project:${issue.projectId}]`:''}${issue.conceptId?` [concept:${issue.conceptId}]`:''}: ${issue.message}`).join('\n');
-  const more=list.length>30?`\n- …and ${list.length-30} more errors.`:'';
-  return `Curriculum integrity check failed with ${list.length} error(s):\n${details}${more}`;
+  const unknownConcepts=[...new Set(list.filter(issue=>issue.conceptId&&issue.code.includes('unknown')).map(issue=>issue.conceptId!))].sort();
+  const unknownSection=unknownConcepts.length?`\nUnknown concept IDs (${unknownConcepts.length}): ${unknownConcepts.join(', ')}\n`:'';
+  const details=list.slice(0,80).map(issue=>`- ${issue.code}${issue.lessonId?` [lesson:${issue.lessonId}]`:''}${issue.exerciseId?` [exercise:${issue.exerciseId}]`:''}${issue.projectId?` [project:${issue.projectId}]`:''}${issue.conceptId?` [concept:${issue.conceptId}]`:''}: ${issue.message}`).join('\n');
+  const more=list.length>80?`\n- …and ${list.length-80} more errors.`:'';
+  return `Curriculum integrity check failed with ${list.length} error(s).${unknownSection}\n${details}${more}`;
 }
