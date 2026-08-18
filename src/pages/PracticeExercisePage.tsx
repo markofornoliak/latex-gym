@@ -10,6 +10,7 @@ import { useAppStore } from '../store/useAppStore';
 import type { CompilationState, CompileResult } from '../types';
 
 const CodeEditor=lazy(()=>import('../components/CodeEditor').then(module=>({default:module.CodeEditor})));
+type MobilePracticeView='task'|'code'|'result';
 
 export function PracticeExercisePage(){
   const {exerciseId}=useParams();
@@ -32,12 +33,13 @@ export function PracticeExercisePage(){
   const [hintOpenedThisAttempt,setHintOpenedThisAttempt]=useState(false);
   const [saved,setSaved]=useState(true);
   const [shortcutsOpen,setShortcutsOpen]=useState(false);
+  const [mobileView,setMobileView]=useState<MobilePracticeView>('task');
   const hintLevel=exercise?(hintsUsed[exercise.id]??0):0;
 
   useEffect(()=>{
     if(!exercise)return;
     setSource(drafts[`exercise:${exercise.id}`]??exercise.starterCode);
-    setResult(null);setValidation(null);setSolution(false);setHintOpenedThisAttempt(false);setCompileState('ready');setSaved(true);
+    setResult(null);setValidation(null);setSolution(false);setHintOpenedThisAttempt(false);setCompileState('ready');setSaved(true);setMobileView('task');
     const key=`latex-gym:scroll:${exercise.id}`;
     const restored=Number(sessionStorage.getItem(key)??0);
     requestAnimationFrame(()=>window.scrollTo({top:restored,behavior:'auto'}));
@@ -65,12 +67,12 @@ export function PracticeExercisePage(){
     setCompileState('queued');setValidation(null);
     try{
       const compiled=await compiler.compile(source,{onPhase:setCompileState});
-      setResult(compiled);
+      setResult(compiled);setMobileView('result');
       return compiled;
     }catch(error){
-      setCompileState('error');
+      setCompileState('error');setMobileView('result');
       const message=error instanceof Error?error.message:String(error);
-      setResult({ok:false,diagnostics:[{severity:'error',line:1,message:'Компилятор не завершил запрос',explanation:'Не удалось получить ни реальную TeX-сборку, ни образовательный fallback.',suggestion:'Исходник сохранён локально. Повторите компиляцию; если ошибка сохраняется, откройте Playground и проверьте доступность движка.',source:'latex-gym',originalCompilerMessage:message}],blocks:[],elapsedMs:1,engine:'educational-preview',providerId:'compiler-manager'});
+      setResult({ok:false,diagnostics:[{severity:'error',line:1,message:'Компилятор не завершил запрос',explanation:'Не удалось получить ни реальную TeX-сборку, ни образовательный предпросмотр.',suggestion:'Исходник сохранён локально. Повторите компиляцию; если ошибка сохраняется, откройте Playground и проверьте доступность движка.',source:'latex-gym',originalCompilerMessage:message}],blocks:[],elapsedMs:1,engine:'educational-preview',providerId:'compiler-manager'});
       return null;
     }
   };
@@ -89,25 +91,27 @@ export function PracticeExercisePage(){
   const revealSolution=()=>{setSolution(true);recordSolutionReveal(exercise.id);};
   const renderHints=(variant:'desktop'|'mobile')=><div className={`hint-area hint-area--${variant}`}><div className="hint-heading"><span>Подсказки</span><button onClick={revealHint} disabled={hintLevel>=exercise.hints.length}>{hintLevel>=exercise.hints.length?'Все открыты':'Открыть подсказку'}</button></div>{exercise.hints.slice(0,hintLevel).map((hint,index)=><p key={index}><b>{index+1}.</b> {hint}</p>)}{hintLevel>=exercise.hints.length&&!solution&&<button className="text-tool reveal-solution" onClick={revealSolution}>Показать одно решение</button>}</div>;
 
-  return <div className="practice-screen" data-compilation-state={compileState}>
+  return <div className="practice-screen" data-compilation-state={compileState} data-mobile-view={mobileView}>
     <header className="practice-top"><Link to="/practice" aria-label="Назад к практике"><BackIcon/></Link><strong>Практика</strong><button type="button" className={`icon-button practice-bookmark ${isSaved?'active':''}`} onClick={()=>toggleBookmark('exercise',exercise.id)} aria-label={isSaved?'Удалить задачу из закладок':'Сохранить задачу'}><BookmarkIcon/></button></header>
+    <nav className="practice-mobile-tabs" role="tablist" aria-label="Рабочая область задачи">{([['task','Задание'],['code','Код'],['result','Результат']] as const).map(([id,label])=><button key={id} id={`practice-tab-${id}`} role="tab" aria-selected={mobileView===id} aria-controls={`practice-panel-${id}`} className={mobileView===id?'active':''} onClick={()=>setMobileView(id)}>{label}</button>)}</nav>
     <div className="practice-workspace">
-      <section className="task-pane">
+      <section id="practice-panel-task" role="tabpanel" aria-labelledby="practice-tab-task" className={`task-pane ${mobileView==='task'?'mobile-active':''}`}>
         <div className="task-progress"><span>ЗАДАНИЕ {position} ИЗ {total}</span><div><i style={{width:`${(position/total)*100}%`}}/></div></div>
         <span className="practice-mode">{exercise.mode}</span>
         <h1>{exercise.instructions}</h1><p className="requirements-title">Требования:</p><ul>{exercise.requirements.map(requirement=><li key={requirement}>{requirement}</li>)}</ul>
         {renderHints('desktop')}
+        <button className="primary-button practice-mobile-start" onClick={()=>setMobileView('code')}>Перейти к коду</button>
       </section>
-      <section className="editor-pane mobile-active">
+      <section id="practice-panel-code" role="tabpanel" aria-labelledby="practice-tab-code" className={`editor-pane ${mobileView==='code'?'mobile-active':''}`}>
         <div className="editor-pane-inner">
           <div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${compileState}`}>{compilationStateLabel(compileState)}</span><span>{result?engineLabel(result):saved?'Сохранено локально':'Сохранение…'}</span></div>
           <Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={setEditorSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={235} onReset={resetEditor} onCompile={()=>{void runCompile();}} onSave={saveNow} onShowShortcuts={()=>setShortcutsOpen(true)} diagnostics={result?.diagnostics??[]}/></Suspense>
           <button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy}><PlayIcon/>{busy?compilationStateLabel(compileState):'Скомпилировать'}</button>
         </div>
       </section>
-      <section className="result-pane mobile-active"><h2>Результат</h2><div className="result-frame"><LatexPreview result={result}/></div>
+      <section id="practice-panel-result" role="tabpanel" aria-labelledby="practice-tab-result" className={`result-pane ${mobileView==='result'?'mobile-active':''}`}><h2>Результат</h2><div className="result-frame"><LatexPreview result={result}/></div>
         {validation&&<div className={`validation-panel ${validation.ok?'validation-panel--ok':''}`} role="status" aria-live="polite"><h3>{validation.ok?'Решение принято':'Что нужно исправить'}</h3>{validation.items.map((item,index)=><div className="validation-row" key={index}><span>{item.ok?'✓':'×'}</span><div><strong>{item.message}</strong>{item.line&&<small>Строка {item.line}</small>}{!item.ok&&<small>{item.hint}</small>}</div></div>)}</div>}
-        {solution&&<details className="reference-solution" open><summary>Один корректный вариант</summary><pre>{exercise.solution}</pre><p>Это пример, а не определение правильности. Раскрытое решение даёт более слабое evidence mastery, чем самостоятельное решение.</p></details>}
+        {solution&&<details className="reference-solution" open><summary>Один корректный вариант</summary><pre>{exercise.solution}</pre><p>Это пример, а не определение правильности. Раскрытое решение считается более слабым свидетельством знания, чем самостоятельное решение.</p></details>}
         {renderHints('mobile')}
       </section>
     </div>
@@ -117,6 +121,6 @@ export function PracticeExercisePage(){
 }
 
 function engineLabel(result:CompileResult){
-  if(result.fallbackReason)return 'Учебный fallback';
+  if(result.fallbackReason)return 'Учебный предпросмотр';
   if(result.engine==='pdflatex')return 'pdfLaTeX';if(result.engine==='xelatex')return 'XeLaTeX';if(result.engine==='lualatex')return 'LuaLaTeX';return 'Учебный предпросмотр';
 }
