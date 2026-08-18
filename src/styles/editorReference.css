@@ -1,3 +1,4 @@
+.editor-tools-left .text-tool:disabled{opacity:.36;cursor:default}
 .cm-command-doc .cm-package-missing{color:#7b4d32;font-weight:600}
 .cm-command-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:9px;border-top:1px solid var(--soft-border)}
 .cm-command-actions button{appearance:none;border:1px solid var(--border);background:#fff;color:var(--navy);padding:5px 8px;border-radius:2px;font:10px/1.2 var(--font-ui);cursor:pointer}
