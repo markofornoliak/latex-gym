@@ -198,6 +198,33 @@ export type ReferenceEntry = {
   commonMistake?: string;
 };
 
+export type ProjectWorkspace = {
+  schemaVersion:1;
+  projectId:string;
+  mainFile:string;
+  activeFile:string;
+  files:Record<string,string>;
+  revision:number;
+  updatedAt:string;
+};
+
+export type ProjectStageCriterion =
+  | {type:'fileExists';path:string;message:string;hint:string}
+  | {type:'fileContains';path:string;value:string;message:string;hint:string}
+  | {type:'mainContains';value:string;message:string;hint:string}
+  | {type:'noSecondaryDocumentClass';message:string;hint:string};
+
+export type LearningProjectStage = {
+  id:string;
+  title:string;
+  objective:string;
+  requirements:string[];
+  starterCode:string;
+  validators?:ValidatorRule[];
+  projectCriteria?:ProjectStageCriterion[];
+  concepts?:string[];
+};
+
 export type LearningProject = {
   id:string;
   title:string;
@@ -206,7 +233,7 @@ export type LearningProject = {
   description:string;
   prerequisites:string[];
   concepts:string[];
-  stages:Array<{id:string;title:string;objective:string;requirements:string[];starterCode:string}>;
+  stages:LearningProjectStage[];
 };
 
 export type MasteryEvidence = {
