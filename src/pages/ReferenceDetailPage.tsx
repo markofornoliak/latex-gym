@@ -3,12 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import katex from 'katex';
 import { BackIcon, BookmarkIcon, CopyIcon } from '../components/Icons';
 import { CodeBlock } from '../components/CodeBlock';
-import { getReferenceEntry } from '../data/reference';
+import { getRuntimeReference } from '../data/runtimeCatalog';
 import { useAppStore } from '../store/useAppStore';
 
 export function ReferenceDetailPage(){
   const {command}=useParams();
-  const entry=getReferenceEntry(command);
+  const entry=getRuntimeReference(command);
   const bookmarks=useAppStore(state=>state.bookmarks);
   const toggle=useAppStore(state=>state.toggleBookmark);
   const touch=useAppStore(state=>state.touchReference);
@@ -30,6 +30,6 @@ export function ReferenceDetailPage(){
     <section className="reference-section"><h2>Минимальный пример</h2><CodeBlock code={entry.example}/></section>
     {entry.resultLatex&&<section className="reference-section"><h2>Результат</h2><div className="math-result" dangerouslySetInnerHTML={{__html:katex.renderToString(entry.resultLatex,{displayMode:true,throwOnError:false})}}/></section>}
     {entry.commonMistake&&<section className="reference-section reference-mistake"><span className="eyebrow">ТИПИЧНАЯ ОШИБКА</span><p>{entry.commonMistake}</p></section>}
-    {entry.related.length>0&&<section className="reference-section"><h2>Связанные команды</h2><div className="related-links">{entry.related.map(id=><Link to={`/reference/${id}`} key={id}>{getReferenceEntry(id)?.command??id}</Link>)}</div></section>}
+    {entry.related.length>0&&<section className="reference-section"><h2>Связанные команды</h2><div className="related-links">{entry.related.map(id=><Link to={`/reference/${id}`} key={id}>{getRuntimeReference(id)?.command??id}</Link>)}</div></section>}
   </div>;
 }
