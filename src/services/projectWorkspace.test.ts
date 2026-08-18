@@ -63,6 +63,27 @@ describe('project workspace',()=>{
     expect(assessment.items.find(item=>item.id.includes('cmd:maketitle'))?.ok).toBe(false);
   });
 
+  it('does not count commands that only appear in LaTeX comments',()=>{
+    const project=getProject('academic-paper')!;
+    const stageIndex=project.stages.findIndex(stage=>stage.id==='stage-2');
+    const workspace=createProjectWorkspace(project,stageIndex,{});
+    workspace.files['main.tex']='\\documentclass{article}\n% \\title{Fake}\n% \\author{Fake}\n% \\maketitle\n\\begin{document}\n\\end{document}';
+    const assessment=assessProjectStage(project,stageIndex,workspace,realResult);
+    expect(assessment.items.find(item=>item.id.includes('cmd:title'))?.ok).toBe(false);
+    expect(assessment.items.find(item=>item.id.includes('cmd:author'))?.ok).toBe(false);
+    expect(assessment.items.find(item=>item.id.includes('cmd:maketitle'))?.ok).toBe(false);
+  });
+
+  it('ignores commented-out input dependencies',()=>{
+    const project=getProject('academic-paper')!;
+    const stageIndex=project.stages.findIndex(stage=>stage.id==='stage-1');
+    const workspace=createProjectWorkspace(project,stageIndex,{});
+    workspace.files['main.tex']='\\documentclass{article}\n\\begin{document}\n% \\input{missing}\nText with escaped percent: 10\\% complete.\n\\end{document}';
+    const assessment=assessProjectStage(project,stageIndex,workspace,realResult);
+    expect(assessment.items.find(item=>item.id==='inputs')?.ok).toBe(true);
+    expect(assessment.ok).toBe(true);
+  });
+
   it('does not treat the educational fallback as proof of a multi-file project',()=>{
     const project=getProject('technical-report')!;
     const stageIndex=project.stages.findIndex(stage=>stage.id==='files');
