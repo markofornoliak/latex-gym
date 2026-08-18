@@ -1,47 +1,80 @@
 import { conceptById } from './concepts';
 import { exercises, lessons } from './courses';
-import type { LearningBlock } from '../types';
+import { canonicalConceptId, canonicalConceptIds } from './conceptAliases';
+import type { ConceptDefinition, Exercise, LearningBlock, Lesson } from '../types';
 
-const aliases:Record<string,string>={
-  documentclass:'document-class','document-class':'document-class',document:'document-environment',environment:'environment',preamble:'preamble',package:'package-model',packages:'package-model',usepackage:'usepackage',
-  section:'section',subsection:'section',paragraph:'paragraph',text:'paragraph',emph:'emphasis',textbf:'emphasis',lists:'list',itemize:'list',enumerate:'list',
-  math:'math-mode','math-mode':'math-mode','inline-math':'inline-math','display-math':'display-math',frac:'fraction',fraction:'fraction',sqrt:'root',powers:'superscript',superscript:'superscript',subscript:'subscript',
-  equation:'equation',align:'align',matrix:'matrix',cases:'cases',operators:'math-operator',operator:'math-operator',theorem:'theorem',proof:'proof',
-  table:'tabular',tabular:'tabular',booktabs:'professional-table',figure:'figure',caption:'caption',float:'float',label:'label',ref:'ref',hyperref:'hyperref',
-  bibliography:'bibliography-model',bibitem:'bibliography-model',biblatex:'bibliography-model',biber:'biber',cite:'citation',citation:'citation',index:'index',glossary:'index',
-  newcommand:'custom-command','custom-command':'custom-command',include:'multi-file',input:'multi-file','large-documents':'project-architecture',debugging:'debugging',latexmk:'latexmk',workflow:'professional-workflow',
-  geometry:'page-structure',layout:'page-structure',microtype:'spacing',typography:'spacing',tikz:'figure',beamer:'document-class',fontspec:'professional-workflow',xelatex:'professional-workflow',lualatex:'professional-workflow',color:'package-model',xcolor:'package-model'
+export type CurriculumNormalizationChange={
+  kind:'exercise-concept'|'exercise-prerequisite'|'lesson-prerequisite'|'lesson-introduces'|'lesson-reinforces';
+  sourceId:string;
+  from:string;
+  to:string;
 };
 
-for(const exercise of exercises){
-  exercise.concepts=unique(exercise.concepts.map(canonical).filter(Boolean));
+export type CurriculumNormalizationReport={
+  changes:readonly CurriculumNormalizationChange[];
+  unresolved:readonly {sourceId:string;conceptId:string;kind:CurriculumNormalizationChange['kind']}[];
+};
+
+export function normalizeCurriculumConcepts(targetLessons:Lesson[]=lessons,targetExercises:Exercise[]=exercises,concepts:readonly ConceptDefinition[]=[...conceptById.values()]):CurriculumNormalizationReport{
+  const known=new Set(concepts.map(concept=>concept.id));
+  const changes:CurriculumNormalizationChange[]=[];
+  const unresolved:CurriculumNormalizationReport['unresolved'][number][]=[];
+  const seenExercises=new Set<Exercise>();
+
+  const normalizeList=(ids:readonly string[],sourceId:string,kind:CurriculumNormalizationChange['kind'])=>{
+    const result:string[]=[];
+    for(const raw of ids){
+      const original=normalizeToken(raw);
+      const canonical=canonicalConceptId(original);
+      if(canonical!==original)changes.push({kind,sourceId,from:original,to:canonical});
+      if(!known.has(canonical))unresolved.push({kind,sourceId,conceptId:canonical});
+      if(!result.includes(canonical))result.push(canonical);
+    }
+    return result;
+  };
+
+  for(const lesson of targetLessons){
+    if(!lesson.content&&lesson.theory.length){
+      lesson.content=lesson.theory.map((item,index):LearningBlock=>{
+        if(item.code)return {id:`${lesson.id}-structured-${index+1}`,type:'syntax',title:item.title,body:item.body,code:item.code,note:item.note};
+        return {id:`${lesson.id}-structured-${index+1}`,type:index===0?'concept':'explanation',title:item.title,body:item.body,details:item.note};
+      });
+    }
+
+    for(const exercise of lesson.exercises)seenExercises.add(exercise);
+    const pedagogy=lesson.pedagogy;
+    if(!pedagogy)continue;
+    pedagogy.prerequisites=normalizeList(pedagogy.prerequisites,lesson.id,'lesson-prerequisite');
+    pedagogy.introduces=normalizeList(pedagogy.introduces,lesson.id,'lesson-introduces');
+    pedagogy.reinforces=normalizeList(pedagogy.reinforces,lesson.id,'lesson-reinforces');
+  }
+  for(const exercise of targetExercises)seenExercises.add(exercise);
+
+  for(const exercise of seenExercises){
+    exercise.concepts=normalizeList(exercise.concepts,exercise.id,'exercise-concept');
+    if(exercise.prerequisites)exercise.prerequisites=normalizeList(exercise.prerequisites,exercise.id,'exercise-prerequisite');
+  }
+
+  // Preserve the previous useful enrichment behavior: an exercise can reinforce a
+  // canonical concept even if old lesson metadata omitted that reinforcement.
+  for(const lesson of targetLessons){
+    if(!lesson.pedagogy)continue;
+    const exerciseConcepts=canonicalConceptIds(lesson.exercises.flatMap(exercise=>exercise.concepts));
+    lesson.pedagogy.reinforces=[...new Set([...lesson.pedagogy.reinforces,...exerciseConcepts.filter(id=>!lesson.pedagogy!.introduces.includes(id))])];
+  }
+
+  return Object.freeze({changes:Object.freeze(changes),unresolved:Object.freeze(unresolved)});
 }
 
-for(const lesson of lessons){
-  if(!lesson.content&&lesson.theory.length){
-    lesson.content=lesson.theory.map((item,index):LearningBlock=>{
-      if(item.code)return {id:`${lesson.id}-structured-${index+1}`,type:'syntax',title:item.title,body:item.body,code:item.code,note:item.note};
-      return {id:`${lesson.id}-structured-${index+1}`,type:index===0?'concept':'explanation',title:item.title,body:item.body,details:item.note};
-    });
+export function normalizeConceptRecord<T>(record:Record<string,T>,merge:(existing:T|undefined,incoming:T,canonicalId:string,legacyId:string)=>T){
+  const normalized:Record<string,T>={};
+  for(const [legacyId,value] of Object.entries(record)){
+    const canonicalId=canonicalConceptId(normalizeToken(legacyId));
+    normalized[canonicalId]=merge(normalized[canonicalId],value,canonicalId,legacyId);
   }
-  const pedagogy=lesson.pedagogy;
-  if(!pedagogy)continue;
-  pedagogy.introduces=unique(pedagogy.introduces.map(canonical).filter(Boolean));
-  const exerciseConcepts=unique(lesson.exercises.flatMap(exercise=>exercise.concepts).map(canonical).filter(Boolean));
-  pedagogy.reinforces=unique([...pedagogy.reinforces.map(canonical),...exerciseConcepts.filter(id=>!pedagogy.introduces.includes(id))].filter(Boolean));
-  if(pedagogy.prerequisites.length===0&&pedagogy.introduces.length){
-    const required=pedagogy.introduces.flatMap(id=>conceptById.get(id)?.prerequisites??[]).filter(id=>!pedagogy.introduces.includes(id));
-    pedagogy.prerequisites=unique(required);
-  }else{
-    pedagogy.prerequisites=unique(pedagogy.prerequisites.map(canonical).filter(Boolean));
-  }
-}
-
-function canonical(value:string){
-  const normalized=value.trim().toLocaleLowerCase('en').replace(/_/g,'-');
-  if(conceptById.has(normalized))return normalized;
-  if(aliases[normalized])return aliases[normalized];
-  if(/^(amsmath|amsthm|graphicx|enumitem|booktabs|geometry|microtype|hyperref|biblatex|fancyhdr)$/.test(normalized))return 'package-model';
   return normalized;
 }
-function unique(values:string[]){return [...new Set(values)];}
+
+export function normalizeConceptIdList(ids:readonly string[]){return canonicalConceptIds(ids.map(normalizeToken));}
+
+function normalizeToken(value:string){return value.trim().toLocaleLowerCase('en').replace(/_/g,'-');}
