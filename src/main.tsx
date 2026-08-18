@@ -17,6 +17,7 @@ import './styles/projects.css';
 import './styles/referenceDeep.css';
 import './styles/progressDeep.css';
 import './styles/interactionPolish.css';
+import './styles/compilerWorkspace.css';
 
 registerSW({ immediate: true });
 createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
