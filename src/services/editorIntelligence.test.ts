@@ -7,6 +7,12 @@ describe('LaTeX editor intelligence',()=>{
     expect([...packages].sort()).toEqual(['amsmath','graphicx']);
   });
 
+  it('uses package state from the whole document even when the cursor is earlier in the preamble',()=>{
+    const source='\\documentclass{article}\n% cursor here\n\\usepackage{graphicx}\n\\begin{document}\n\\end{document}';
+    const cursor=source.indexOf('% cursor');
+    expect(analyzeLatexContext(source,cursor).packages.has('graphicx')).toBe(true);
+  });
+
   it('detects preamble, math mode and the current environment',()=>{
     const source='\\documentclass{article}\n\\usepackage{amsmath}\n\\begin{document}\n\\begin{align}\na &= ';
     const context=analyzeLatexContext(source);
@@ -22,6 +28,13 @@ describe('LaTeX editor intelligence',()=>{
     const frac=suggestions.find(item=>item.referenceId==='frac')!;
     const section=suggestions.find(item=>item.referenceId==='section')!;
     expect(frac.boost).toBeGreaterThan(section.boost);
+    expect(frac.apply).toBe('\\frac{}{}');
+  });
+
+  it('does not insert documentation placeholder words as executable LaTeX',()=>{
+    const draw=referenceSuggestions('\\documentclass{article}\n\\begin{document}\n').find(item=>item.referenceId==='draw')!;
+    expect(draw.apply).toBe('\\draw');
+    expect(draw.apply).not.toContain('options path');
   });
 
   it('marks package-dependent commands when the package is missing',()=>{
