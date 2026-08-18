@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
 import { ChevronIcon } from '../components/Icons';
-import { exercises } from '../data/courses';
+import { curriculum } from '../data/curriculumRuntime';
 import { selectDailyTraining } from '../services/spacedRepetition';
 import { useAppStore } from '../store/useAppStore';
 import type { PracticeCategory } from '../types';
 
 const categories:PracticeCategory[]=['Основы','Текст','Математика','Таблицы','Графика','TikZ','Библиография','Большие документы','Отладка','Academic challenges'];
 const modeDescriptions=['Собрать','Дополнить','Исправить','Предсказать','Объяснить','Преобразовать','Рефакторинг','Отладка','Архитектура'];
+const {exercises}=curriculum;
 
 export function PracticePage(){
   const scores=useAppStore(state=>state.conceptScores);

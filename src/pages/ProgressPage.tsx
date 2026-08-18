@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
-import { conceptById } from '../data/concepts';
-import { exercises, lessons, modules } from '../data/courses';
-import { projects } from '../data/projects';
+import { curriculum } from '../data/curriculumRuntime';
 import { useAppStore } from '../store/useAppStore';
+
+const {exercises,lessons,modules,projects}=curriculum;
 
 export function ProgressPage(){
   const completedLessons=useAppStore(state=>state.completedLessons);
@@ -27,7 +27,7 @@ export function ProgressPage(){
 
     <section className="progress-section practice-ledger"><div className="section-heading"><h2>Практика</h2><span>{completedExercises.length} / {exercises.length} задач</span></div><dl><div><dt>Попытки</dt><dd>{attemptCount}</dd></div><div><dt>Успешные решения</dt><dd>{successCount}</dd></div><div><dt>Успешность</dt><dd>{attemptCount?`${practiceRate}%`:'—'}</dd></div><div><dt>Текущая серия</dt><dd>{streak.count?`${streak.count} дн.`:'—'}</dd></div></dl></section>
 
-    <section className="progress-section concept-review"><div className="section-heading"><h2>Понятия к повторению</h2><span>{Object.keys(mastery).length} отслеживается</span></div>{review.length?<div className="mastery-list">{review.map(([id,state])=><div className="mastery-row" key={id}><span><strong>{conceptById.get(id)?.title??id}</strong><small>{masteryLabel(state.score,state.nextReview)}</small></span><div aria-label={`Устойчивость ${Math.round(state.score*100)}%`}><i style={{width:`${Math.round(state.score*100)}%`}}/></div></div>)}</div>:<p className="progress-empty">После первых упражнений здесь появятся понятия, которым полезно повторение.</p>}</section>
+    <section className="progress-section concept-review"><div className="section-heading"><h2>Понятия к повторению</h2><span>{Object.keys(mastery).length} отслеживается</span></div>{review.length?<div className="mastery-list">{review.map(([id,state])=><div className="mastery-row" key={id}><span><strong>{curriculum.conceptById[id]?.title??id}</strong><small>{masteryLabel(state.score,state.nextReview)}</small></span><div aria-label={`Устойчивость ${Math.round(state.score*100)}%`}><i style={{width:`${Math.round(state.score*100)}%`}}/></div></div>)}</div>:<p className="progress-empty">После первых упражнений здесь появятся понятия, которым полезно повторение.</p>}</section>
 
     <section className="progress-section project-progress"><div className="section-heading"><h2>Проекты</h2><span>{completedStages} / {projectStages} этапов</span></div>{projects.map(project=>{const done=projectProgress[project.id]?.length??0;return <Link to={`/project/${project.id}`} className="project-progress-row" key={project.id}><span><strong>{project.title}</strong><small>{done?`${done} из ${project.stages.length} этапов`:'Не начат'}</small></span><div><i style={{width:`${done/project.stages.length*100}%`}}/></div></Link>;})}</section>
 

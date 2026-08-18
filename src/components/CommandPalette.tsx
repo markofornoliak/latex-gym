@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { exercises, lessons } from '../data/courses';
-import { projects } from '../data/projects';
-import { searchReference } from '../data/reference';
+import { curriculum } from '../data/curriculumRuntime';
+import { searchRuntimeReference } from '../data/runtimeCatalog';
 import { SearchIcon } from './Icons';
 
 type PaletteResult={id:string;kind:'Урок'|'Команда'|'Задача'|'Проект';title:string;meta:string;to:string;code?:string;score:number};
+const {exercises,lessons,projects}=curriculum;
 
 export default function CommandPalette({onClose}:{onClose:()=>void}){
   const navigate=useNavigate();
@@ -34,7 +34,7 @@ export default function CommandPalette({onClose}:{onClose:()=>void}){
 function collectResults(query:string):PaletteResult[]{
   const q=normalize(query);
   const items:PaletteResult[]=[];
-  for(const entry of searchReference(query).slice(0,q?12:5))items.push({id:`ref-${entry.id}`,kind:'Команда',title:entry.title,meta:entry.description,to:`/reference/${entry.id}`,code:entry.command,score:referenceRank(entry.command,entry.title,entry.aliases,q)});
+  for(const entry of searchRuntimeReference(query).slice(0,q?12:5))items.push({id:`ref-${entry.id}`,kind:'Команда',title:entry.title,meta:entry.description,to:`/reference/${entry.id}`,code:entry.command,score:referenceRank(entry.command,entry.title,entry.aliases,q)});
   for(const lesson of lessons){const score=rank(`${lesson.title} ${lesson.subtitle} ${lesson.pedagogy?.introduces.join(' ')??''}`,q);if(score>0)items.push({id:`lesson-${lesson.id}`,kind:'Урок',title:lesson.title,meta:lesson.subtitle,to:`/lesson/${lesson.id}`,score:score+8});}
   for(const exercise of exercises){const score=rank(`${exercise.title} ${exercise.instructions} ${exercise.concepts.join(' ')}`,q);if(score>0)items.push({id:`exercise-${exercise.id}`,kind:'Задача',title:exercise.title,meta:`${exercise.mode} · ${exercise.difficulty}`,to:`/practice/${exercise.id}`,score});}
   for(const project of projects){const score=rank(`${project.title} ${project.subtitle} ${project.description}`,q);if(score>0)items.push({id:`project-${project.id}`,kind:'Проект',title:project.title,meta:project.subtitle,to:`/project/${project.id}`,score:score+4});}

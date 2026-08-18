@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wordmark } from '../components/Wordmark';
-import { getLesson } from '../data/courses';
+import { getRuntimeLesson } from '../data/runtimeCatalog';
 import { useAppStore, type OnboardingExperience } from '../store/useAppStore';
 
 const goals=[
@@ -43,7 +43,7 @@ export function OnboardingPage() {
   const currentTask=useMemo(()=>chooseTask(tasks,answers.map(answer=>answer.task.id),ability),[answers,ability]);
   const score=answers.filter(answer=>answer.correct).length;
   const recommendation=recommendLesson(score,answers.length,experience);
-  const recommendedLesson=getLesson(recommendation);
+  const recommendedLesson=getRuntimeLesson(recommendation);
   const recommendedTrack=trackForGoals(selectedGoals);
 
   const toggleGoal=(id:string)=>setSelectedGoals(current=>current.includes(id)?current.filter(goal=>goal!==id):[...current,id]);

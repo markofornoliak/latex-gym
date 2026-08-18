@@ -6,8 +6,8 @@
  * After this module evaluates, all public curriculum data is normalized, validated,
  * indexed and deeply frozen. Runtime components must treat it as immutable.
  *
- * This is an incremental migration step toward pure source transforms. It removes
- * mutation from application bootstrap without rewriting educational content at once.
+ * This boundary is the only supported entry point for application curriculum reads.
+ * Construction modules will be migrated to pure transforms behind this contract.
  */
 import './editorialEnhancements';
 import './curriculumExpansion';
@@ -15,7 +15,7 @@ import './deepCurriculum';
 import './debuggingTrack';
 import './explanationElaboration';
 
-import { exercises, lessonIndex, lessons, modules } from './courses';
+import { exercises, lessons, modules } from './courses';
 import { concepts } from './concepts';
 import { normalizeCurriculumConcepts } from './curriculumNormalize';
 import { projects } from './projects';
@@ -38,12 +38,13 @@ if(graphIssues.some(issue=>issue.code==='concept-cycle'))throw new Error(`Curric
 
 const moduleById=freezeRecord(Object.fromEntries(modules.map(module=>[module.id,module])));
 const lessonById=freezeRecord(Object.fromEntries(lessons.map(lesson=>[lesson.id,lesson])));
+const lessonPositionById=freezeRecord(Object.fromEntries(lessons.map((lesson,index)=>[lesson.id,index])));
 const exerciseById=freezeRecord(Object.fromEntries(exercises.map(exercise=>[exercise.id,exercise])));
 const conceptById=freezeRecord(Object.fromEntries(concepts.map(concept=>[concept.id,concept])));
 const referenceById=freezeRecord(Object.fromEntries(referenceEntries.map(entry=>[entry.id,entry])));
 const projectById=freezeRecord(Object.fromEntries(projects.map(project=>[project.id,project])));
 
-// Freeze only after every legacy transform and every index has been produced.
+// Freeze only after every construction transform and every index has been produced.
 deepFreeze(modules);deepFreeze(lessons);deepFreeze(exercises);deepFreeze(concepts);deepFreeze(referenceEntries);deepFreeze(projects);
 
 export const curriculum=Object.freeze({
@@ -55,6 +56,7 @@ export const curriculum=Object.freeze({
   projects:projects as readonly typeof projects[number][],
   moduleById,
   lessonById,
+  lessonPositionById,
   exerciseById,
   conceptById,
   referenceById,
@@ -72,10 +74,6 @@ export const curriculum=Object.freeze({
     normalizedConceptTags:normalization.changes.length
   })
 });
-
-// Keep the legacy Map synchronized during the migration. It is no longer the source
-// of truth for the finalized snapshot, but old consumers can continue reading it.
-lessonIndex.clear();lessons.forEach((lesson,index)=>lessonIndex.set(lesson.id,index));
 
 export function assertCurriculumIntegrity(){return curriculum;}
 

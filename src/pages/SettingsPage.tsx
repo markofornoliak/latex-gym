@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getLesson } from '../data/courses';
+import { getRuntimeLesson } from '../data/runtimeCatalog';
 import { exportProgress, useAppStore } from '../store/useAppStore';
 export function SettingsPage(){
   const navigate=useNavigate();const settings=useAppStore(s=>s.settings);const update=useAppStore(s=>s.updateSettings);const reset=useAppStore(s=>s.resetProgress);const retakeOnboarding=useAppStore(s=>s.retakeOnboarding);const onboarding=useAppStore(s=>s.onboarding);const importProgress=useAppStore(s=>s.importProgress);const input=useRef<HTMLInputElement>(null);const [message,setMessage]=useState('');
-  const recommendedLesson=onboarding.recommendedLessonId?getLesson(onboarding.recommendedLessonId):undefined;
+  const recommendedLesson=onboarding.recommendedLessonId?getRuntimeLesson(onboarding.recommendedLessonId):undefined;
   const download=()=>{const blob=new Blob([exportProgress()],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='latex-gym-progress.json';a.click();URL.revokeObjectURL(url);};
   const upload=async(file?:File)=>{if(!file)return;const response=importProgress(await file.text());setMessage(response.message);};
   const retake=()=>{retakeOnboarding();navigate('/');};

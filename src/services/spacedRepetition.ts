@@ -4,7 +4,7 @@ export type WorkoutReason='review'|'new'|'weak'|'debugging'|'transfer';
 export type DailyWorkoutItem={exercise:Exercise;reason:WorkoutReason;explanation:string};
 
 export function buildDailyWorkout(
-  exercises:Exercise[],
+  exercises:readonly Exercise[],
   conceptScores:Record<string,number>,
   completedLessonIds:string[],
   daySeed=new Date().toISOString().slice(0,10),
@@ -46,7 +46,7 @@ export function buildDailyWorkout(
 }
 
 export function selectDailyTraining(
-  exercises:Exercise[],
+  exercises:readonly Exercise[],
   conceptScores:Record<string,number>,
   completedLessonIds:string[],
   daySeed=new Date().toISOString().slice(0,10),

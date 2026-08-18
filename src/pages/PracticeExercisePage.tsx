@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { BackIcon, BookmarkIcon, PlayIcon } from '../components/Icons';
 import { LatexPreview } from '../components/LatexPreview';
-import { getExercise, getLesson } from '../data/courses';
+import { getRuntimeExercise, getRuntimeLesson } from '../data/runtimeCatalog';
 import { compiler } from '../services/compiler';
 import { compilationStateLabel, isCompilationBusy } from '../services/compilerState';
 import { getExerciseInteraction, initialExerciseDraft } from '../services/exerciseInteraction';
@@ -15,7 +15,7 @@ type MobilePracticeView='task'|'code'|'result';
 
 export function PracticeExercisePage(){
   const {exerciseId}=useParams();
-  const exercise=getExercise(exerciseId);
+  const exercise=getRuntimeExercise(exerciseId);
   const interaction=useMemo(()=>exercise?getExerciseInteraction(exercise):null,[exercise?.mode]);
   const settings=useAppStore(state=>state.settings);
   const drafts=useAppStore(state=>state.drafts);
@@ -73,7 +73,7 @@ export function PracticeExercisePage(){
     return()=>{active=false;};
   },[exercise?.id,interaction?.kind]);
 
-  const lesson=useMemo(()=>exercise?getLesson(exercise.lessonId):undefined,[exercise]);
+  const lesson=useMemo(()=>exercise?getRuntimeLesson(exercise.lessonId):undefined,[exercise]);
   const position=useMemo(()=>Math.max(1,(lesson?.exercises.findIndex(item=>item.id===exercise?.id)??0)+1),[lesson,exercise?.id]);
   const total=lesson?.exercises.length??1;
   if(!exercise||!interaction)return <div className="page empty-state">Задача не найдена.</div>;

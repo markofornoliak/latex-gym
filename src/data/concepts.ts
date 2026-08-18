@@ -67,7 +67,9 @@ const definitions:ConceptDefinition[] = [
   {id:'bibliography-model',title:'Библиографическая модель',description:'Источники имеют стабильные ключи, а стиль определяет визуальное цитирование.',prerequisites:['ref','package-model']},
   {id:'bib-file',title:'.bib-файл',description:'Библиографические записи хранятся отдельно от текста документа.',prerequisites:['bibliography-model','source-file']},
   {id:'citation',title:'Цитирование',description:'cite связывает место в тексте с библиографическим ключом.',prerequisites:['bibliography-model']},
-  {id:'biber',title:'Biber/BibLaTeX',description:'Отдельный этап обработки библиографии участвует в многошаговой сборке.',prerequisites:['compiler','bib-file','citation']},
+  {id:'bibtex',title:'BibTeX',description:'Классический библиографический процессор читает .aux и .bib, формирует библиографию и требует повторного запуска LaTeX.',prerequisites:['compiler','bib-file','citation']},
+  {id:'biblatex',title:'BibLaTeX',description:'Пакетный слой библиографии управляет источниками, цитированием и выбором backend независимо от конкретного процессора.',prerequisites:['bibliography-model','bib-file','citation','package-model']},
+  {id:'biber',title:'Biber',description:'Современный библиографический процессор для BibLaTeX выполняется отдельным этапом сборки и не равен самому пакету biblatex.',prerequisites:['compiler','biblatex']},
   {id:'glossary',title:'Глоссарии и сокращения',description:'Термины и акронимы объявляются один раз и затем используются по устойчивым ключам с отдельным этапом генерации.',prerequisites:['package-model','ref','compiler']},
   {id:'footnote',title:'Сноска',description:'footnote создаёт структурную сноску и управляет её нумерацией.',prerequisites:['command','required-argument']},
   {id:'index',title:'Предметный указатель',description:'Индекс собирается из отмеченных терминов дополнительным этапом.',prerequisites:['compiler','package-model']},
@@ -83,7 +85,7 @@ const definitions:ConceptDefinition[] = [
   {id:'project-architecture',title:'Архитектура проекта',description:'Главный файл, преамбула, главы, рисунки и библиография имеют предсказуемые роли.',prerequisites:['multi-file','custom-command','bibliography-model']},
   {id:'accessibility',title:'Доступность документа',description:'Смысловая структура, подписи, порядок чтения и корректные метаданные делают итоговый документ пригоднее для разных способов восприятия.',prerequisites:['latex-model','document-metadata','project-architecture']},
   {id:'debugging',title:'Системная отладка',description:'Ошибка локализуется по диагностике, минимальному примеру и структурным инвариантам.',prerequisites:['compile-error','environment-balance','brace-balance']},
-  {id:'latexmk',title:'Автоматическая сборка',description:'latexmk повторяет необходимые проходы и зависимости до стабильного результата.',prerequisites:['compiler','biber','debugging']},
+  {id:'latexmk',title:'Автоматическая сборка',description:'latexmk повторяет необходимые проходы и зависимости до стабильного результата.',prerequisites:['compiler','debugging']},
   {id:'professional-workflow',title:'Профессиональный workflow',description:'Воспроизводимая сборка, структура файлов, библиография и проверка ошибок работают как единая система.',prerequisites:['project-architecture','latexmk']}
 ];
 

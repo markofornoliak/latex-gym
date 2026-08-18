@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
 import { CheckIcon, ChevronIcon } from '../components/Icons';
-import { lessons, modules } from '../data/courses';
-import { projects } from '../data/projects';
+import { curriculum } from '../data/curriculumRuntime';
 import { useAppStore } from '../store/useAppStore';
+
+const {lessons,modules,projects}=curriculum;
 
 export function CoursesPage(){
   const completed=useAppStore(state=>state.completedLessons);

@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState, type ChangeEvent } from '
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BackIcon, ChevronIcon, PlayIcon } from '../components/Icons';
 import { LatexPreview } from '../components/LatexPreview';
-import { getProject } from '../data/projects';
+import { getRuntimeProject } from '../data/runtimeCatalog';
 import { compiler } from '../services/compiler';
 import { compilationStateLabel, isCompilationBusy } from '../services/compilerState';
 import {
@@ -35,7 +35,7 @@ const EMPTY_PROJECT_PROGRESS:string[]=[];
 export function ProjectPage(){
   const {projectId,stageId}=useParams();
   const navigate=useNavigate();
-  const project=getProject(projectId);
+  const project=getRuntimeProject(projectId);
   const settings=useAppStore(store=>store.settings);
   const drafts=useAppStore(store=>store.drafts);
   const setDraft=useAppStore(store=>store.setDraft);

@@ -4,17 +4,17 @@ import { BackIcon, BookmarkIcon, ChevronIcon } from '../components/Icons';
 import { CodeBlock } from '../components/CodeBlock';
 import { LatexPreview } from '../components/LatexPreview';
 import { LearningBlockView } from '../components/LearningBlockView';
-import { conceptById } from '../data/concepts';
-import { getLesson, lessonIndex, lessons } from '../data/courses';
+import { curriculum } from '../data/curriculumRuntime';
 import { compiler } from '../services/compiler';
 import { useAppStore } from '../store/useAppStore';
 import type { CompileResult, TheoryBlock as TheoryBlockType } from '../types';
 
 type Tab='theory'|'example'|'practice';
+const {lessons}=curriculum;
 
 export function LessonPage(){
   const {lessonId}=useParams();
-  const lesson=getLesson(lessonId);
+  const lesson=lessonId?curriculum.lessonById[lessonId]:undefined;
   const navigate=useNavigate();
   const [tab,setTab]=useState<Tab>('theory');
   const [slide,setSlide]=useState(0);
@@ -32,7 +32,7 @@ export function LessonPage(){
     setSlide(0);
   },[lesson?.id,setCurrent]);
 
-  const index=lesson?lessonIndex.get(lesson.id)??0:0;
+  const index=lesson?curriculum.lessonPositionById[lesson.id]??0:0;
   const prev=lessons[index-1];
   const next=lessons[index+1];
   const theoryCount=lesson?.content?.length??lesson?.theory.length??1;
@@ -103,7 +103,7 @@ export function LessonPage(){
 
     <aside className="lesson-context">
       <span className="eyebrow">КОНТЕКСТ</span>
-      {lesson.pedagogy&&<><h3>Цель</h3><p>{lesson.pedagogy.objective}</p>{lesson.pedagogy.introduces.length>0&&<><h3>Новые понятия</h3><div className="context-concepts">{lesson.pedagogy.introduces.map(id=><span key={id}>{conceptById.get(id)?.title??id}</span>)}</div></>}</>}
+      {lesson.pedagogy&&<><h3>Цель</h3><p>{lesson.pedagogy.objective}</p>{lesson.pedagogy.introduces.length>0&&<><h3>Новые понятия</h3><div className="context-concepts">{lesson.pedagogy.introduces.map(id=><span key={id}>{curriculum.conceptById[id]?.title??id}</span>)}</div></>}</>}
       {lesson.relatedCommands.length>0&&<><h3>Команды</h3>{lesson.relatedCommands.map(commandName=><code key={commandName}>\{commandName}</code>)}</>}
       <p className="context-count">{theoryCount} шагов · {lesson.examples.length} прим. · {lesson.exercises.length} задач</p>
     </aside>
