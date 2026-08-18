@@ -15,6 +15,7 @@ const definitions:ConceptDefinition[] = [
   {id:'preamble',title:'Преамбула',description:'Конфигурационная часть до begin{document}.',prerequisites:['document-environment']},
   {id:'document-body',title:'Тело документа',description:'Содержимое внутри окружения document.',prerequisites:['document-environment']},
   {id:'document-class',title:'Класс документа',description:'Базовые правила структуры и набора: article, report, book, beamer.',prerequisites:['command','required-argument']},
+  {id:'document-metadata',title:'Метаданные документа',description:'Название, автор и аннотация описываются структурно и отделены от визуального оформления.',prerequisites:['document-class','preamble']},
   {id:'package-model',title:'Модель пакетов',description:'Пакеты расширяют базовые возможности LaTeX и подключаются в преамбуле.',prerequisites:['preamble','command']},
   {id:'usepackage',title:'Подключение пакета',description:'Команда usepackage подключает расширение и его команды.',prerequisites:['package-model','optional-argument']},
   {id:'compile-error',title:'Ошибка компиляции',description:'Диагностика связывает симптом с местом и типом нарушения исходника.',prerequisites:['compiler','command','environment']},
@@ -28,6 +29,9 @@ const definitions:ConceptDefinition[] = [
   {id:'quote',title:'Цитатные блоки',description:'quote/quotation задают структурно отличимый фрагмент текста.',prerequisites:['environment']},
   {id:'escaping',title:'Экранирование',description:'Специальные символы %, &, #, _, $ и другие выводятся осознанно.',prerequisites:['special-symbols']},
   {id:'spacing',title:'Пробелы и переносы',description:'Исходные пробелы не являются ручной системой вёрстки.',prerequisites:['paragraph','escaping']},
+  {id:'typography',title:'Профессиональная типографика',description:'Интервалы, неразрывные связи и микротипографика улучшают набор без ручных визуальных костылей.',prerequisites:['spacing','emphasis','package-model']},
+  {id:'font-management',title:'Шрифтовая система',description:'Шрифты выбираются на уровне движка и документа; fontspec связывает Unicode-шрифты с XeLaTeX/LuaLaTeX.',prerequisites:['typography','compiler','package-model']},
+  {id:'color-model',title:'Цвет в документе',description:'Цвет задаётся через семантические команды и палитры xcolor, а не хаотичными локальными настройками.',prerequisites:['package-model','command']},
   {id:'page-structure',title:'Структура страницы',description:'Класс и пакеты управляют полями, размером бумаги и композиционной областью.',prerequisites:['document-class','package-model']},
   {id:'math-mode',title:'Математический режим',description:'Отдельный режим набора со специальной семантикой символов и интервалов.',prerequisites:['special-symbols','document-body']},
   {id:'inline-math',title:'Встроенная математика',description:'Короткая формула остаётся частью строки текста.',prerequisites:['math-mode']},
@@ -53,8 +57,10 @@ const definitions:ConceptDefinition[] = [
   {id:'figure',title:'Рисунок',description:'figure — плавающий структурный объект, а includegraphics вставляет графический файл.',prerequisites:['environment','package-model']},
   {id:'caption',title:'Подпись',description:'caption описывает объект и участвует в нумерации.',prerequisites:['figure']},
   {id:'float',title:'Плавающий объект',description:'LaTeX выбирает физическое положение figure/table в пределах заданных правил.',prerequisites:['figure','tabular']},
+  {id:'float-placement',title:'Управление размещением float',description:'Параметры размещения и барьеры ограничивают работу float-механизма, не превращая документ в ручную вёрстку.',prerequisites:['float','package-model']},
   {id:'label',title:'Метка',description:'label связывает устойчивый ключ с нумеруемым объектом.',prerequisites:['section','equation']},
   {id:'ref',title:'Перекрёстная ссылка',description:'ref получает номер по ключу вместо жёстко записанного числа.',prerequisites:['label','compiler']},
+  {id:'hyperlink',title:'Гиперссылки и PDF-навигация',description:'hyperref связывает ссылки, метаданные PDF и навигацию с семантической структурой документа.',prerequisites:['ref','package-model']},
   {id:'theorem',title:'Теоремное окружение',description:'amsthm задаёт единый тип и нумерацию утверждений.',prerequisites:['environment','usepackage']},
   {id:'definition',title:'Определение',description:'Определения получают собственную смысловую роль и стиль.',prerequisites:['theorem']},
   {id:'proof',title:'Доказательство',description:'proof задаёт структурную область доказательства и его завершение.',prerequisites:['theorem']},
@@ -62,6 +68,7 @@ const definitions:ConceptDefinition[] = [
   {id:'bib-file',title:'.bib-файл',description:'Библиографические записи хранятся отдельно от текста документа.',prerequisites:['bibliography-model','source-file']},
   {id:'citation',title:'Цитирование',description:'cite связывает место в тексте с библиографическим ключом.',prerequisites:['bibliography-model']},
   {id:'biber',title:'Biber/BibLaTeX',description:'Отдельный этап обработки библиографии участвует в многошаговой сборке.',prerequisites:['compiler','bib-file','citation']},
+  {id:'glossary',title:'Глоссарии и сокращения',description:'Термины и акронимы объявляются один раз и затем используются по устойчивым ключам с отдельным этапом генерации.',prerequisites:['package-model','ref','compiler']},
   {id:'footnote',title:'Сноска',description:'footnote создаёт структурную сноску и управляет её нумерацией.',prerequisites:['command','required-argument']},
   {id:'index',title:'Предметный указатель',description:'Индекс собирается из отмеченных терминов дополнительным этапом.',prerequisites:['compiler','package-model']},
   {id:'appendix',title:'Приложения',description:'appendix переключает последующие структурные единицы в режим приложений.',prerequisites:['section']},
@@ -71,7 +78,10 @@ const definitions:ConceptDefinition[] = [
   {id:'length',title:'Длины',description:'Размеры и интервалы выражаются типографическими длинами, а не случайными пикселями.',prerequisites:['page-structure']},
   {id:'headers-footers',title:'Колонтитулы',description:'Колонтитулы строятся поверх структурной модели страницы.',prerequisites:['page-structure','package-model']},
   {id:'multi-file',title:'Многофайловый документ',description:'input/include разделяют большой проект без потери общей структуры.',prerequisites:['source-file','section']},
+  {id:'tikz',title:'TikZ как программная графика',description:'TikZ описывает научную графику командами и координатами внутри воспроизводимого исходного проекта.',prerequisites:['package-model','environment','length']},
+  {id:'beamer',title:'Архитектура Beamer',description:'Beamer представляет презентацию как структурированный документ из секций, frames, overlays и навигации.',prerequisites:['document-class','environment','section']},
   {id:'project-architecture',title:'Архитектура проекта',description:'Главный файл, преамбула, главы, рисунки и библиография имеют предсказуемые роли.',prerequisites:['multi-file','custom-command','bibliography-model']},
+  {id:'accessibility',title:'Доступность документа',description:'Смысловая структура, подписи, порядок чтения и корректные метаданные делают итоговый документ пригоднее для разных способов восприятия.',prerequisites:['latex-model','document-metadata','project-architecture']},
   {id:'debugging',title:'Системная отладка',description:'Ошибка локализуется по диагностике, минимальному примеру и структурным инвариантам.',prerequisites:['compile-error','environment-balance','brace-balance']},
   {id:'latexmk',title:'Автоматическая сборка',description:'latexmk повторяет необходимые проходы и зависимости до стабильного результата.',prerequisites:['compiler','biber','debugging']},
   {id:'professional-workflow',title:'Профессиональный workflow',description:'Воспроизводимая сборка, структура файлов, библиография и проверка ошибок работают как единая система.',prerequisites:['project-architecture','latexmk']}
@@ -83,8 +93,8 @@ export const hasConcept = (id:string) => conceptById.has(id);
 
 export function conceptAncestors(id:string, seen=new Set<string>()):string[] {
   if(seen.has(id)) return [];
-  seen.add(id);
-  const current=conceptById.get(id);
-  if(!current) return [];
-  return current.prerequisites.flatMap(parent=>[parent,...conceptAncestors(parent,seen)]);
+  const definition=conceptById.get(id);
+  if(!definition) return [];
+  const next=new Set(seen); next.add(id);
+  return definition.prerequisites.flatMap(prerequisite=>[prerequisite,...conceptAncestors(prerequisite,next)]);
 }

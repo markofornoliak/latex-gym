@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "curriculum:check": "vitest run src/services/curriculumLinter.test.ts",
+    "build": "npm run curriculum:check && tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run"

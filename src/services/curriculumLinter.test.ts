@@ -1,14 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import '../data/editorialEnhancements';
-import '../data/curriculumExpansion';
-import '../data/deepCurriculum';
-import '../data/debuggingTrack';
-import { exercises, lessons, modules } from '../data/courses';
-import { concepts, conceptById } from '../data/concepts';
-import { projects } from '../data/projects';
-import { referenceEntries } from '../data/reference';
+import { curriculum } from '../data/curriculumRuntime';
 import { lintCurriculum } from './curriculumLinter';
 
+const {modules,lessons,exercises,projects,references,concepts,graph}=curriculum;
 const foundationOrder=['what-is-latex','compilation-model','tex-source','commands-foundation','arguments-foundation','environments-foundation','document-structure-foundation','preamble-body-foundation','packages-foundation','errors-foundation','first-document-foundation'];
 const debuggingIds=['debug-undefined-control','debug-missing-brace','debug-alignment-tab','debug-missing-math','debug-undefined-environment','debug-file-not-found'];
 
@@ -18,7 +12,7 @@ describe('curriculum quality gate',()=>{
     expect(lessons.length).toBeGreaterThanOrEqual(60);
     expect(exercises.length).toBeGreaterThanOrEqual(150);
     expect(projects).toHaveLength(5);
-    expect(referenceEntries.length).toBeGreaterThanOrEqual(45);
+    expect(references.length).toBeGreaterThanOrEqual(45);
   });
 
   it('keeps theory-before-syntax foundation in the intended order',()=>{
@@ -34,26 +28,46 @@ describe('curriculum quality gate',()=>{
     for(const id of debuggingIds)expect(ids.has(id),id).toBe(true);
   });
 
-  it('contains no curriculum integrity errors',()=>{
-    const issues=lintCurriculum(lessons,exercises,referenceEntries);
+  it('contains no structural curriculum integrity errors',()=>{
+    const issues=lintCurriculum(lessons,exercises,references,{modules,concepts,projects});
     const errors=issues.filter(issue=>issue.severity==='error');
-    expect(errors,errors.map(issue=>`${issue.code}: ${issue.lessonId??issue.exerciseId??''} ${issue.message}`).join('\n')).toEqual([]);
+    expect(errors,errors.map(issue=>`${issue.code}: ${issue.lessonId??issue.exerciseId??issue.projectId??issue.conceptId??''} ${issue.message}`).join('\n')).toEqual([]);
+  });
+
+  it('is deeply frozen after the construction phase',()=>{
+    expect(Object.isFrozen(modules)).toBe(true);
+    expect(Object.isFrozen(lessons)).toBe(true);
+    expect(Object.isFrozen(exercises)).toBe(true);
+    expect(Object.isFrozen(references)).toBe(true);
+    expect(Object.isFrozen(projects)).toBe(true);
+    expect(Object.isFrozen(lessons[0])).toBe(true);
+    expect(Object.isFrozen(lessons[0].exercises)).toBe(true);
   });
 });
 
 describe('concept dependency graph',()=>{
-  it('has only known prerequisites and no dependency cycles',()=>{
-    for(const concept of concepts){
-      for(const prerequisite of concept.prerequisites)expect(conceptById.has(prerequisite),`${concept.id} -> ${prerequisite}`).toBe(true);
-      expect(hasCycle(concept.id,new Set(),new Set()),`cycle starting at ${concept.id}`).toBe(false);
+  it('contains every concept exactly once and has a complete topological order',()=>{
+    expect(graph.conceptIds).toHaveLength(concepts.length);
+    expect(new Set(graph.conceptIds).size).toBe(concepts.length);
+    expect(graph.topologicalOrder).toHaveLength(concepts.length);
+    expect(new Set(graph.topologicalOrder).size).toBe(concepts.length);
+  });
+
+  it('orders prerequisites before their dependents',()=>{
+    const position=new Map(graph.topologicalOrder.map((id,index)=>[id,index]));
+    for(const node of Object.values(graph.nodes)){
+      for(const prerequisite of node.requires){
+        expect(position.get(prerequisite),`${prerequisite} before ${node.id}`).toBeLessThan(position.get(node.id)!);
+      }
     }
   });
-});
 
-function hasCycle(id:string,visiting:Set<string>,visited:Set<string>):boolean{
-  if(visiting.has(id))return true;
-  if(visited.has(id))return false;
-  visiting.add(id);
-  for(const parent of conceptById.get(id)?.prerequisites??[])if(hasCycle(parent,visiting,visited))return true;
-  visiting.delete(id);visited.add(id);return false;
-}
+  it('connects concepts to learning, practice, reference and projects without duplicating databases',()=>{
+    const label=graph.nodes.label;
+    expect(label).toBeDefined();
+    expect(label.introducedBy.length+label.reinforcedBy.length).toBeGreaterThan(0);
+    expect(label.practicedBy.length).toBeGreaterThan(0);
+    expect(label.referenceIds).toContain('label');
+    expect(label.projectIds.length).toBeGreaterThan(0);
+  });
+});

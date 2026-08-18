@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { canonicalConceptId } from '../data/conceptAliases';
 import type { Bookmark, ConceptMastery, HistoryEntry, MasteryEvidence } from '../types';
 
 type Settings={textSize:'small'|'medium'|'large';wordWrap:boolean;autoClose:boolean;lineNumbers:boolean};
@@ -44,6 +45,7 @@ type AppState={
   resetProgress:()=>void;
 };
 
+const STORE_VERSION=4;
 const defaultSettings:Settings={textSize:'medium',wordWrap:true,autoClose:true,lineNumbers:true};
 const defaultOnboarding:OnboardingProfile={goals:[],experience:null,placementScore:null,placementTotal:0,placementEvidence:{},recommendedLessonId:null,completedAt:null};
 const pad2=(value:number)=>String(value).padStart(2,'0');
@@ -52,6 +54,7 @@ const localDate=(value:string)=>{const [year,month,day]=value.split('-').map(Num
 const clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(max,value));
 const unique=(values:string[],value:string)=>values.includes(value)?values:[...values,value];
 const historyItem=(text:string,kind:HistoryEntry['kind']):HistoryEntry=>({id:crypto.randomUUID(),at:new Date().toISOString(),text,kind});
+const canonicalKey=(value:string)=>canonicalConceptId(value.trim().toLocaleLowerCase('en').replace(/_/g,'-'));
 
 function nextStreak(streak:AppState['streak']){
   const current=today();
@@ -70,21 +73,73 @@ function normalizeMastery(value:Partial<ConceptMastery>|undefined):ConceptMaster
   const base=emptyMastery();
   if(!value)return base;
   return {
-    score:typeof value.score==='number'?value.score:base.score,
-    attempts:typeof value.attempts==='number'?value.attempts:0,
-    successes:typeof value.successes==='number'?value.successes:0,
-    mistakeCount:typeof value.mistakeCount==='number'?value.mistakeCount:0,
+    score:typeof value.score==='number'?clamp(value.score,0,1):base.score,
+    attempts:typeof value.attempts==='number'?Math.max(0,value.attempts):0,
+    successes:typeof value.successes==='number'?Math.max(0,value.successes):0,
+    mistakeCount:typeof value.mistakeCount==='number'?Math.max(0,value.mistakeCount):0,
     lastPracticed:typeof value.lastPracticed==='string'?value.lastPracticed:null,
-    stability:typeof value.stability==='number'?value.stability:1,
+    stability:typeof value.stability==='number'?Math.max(.5,value.stability):1,
     nextReview:typeof value.nextReview==='string'?value.nextReview:null,
-    independentSuccesses:typeof value.independentSuccesses==='number'?value.independentSuccesses:0,
-    hintedSuccesses:typeof value.hintedSuccesses==='number'?value.hintedSuccesses:0,
-    transferSuccesses:typeof value.transferSuccesses==='number'?value.transferSuccesses:0,
-    projectSuccesses:typeof value.projectSuccesses==='number'?value.projectSuccesses:0,
-    solutionReveals:typeof value.solutionReveals==='number'?value.solutionReveals:0,
+    independentSuccesses:typeof value.independentSuccesses==='number'?Math.max(0,value.independentSuccesses):0,
+    hintedSuccesses:typeof value.hintedSuccesses==='number'?Math.max(0,value.hintedSuccesses):0,
+    transferSuccesses:typeof value.transferSuccesses==='number'?Math.max(0,value.transferSuccesses):0,
+    projectSuccesses:typeof value.projectSuccesses==='number'?Math.max(0,value.projectSuccesses):0,
+    solutionReveals:typeof value.solutionReveals==='number'?Math.max(0,value.solutionReveals):0,
     lastEvidence:value.lastEvidence??null
   };
 }
+
+export function migrateConceptScores(raw:Record<string,number>|undefined){
+  const migrated:Record<string,number>={};
+  for(const [legacyId,value] of Object.entries(raw??{})){
+    if(typeof value!=='number'||!Number.isFinite(value))continue;
+    const id=canonicalKey(legacyId);
+    migrated[id]=(migrated[id]??0)+value;
+  }
+  return migrated;
+}
+
+export function migrateConceptMastery(raw:Record<string,Partial<ConceptMastery>>|undefined){
+  const migrated:Record<string,ConceptMastery>={};
+  for(const [legacyId,value] of Object.entries(raw??{})){
+    const id=canonicalKey(legacyId);
+    migrated[id]=mergeMastery(migrated[id],normalizeMastery(value));
+  }
+  return migrated;
+}
+
+function migratePlacementEvidence(raw:Record<string,boolean>|undefined){
+  const migrated:Record<string,boolean>={};
+  for(const [legacyId,value] of Object.entries(raw??{})){
+    const id=canonicalKey(legacyId);
+    migrated[id]=id in migrated?migrated[id]&&Boolean(value):Boolean(value);
+  }
+  return migrated;
+}
+
+function mergeMastery(existing:ConceptMastery|undefined,incoming:ConceptMastery):ConceptMastery{
+  if(!existing)return incoming;
+  const leftWeight=Math.max(1,existing.attempts),rightWeight=Math.max(1,incoming.attempts),weight=leftWeight+rightWeight;
+  const latest=isLater(incoming.lastPracticed,existing.lastPracticed)?incoming:existing;
+  return {
+    score:clamp((existing.score*leftWeight+incoming.score*rightWeight)/weight,0,1),
+    attempts:existing.attempts+incoming.attempts,
+    successes:existing.successes+incoming.successes,
+    mistakeCount:existing.mistakeCount+incoming.mistakeCount,
+    lastPracticed:latest.lastPracticed,
+    stability:Math.max(existing.stability,incoming.stability),
+    nextReview:earlierDate(existing.nextReview,incoming.nextReview),
+    independentSuccesses:existing.independentSuccesses+incoming.independentSuccesses,
+    hintedSuccesses:existing.hintedSuccesses+incoming.hintedSuccesses,
+    transferSuccesses:existing.transferSuccesses+incoming.transferSuccesses,
+    projectSuccesses:existing.projectSuccesses+incoming.projectSuccesses,
+    solutionReveals:existing.solutionReveals+incoming.solutionReveals,
+    lastEvidence:latest.lastEvidence
+  };
+}
+
+function isLater(left:string|null,right:string|null){if(!left)return false;if(!right)return true;return Date.parse(left)>Date.parse(right);}
+function earlierDate(left:string|null,right:string|null){if(!left)return right;if(!right)return left;return Date.parse(left)<=Date.parse(right)?left:right;}
 
 function evidenceStrength(evidence:MasteryEvidence){
   if(evidence.outcome==='failure')return 0;
@@ -128,19 +183,20 @@ export function updateConceptMastery(previous:ConceptMastery|undefined,ok:boolea
 }
 
 export const useAppStore=create<AppState>()(persist((set)=>({
-  version:3,
+  version:STORE_VERSION,
   onboarded:false,onboarding:defaultOnboarding,
   completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null},settings:defaultSettings,
   setOnboarded:()=>set({onboarded:true}),
   completeOnboarding:(profile)=>set(state=>{
     const conceptMastery={...state.conceptMastery};
     const conceptScores={...state.conceptScores};
+    const placementEvidence=migratePlacementEvidence(profile.placementEvidence);
     const now=new Date();
-    for(const [conceptId,correct] of Object.entries(profile.placementEvidence)){
+    for(const [conceptId,correct] of Object.entries(placementEvidence)){
       conceptMastery[conceptId]=updateConceptMastery(conceptMastery[conceptId],correct,now,{independence:'independent',context:'placement',realCompile:false});
       conceptScores[conceptId]=(conceptScores[conceptId]??0)+(correct?1:-1);
     }
-    return {onboarded:true,onboarding:{...profile,completedAt:now.toISOString()},currentLessonId:profile.recommendedLessonId??'what-is-latex',conceptMastery,conceptScores};
+    return {onboarded:true,onboarding:{...profile,placementEvidence,completedAt:now.toISOString()},currentLessonId:profile.recommendedLessonId??'what-is-latex',conceptMastery,conceptScores};
   }),
   retakeOnboarding:()=>set({onboarded:false,onboarding:{...defaultOnboarding,placementEvidence:{}}}),
   setCurrentLesson:(id)=>set({currentLessonId:id}),
@@ -152,7 +208,8 @@ export const useAppStore=create<AppState>()(persist((set)=>({
     const conceptScores={...state.conceptScores};
     const conceptMastery={...state.conceptMastery};
     const now=new Date();
-    for(const conceptId of concepts){
+    for(const rawConceptId of concepts){
+      const conceptId=canonicalKey(rawConceptId);
       conceptScores[conceptId]=(conceptScores[conceptId]??0)+(ok?1:-1);
       conceptMastery[conceptId]=updateConceptMastery(conceptMastery[conceptId],ok,now,evidence);
     }
@@ -171,34 +228,39 @@ export const useAppStore=create<AppState>()(persist((set)=>({
       if(!parsed||typeof parsed!=='object')throw new Error('invalid');
       const progress=(parsed.progress&&typeof parsed.progress==='object'?parsed.progress:parsed) as Partial<AppState>;
       const projects=(parsed.projects&&typeof parsed.projects==='object'?parsed.projects:{}) as {completedStages?:ProjectProgress;drafts?:Record<string,string>};
-      const importedMastery=progress.conceptMastery??{};
-      const conceptMastery=Object.fromEntries(Object.entries(importedMastery).map(([id,value])=>[id,normalizeMastery(value)]));
-      set(state=>({
-        onboarded:progress.onboarded??state.onboarded,
-        onboarding:progress.onboarding??state.onboarding,
-        completedLessons:Array.isArray(progress.completedLessons)?progress.completedLessons:state.completedLessons,
-        completedExercises:Array.isArray(progress.completedExercises)?progress.completedExercises:state.completedExercises,
-        completedProjectStages:projects.completedStages??progress.completedProjectStages??state.completedProjectStages,
-        currentLessonId:typeof progress.currentLessonId==='string'?progress.currentLessonId:state.currentLessonId,
-        bookmarks:Array.isArray(progress.bookmarks)?progress.bookmarks:state.bookmarks,
-        attempts:progress.attempts??state.attempts,successfulAttempts:progress.successfulAttempts??state.successfulAttempts,
-        hintsUsed:progress.hintsUsed??state.hintsUsed,solutionReveals:progress.solutionReveals??state.solutionReveals,
-        drafts:{...state.drafts,...(progress.drafts??{}),...(projects.drafts??{})},conceptScores:progress.conceptScores??state.conceptScores,conceptMastery,
-        history:Array.isArray(progress.history)?progress.history:state.history,streak:progress.streak??state.streak,settings:{...state.settings,...((parsed.settings??progress.settings) as Partial<Settings>|undefined)}
-      }));
+      const importedMastery=migrateConceptMastery(progress.conceptMastery as Record<string,Partial<ConceptMastery>>|undefined);
+      const importedScores=migrateConceptScores(progress.conceptScores);
+      const oldOnboarding=(progress.onboarding??{}) as Partial<OnboardingProfile>;
+      set(state=>{
+        const onboarding:OnboardingProfile={...state.onboarding,...oldOnboarding,goals:Array.isArray(oldOnboarding.goals)?oldOnboarding.goals:state.onboarding.goals,placementEvidence:migratePlacementEvidence(oldOnboarding.placementEvidence??state.onboarding.placementEvidence)};
+        return {
+          onboarded:progress.onboarded??state.onboarded,
+          onboarding,
+          completedLessons:Array.isArray(progress.completedLessons)?progress.completedLessons:state.completedLessons,
+          completedExercises:Array.isArray(progress.completedExercises)?progress.completedExercises:state.completedExercises,
+          completedProjectStages:projects.completedStages??progress.completedProjectStages??state.completedProjectStages,
+          currentLessonId:typeof progress.currentLessonId==='string'?progress.currentLessonId:state.currentLessonId,
+          bookmarks:Array.isArray(progress.bookmarks)?progress.bookmarks:state.bookmarks,
+          attempts:progress.attempts??state.attempts,successfulAttempts:progress.successfulAttempts??state.successfulAttempts,
+          hintsUsed:progress.hintsUsed??state.hintsUsed,solutionReveals:progress.solutionReveals??state.solutionReveals,
+          drafts:{...state.drafts,...(progress.drafts??{}),...(projects.drafts??{})},conceptScores:{...state.conceptScores,...importedScores},conceptMastery:{...state.conceptMastery,...importedMastery},
+          history:Array.isArray(progress.history)?progress.history:state.history,streak:progress.streak??state.streak,settings:{...state.settings,...((parsed.settings??progress.settings) as Partial<Settings>|undefined)}
+        };
+      });
       return {ok:true,message:'Прогресс импортирован.'};
     }catch{return {ok:false,message:'Файл прогресса имеет неверный формат.'};}
   },
-  resetProgress:()=>set({onboarded:false,onboarding:{...defaultOnboarding,placementEvidence:{}},completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null}})
+  resetProgress:()=>set({version:STORE_VERSION,onboarded:false,onboarding:{...defaultOnboarding,placementEvidence:{}},completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null}})
 }),{
-  name:'latex-gym-state',version:3,storage:createJSONStorage(()=>localStorage),
-  migrate:(persisted,version)=>{
+  name:'latex-gym-state',version:STORE_VERSION,storage:createJSONStorage(()=>localStorage),
+  migrate:(persisted)=>{
     const state=(persisted??{}) as Record<string,unknown>;
     const rawMastery=(state.conceptMastery??{}) as Record<string,Partial<ConceptMastery>>;
-    const conceptMastery=Object.fromEntries(Object.entries(rawMastery).map(([id,value])=>[id,normalizeMastery(value)]));
+    const conceptMastery=migrateConceptMastery(rawMastery);
+    const conceptScores=migrateConceptScores((state.conceptScores??{}) as Record<string,number>);
     const oldOnboarding=(state.onboarding??{}) as Partial<OnboardingProfile>;
-    const onboarding:OnboardingProfile={...defaultOnboarding,...oldOnboarding,goals:Array.isArray(oldOnboarding.goals)?oldOnboarding.goals:[],placementEvidence:oldOnboarding.placementEvidence??{}};
-    return {...state,version:3,onboarding,completedProjectStages:state.completedProjectStages??{},solutionReveals:state.solutionReveals??{},conceptMastery} as unknown as AppState;
+    const onboarding:OnboardingProfile={...defaultOnboarding,...oldOnboarding,goals:Array.isArray(oldOnboarding.goals)?oldOnboarding.goals:[],placementEvidence:migratePlacementEvidence(oldOnboarding.placementEvidence??{})};
+    return {...state,version:STORE_VERSION,onboarding,completedProjectStages:state.completedProjectStages??{},solutionReveals:state.solutionReveals??{},conceptScores,conceptMastery} as unknown as AppState;
   }
 }));
 
@@ -207,7 +269,7 @@ export function exportProgress(){
   const projectDrafts=Object.fromEntries(Object.entries(state.drafts).filter(([key])=>key.startsWith('project:')));
   const otherDrafts=Object.fromEntries(Object.entries(state.drafts).filter(([key])=>!key.startsWith('project:')));
   return JSON.stringify({
-    schemaVersion:3,
+    schemaVersion:STORE_VERSION,
     exportedAt:new Date().toISOString(),
     progress:{
       onboarded:state.onboarded,onboarding:state.onboarding,completedLessons:state.completedLessons,completedExercises:state.completedExercises,currentLessonId:state.currentLessonId,
