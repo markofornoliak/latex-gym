@@ -55,7 +55,9 @@ jobs:
           <meta charset="utf-8">
           <title>LaTeX Gym real TeX smoke</title>
           <body data-state="starting">REAL_TEX_SMOKE_STARTING<script>
-          const source = '\\documentclass{article}\n\\begin{document}\nLaTeX Gym real TeX smoke.\n\\end{document}';
+          const minimalSource = '\\documentclass{article}\n\\begin{document}\nLaTeX Gym real TeX smoke.\n\\end{document}';
+          const multiMain = '\\documentclass{article}\n\\begin{document}\n\\input{sections/method}\n\\end{document}';
+          const multiSection = '\\section{Method}\nThis paragraph comes from a secondary project file.';
           const worker = new Worker('./busytex.worker.js');
           let compileStarted = false;
           const fail = message => {
@@ -63,6 +65,7 @@ jobs:
             document.body.textContent = `REAL_TEX_SMOKE_FAIL ${message}`;
             worker.terminate();
           };
+          const signatureOf = pdf => pdf && pdf.length >= 4 ? String.fromCharCode(pdf[0], pdf[1], pdf[2], pdf[3]) : '';
           worker.onerror = event => fail(event.message || 'worker error');
           worker.onmessage = event => {
             const message = event.data || {};
@@ -72,21 +75,32 @@ jobs:
               document.body.dataset.state = 'compiling';
               document.body.textContent = 'REAL_TEX_SMOKE_COMPILING';
               worker.postMessage({
-                type: 'compile',
-                requestId: 1,
-                files: [{ path: 'main.tex', contents: source }],
-                mainFile: 'main.tex',
-                bibtex: false,
-                driver: 'pdftex_bibtex8'
+                type: 'compile', requestId: 1,
+                files: [{ path: 'main.tex', contents: minimalSource }],
+                mainFile: 'main.tex', bibtex: false, driver: 'pdftex_bibtex8'
               });
               return;
             }
             if (message.type === 'compile-result' && message.requestId === 1) {
               const pdf = message.result && message.result.pdf;
-              const signature = pdf && pdf.length >= 4 ? String.fromCharCode(pdf[0], pdf[1], pdf[2], pdf[3]) : '';
-              if (signature !== '%PDF') return fail(`invalid PDF signature: ${signature || 'empty'}`);
+              if (signatureOf(pdf) !== '%PDF') return fail(`invalid minimal PDF signature: ${signatureOf(pdf) || 'empty'}`);
+              document.body.dataset.state = 'multifile';
+              document.body.textContent = 'REAL_TEX_MULTIFILE_COMPILING';
+              worker.postMessage({
+                type: 'compile', requestId: 2,
+                files: [
+                  { path: 'main.tex', contents: multiMain },
+                  { path: 'sections/method.tex', contents: multiSection }
+                ],
+                mainFile: 'main.tex', bibtex: false, driver: 'pdftex_bibtex8'
+              });
+              return;
+            }
+            if (message.type === 'compile-result' && message.requestId === 2) {
+              const pdf = message.result && message.result.pdf;
+              if (signatureOf(pdf) !== '%PDF') return fail(`invalid multi-file PDF signature: ${signatureOf(pdf) || 'empty'}`);
               document.body.dataset.state = 'passed';
-              document.body.textContent = `REAL_TEX_SMOKE_PASS ${pdf.length}`;
+              document.body.textContent = `REAL_TEX_SMOKE_PASS ${pdf.length} MULTIFILE_PASS`;
               worker.terminate();
             }
           };
@@ -117,13 +131,13 @@ jobs:
             exit 1
           fi
 
-          echo 'QA real TeX: compile a minimal article and require real PDF bytes'
+          echo 'QA real TeX: compile single-file and multi-file projects and require real PDF bytes'
           timeout 150s "$CHROME" --headless --no-sandbox --disable-gpu \
             --virtual-time-budget=120000 --dump-dom \
             'http://127.0.0.1:4173/latex-gym/compiler-smoke.html' \
             > /tmp/real-tex-smoke.html 2> /tmp/real-tex-smoke.browser.log || true
-          if ! grep -Fq 'REAL_TEX_SMOKE_PASS' /tmp/real-tex-smoke.html; then
-            echo 'Real TeX smoke test did not produce a PDF.'
+          if ! grep -Fq 'REAL_TEX_SMOKE_PASS' /tmp/real-tex-smoke.html || ! grep -Fq 'MULTIFILE_PASS' /tmp/real-tex-smoke.html; then
+            echo 'Real TeX smoke test did not produce both single-file and multi-file PDFs.'
             cat /tmp/real-tex-smoke.html || true
             cat /tmp/real-tex-smoke.browser.log || true
             exit 1
@@ -169,6 +183,7 @@ jobs:
           capture phone-360-practice /practice/deep-001 360 800 'ЗАДАНИЕ 1 ИЗ 3'
           capture phone-390-command /lesson/commands-foundation 390 844 'Команды'
           capture phone-430-first-document /lesson/first-document-foundation 430 932 'Первый документ'
+          capture phone-430-project /project/academic-paper/stage-10 430 932 'ФАЙЛЫ'
           capture tablet-768-reference /reference/frac 768 1024 'Дробь'
           capture tablet-1024-project /project/academic-paper/stage-4 1024 1366 'Математическая модель'
           capture laptop-1280-lesson /lesson/table-anatomy 1280 800 'Анатомия tabular'
