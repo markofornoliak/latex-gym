@@ -12,6 +12,8 @@ import path from 'node:path';
 const BASE = process.env.BUSYTEX_ASSET_BASE || 'https://busytex.github.io/dist';
 const destination = process.env.BUSYTEX_DEST || path.resolve('dist', 'busytex');
 const mode = process.argv[2] === 'full' ? 'full' : 'smoke';
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 4;
 
 const EXPECTED_SHA256 = {
   'busytex_pipeline.js': 'f8741cfd1fb0ac3c11daeee8386bc024f59d8b14c3000ad64b9c00dce7d61265',
@@ -44,6 +46,8 @@ const productionData = [
   'ubuntu-texlive-science.data'
 ];
 
+const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
 async function existsWithContent(filePath) {
   try {
     return (await stat(filePath)).size > 0;
@@ -69,15 +73,31 @@ async function verify(file, target) {
   console.log(`BUSYTEX_ASSET ${file} ${size} sha256=${digest} verified`);
 }
 
+async function fetchAsset(file) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(`${BASE}/${file}`, { redirect: 'follow' });
+      if (response.ok && response.body) return response;
+      const error = new Error(`BusyTeX asset ${file} failed: HTTP ${response.status}`);
+      if (!RETRYABLE_STATUS.has(response.status) || attempt === MAX_ATTEMPTS) throw error;
+      lastError = error;
+    } catch (error) {
+      lastError = error;
+      if (attempt === MAX_ATTEMPTS) throw error;
+    }
+    const delay = 750 * (2 ** (attempt - 1));
+    console.warn(`BusyTeX: retry ${file} after attempt ${attempt}/${MAX_ATTEMPTS} (${lastError?.message || 'network error'})`);
+    await sleep(delay);
+  }
+  throw lastError ?? new Error(`BusyTeX asset ${file} could not be downloaded`);
+}
+
 async function download(file) {
   const target = path.join(destination, file);
   if (!(await existsWithContent(target))) {
-    const response = await fetch(`${BASE}/${file}`, { redirect: 'follow' });
-    if (!response.ok || !response.body) {
-      throw new Error(`BusyTeX asset ${file} failed: HTTP ${response.status}`);
-    }
-
     try {
+      const response = await fetchAsset(file);
       await pipeline(Readable.fromWeb(response.body), createWriteStream(target));
       if ((await stat(target)).size === 0) throw new Error(`BusyTeX asset ${file} is empty`);
     } catch (error) {
