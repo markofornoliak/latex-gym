@@ -1,4 +1,3 @@
-import '../data/curriculumRuntime';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AppShell } from '../components/AppShell';
