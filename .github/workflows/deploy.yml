@@ -184,7 +184,6 @@ jobs:
           ! grep -Fq 'Страница не найдена' /tmp/reload.html
 
       - name: Prepare full BusyTeX runtime for Pages
-        if: github.event_name != 'pull_request'
         run: node scripts/prepare-busytex.mjs full
 
       - name: Upload visual QA screenshots
