@@ -11,6 +11,7 @@ import {
 const realResult:CompileResult={
   ok:true,diagnostics:[],blocks:[],elapsedMs:20,engine:'pdflatex',providerId:'busytex-wasm',pdf:new Uint8Array([37,80,68,70])
 };
+const validTechnicalRoot='\\documentclass{report}\n\\usepackage[margin=28mm]{geometry}\n\\begin{document}\n\\chapter{Overview}\n\\include{chapters/system}\n\\include{chapters/validation}\n\\end{document}';
 
 describe('project workspace',()=>{
   it('migrates the existing single-file project draft into main.tex without discarding it',()=>{
@@ -41,21 +42,32 @@ describe('project workspace',()=>{
     expect(normalizeProjectFilePath('chapters/../root.tex')).toBeNull();
   });
 
-  it('validates a real multi-file technical report including resolved includes',()=>{
+  it('validates cumulative requirements in a real multi-file technical report',()=>{
     const project=getProject('technical-report')!;
     const stageIndex=project.stages.findIndex(stage=>stage.id==='files');
     const workspace=createProjectWorkspace(project,stageIndex,{});
-    workspace.files['main.tex']='\\documentclass{report}\n\\begin{document}\n\\include{chapters/system}\n\\include{chapters/validation}\n\\end{document}';
+    workspace.files['main.tex']=validTechnicalRoot;
     const assessment=assessProjectStage(project,stageIndex,workspace,realResult);
     expect(assessment.ok).toBe(true);
     expect(assessment.realCompile).toBe(true);
+  });
+
+  it('rejects a later stage when its new requirement was not actually added',()=>{
+    const project=getProject('academic-paper')!;
+    const stageIndex=project.stages.findIndex(stage=>stage.id==='stage-2');
+    const workspace=createProjectWorkspace(project,stageIndex,{});
+    workspace.files['main.tex']='\\documentclass{article}\n\\begin{document}\n\\end{document}';
+    const assessment=assessProjectStage(project,stageIndex,workspace,realResult);
+    expect(assessment.ok).toBe(false);
+    expect(assessment.items.find(item=>item.id.includes('cmd:title'))?.ok).toBe(false);
+    expect(assessment.items.find(item=>item.id.includes('cmd:maketitle'))?.ok).toBe(false);
   });
 
   it('does not treat the educational fallback as proof of a multi-file project',()=>{
     const project=getProject('technical-report')!;
     const stageIndex=project.stages.findIndex(stage=>stage.id==='files');
     const workspace=createProjectWorkspace(project,stageIndex,{});
-    workspace.files['main.tex']='\\documentclass{report}\n\\begin{document}\n\\include{chapters/system}\n\\include{chapters/validation}\n\\end{document}';
+    workspace.files['main.tex']=validTechnicalRoot;
     const fallback:CompileResult={...realResult,pdf:undefined,engine:'educational-preview',fallbackReason:'offline'};
     const assessment=assessProjectStage(project,stageIndex,workspace,fallback);
     expect(assessment.ok).toBe(false);
@@ -66,7 +78,7 @@ describe('project workspace',()=>{
     const project=getProject('technical-report')!;
     const stageIndex=project.stages.findIndex(stage=>stage.id==='files');
     const workspace=createProjectWorkspace(project,stageIndex,{});
-    workspace.files['main.tex']='\\documentclass{report}\n\\begin{document}\n\\input{chapters/missing}\n\\end{document}';
+    workspace.files['main.tex']='\\documentclass{report}\n\\usepackage[margin=28mm]{geometry}\n\\begin{document}\n\\chapter{Overview}\n\\input{chapters/missing}\n\\end{document}';
     const assessment=assessProjectStage(project,stageIndex,workspace,realResult);
     const inputs=assessment.items.find(item=>item.id==='inputs');
     expect(inputs?.ok).toBe(false);
