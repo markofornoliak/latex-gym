@@ -55,7 +55,7 @@ jobs:
           <meta charset="utf-8">
           <title>LaTeX Gym real TeX smoke</title>
           <body data-state="starting">REAL_TEX_SMOKE_STARTING<script>
-          const source = '\\documentclass{article}\n\\begin{document}\nLaTeX Gym real TeX smoke.\n\\end{document}';
+          const source = '\\documentclass{article}\n\\begin{document}\n\\input{sections/body}\n\\end{document}';
           const worker = new Worker('./busytex.worker.js');
           let compileStarted = false;
           const fail = message => {
@@ -74,7 +74,10 @@ jobs:
               worker.postMessage({
                 type: 'compile',
                 requestId: 1,
-                files: [{ path: 'main.tex', contents: source }],
+                files: [
+                  { path: 'main.tex', contents: source },
+                  { path: 'sections/body.tex', contents: 'LaTeX Gym real multi-file TeX smoke.' }
+                ],
                 mainFile: 'main.tex',
                 bibtex: false,
                 driver: 'pdftex_bibtex8'
@@ -117,13 +120,13 @@ jobs:
             exit 1
           fi
 
-          echo 'QA real TeX: compile a minimal article and require real PDF bytes'
+          echo 'QA real TeX: compile a multi-file article and require real PDF bytes'
           timeout 150s "$CHROME" --headless --no-sandbox --disable-gpu \
             --virtual-time-budget=120000 --dump-dom \
             'http://127.0.0.1:4173/latex-gym/compiler-smoke.html' \
             > /tmp/real-tex-smoke.html 2> /tmp/real-tex-smoke.browser.log || true
           if ! grep -Fq 'REAL_TEX_SMOKE_PASS' /tmp/real-tex-smoke.html; then
-            echo 'Real TeX smoke test did not produce a PDF.'
+            echo 'Real multi-file TeX smoke test did not produce a PDF.'
             cat /tmp/real-tex-smoke.html || true
             cat /tmp/real-tex-smoke.browser.log || true
             exit 1
@@ -168,6 +171,7 @@ jobs:
           capture phone-320-foundation /lesson/what-is-latex 320 568 'Что такое LaTeX'
           capture phone-360-practice /practice/deep-001 360 800 'ЗАДАНИЕ 1 ИЗ 3'
           capture phone-390-command /lesson/commands-foundation 390 844 'Команды'
+          capture phone-390-project /project/academic-paper/stage-10 390 844 'Архитектура публикации'
           capture phone-430-first-document /lesson/first-document-foundation 430 932 'Первый документ'
           capture tablet-768-reference /reference/frac 768 1024 'Дробь'
           capture tablet-1024-project /project/academic-paper/stage-4 1024 1366 'Математическая модель'
@@ -176,6 +180,14 @@ jobs:
           capture desktop-1920-project /project/academic-paper/stage-10 1920 1080 'Архитектура публикации'
           capture tv-2560-debug /lesson/debug-alignment-tab 2560 1440 'Extra alignment tab'
           capture tv-3840-project /project/technical-report/build 3840 2160 'Сборка'
+
+          # Project QA protects the applied-workflow surface, not only the route heading.
+          grep -Fq 'ФАЙЛЫ' /tmp/phone-390-project.html
+          grep -Fq 'sections/introduction.tex' /tmp/phone-390-project.html
+          grep -Fq 'ФАЙЛЫ' /tmp/desktop-1920-project.html
+          grep -Fq 'sections/introduction.tex' /tmp/desktop-1920-project.html
+          grep -Fq 'chapters/system.tex' /tmp/tv-3840-project.html
+          grep -Fq 'Проверить этап' /tmp/tv-3840-project.html
 
           # A second load of the same deep route exercises reload/direct-route behavior.
           "$CHROME" --headless --no-sandbox --disable-gpu --virtual-time-budget=1600 \

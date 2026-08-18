@@ -1,0 +1,73 @@
+.project-files{border:1px solid var(--soft-border);background:#fbfbf9;margin-bottom:14px}
+.project-files-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:13px 14px;border-bottom:1px solid var(--soft-border)}
+.project-files-head>div{display:flex;flex-direction:column;gap:4px;min-width:0}
+.project-files-head strong{font-size:11px;font-weight:500;color:var(--text);overflow-wrap:anywhere}
+.project-files-head>span{font-size:10px;color:var(--muted);white-space:nowrap}
+.project-file-list{display:flex;gap:0;overflow-x:auto;border-bottom:1px solid var(--soft-border);scrollbar-width:thin}
+.project-file-list button{appearance:none;border:0;border-right:1px solid var(--soft-border);background:transparent;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:7px;min-width:max-content;padding:10px 12px;color:var(--secondary);cursor:pointer;text-align:left}
+.project-file-list button>span{font-family:var(--font-mono);font-size:8px;letter-spacing:.06em;color:var(--muted)}
+.project-file-list button strong{font-family:var(--font-mono);font-size:10.5px;font-weight:500}
+.project-file-list button small{font-size:8px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.project-file-list button.active{background:#fff;color:var(--navy);box-shadow:inset 0 -2px 0 var(--navy)}
+.project-file-list button:focus-visible{outline:2px solid var(--navy);outline-offset:-3px}
+.project-add-file{padding:11px 13px}
+.project-add-file>label{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:7px}
+.project-add-file>div{display:flex;gap:8px;align-items:stretch}
+.project-add-file input[type="text"],.project-add-file>div>input:not([type]){min-width:0;flex:1;border:1px solid var(--border);background:#fff;padding:9px 10px;font:11px/1.3 var(--font-mono);color:var(--text);border-radius:var(--radius-sm,3px)}
+.project-add-file input:focus{outline:2px solid var(--navy);outline-offset:1px}
+.project-add-file .secondary-button{min-height:34px;padding:7px 12px;font-size:10px}
+.project-add-file>small{display:block;color:var(--danger,#9b2c2c);font-size:10px;margin-top:6px}
+.project-upload-button{position:relative;display:inline-flex!important;align-items:center;justify-content:center;margin:0!important;padding:7px 11px;border:1px solid var(--border);background:#fff;color:var(--navy)!important;font-size:9px!important;line-height:1.2;text-transform:none!important;letter-spacing:0!important;cursor:pointer;white-space:nowrap}
+.project-upload-button:hover{border-color:rgba(6,26,58,.42)}
+.project-upload-button:focus-within{outline:2px solid var(--navy);outline-offset:1px}
+.project-upload-button input,.project-asset-inspector label input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.project-active-file{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:7px 10px;background:var(--navy);color:#fff}
+.project-active-file>span{font:10px/1.4 var(--font-mono)}
+.project-active-file>small{font-size:9px;line-height:1.4;color:rgba(255,255,255,.72);max-width:520px;text-align:right}
+.project-asset-inspector{min-height:310px;border:1px solid var(--soft-border);border-top:0;background:#fff;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding:36px clamp(22px,5vw,54px)}
+.project-asset-inspector>span{font:9px/1 var(--font-mono);letter-spacing:.08em;color:var(--muted)}
+.project-asset-inspector h2{font-family:var(--font-serif);font-size:25px;font-weight:500;color:var(--navy);margin:9px 0 8px;overflow-wrap:anywhere}
+.project-asset-inspector p{font-size:11px;line-height:1.6;color:var(--secondary);max-width:520px;margin:0 0 18px}
+.project-asset-inspector label{position:relative;cursor:pointer}
+.project-assessment{margin-top:15px;border:1px solid var(--border);background:#fff}
+.project-assessment>header{display:flex;justify-content:space-between;gap:16px;padding:15px 16px;border-bottom:1px solid var(--soft-border)}
+.project-assessment h2{font-family:var(--font-serif);font-size:20px;font-weight:500;color:var(--navy);margin:4px 0 0}
+.project-assessment>header>small{font-size:9px;line-height:1.45;color:var(--muted);text-align:right;max-width:180px}
+.project-assessment-row{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px;padding:10px 16px;border-bottom:1px solid var(--soft-border)}
+.project-assessment-row:last-child{border-bottom:0}
+.project-assessment-row>span{font-size:12px;color:var(--danger,#9b2c2c)}
+.project-assessment-row p{display:flex;flex-direction:column;gap:3px;margin:0}
+.project-assessment-row strong{font-size:11px;font-weight:500;color:var(--text)}
+.project-assessment-row small{font-size:9.5px;line-height:1.45;color:var(--secondary)}
+.project-assessment--ok{border-color:rgba(31,106,75,.28)}
+.project-assessment--ok .project-assessment-row>span{color:var(--success)}
+
+@media(max-width:767px){
+  .project-files-head{padding:11px 12px}
+  .project-files-head>span{display:none}
+  .project-file-list button{padding:10px;gap:6px}
+  .project-add-file>div{display:grid;grid-template-columns:minmax(0,1fr) auto}
+  .project-add-file>div>input{font-size:12px}
+  .project-upload-button{grid-column:1/-1;min-height:36px}
+  .project-active-file{align-items:flex-start;flex-direction:column;gap:3px}
+  .project-active-file>small{text-align:left}
+  .project-asset-inspector{min-height:240px;padding:28px 20px}
+  .project-assessment>header{flex-direction:column}
+  .project-assessment>header>small{text-align:left;max-width:none}
+}
+
+@media(min-width:1280px){
+  .project-files{max-width:930px}
+  .project-file-list{max-height:112px;flex-wrap:wrap;overflow-y:auto}
+}
+
+@media(min-width:2560px){
+  .project-files{max-width:1180px;margin-bottom:19px}
+  .project-files-head{padding:17px 18px}
+  .project-files-head strong{font-size:14px}.project-files-head>span{font-size:12px}
+  .project-file-list button{padding:13px 16px}.project-file-list button strong{font-size:13px}.project-file-list button>span,.project-file-list button small{font-size:10px}
+  .project-add-file{padding:14px 17px}.project-add-file>div>input{font-size:13px;padding:11px 12px}.project-upload-button{font-size:11px!important;padding-inline:15px}
+  .project-active-file{padding:9px 13px}.project-active-file>span{font-size:12px}.project-active-file>small{font-size:11px}
+  .project-asset-inspector{min-height:430px}.project-asset-inspector h2{font-size:34px}.project-asset-inspector p{font-size:14px}
+  .project-assessment{margin-top:20px}.project-assessment h2{font-size:27px}.project-assessment-row strong{font-size:14px}.project-assessment-row small{font-size:12px}
+}
