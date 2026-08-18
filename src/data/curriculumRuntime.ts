@@ -3,8 +3,8 @@
  *
  * Legacy enrichment modules are intentionally imported here, in one deterministic
  * phase. They may mutate the seed arrays while the curriculum is being built.
- * After this module evaluates, all public curriculum data is validated, indexed and
- * deeply frozen. Runtime components must treat it as immutable.
+ * After this module evaluates, all public curriculum data is normalized, validated,
+ * indexed and deeply frozen. Runtime components must treat it as immutable.
  *
  * This is an incremental migration step toward pure source transforms. It removes
  * mutation from application bootstrap without rewriting educational content at once.
@@ -17,10 +17,17 @@ import './explanationElaboration';
 
 import { exercises, lessonIndex, lessons, modules } from './courses';
 import { concepts } from './concepts';
+import { normalizeCurriculumConcepts } from './curriculumNormalize';
 import { projects } from './projects';
 import { referenceEntries } from './reference';
 import { buildCurriculumGraph } from '../services/curriculumGraph';
 import { lintCurriculum, type CurriculumIssue } from '../services/curriculumLinter';
+
+const normalization=normalizeCurriculumConcepts(lessons,exercises,concepts);
+if(normalization.unresolved.length){
+  const unresolved=[...new Set(normalization.unresolved.map(item=>item.conceptId))].sort();
+  throw new Error(`Curriculum normalization produced unknown concepts (${unresolved.length}): ${unresolved.join(', ')}`);
+}
 
 const issues=lintCurriculum(lessons,exercises,referenceEntries,{modules,concepts,projects});
 const errors=issues.filter(issue=>issue.severity==='error');
@@ -53,6 +60,7 @@ export const curriculum=Object.freeze({
   referenceById,
   projectById,
   graph,
+  normalization,
   issues:Object.freeze(issues),
   build:Object.freeze({
     moduleCount:modules.length,
@@ -60,7 +68,8 @@ export const curriculum=Object.freeze({
     exerciseCount:exercises.length,
     conceptCount:concepts.length,
     referenceCount:referenceEntries.length,
-    projectCount:projects.length
+    projectCount:projects.length,
+    normalizedConceptTags:normalization.changes.length
   })
 });
 
