@@ -4,6 +4,7 @@ import { BackIcon, BookmarkIcon, PlayIcon } from '../components/Icons';
 import { LatexPreview } from '../components/LatexPreview';
 import { getExercise, getLesson } from '../data/courses';
 import { compiler } from '../services/compiler';
+import { compilationStateLabel, isCompilationBusy } from '../services/compilerState';
 import { validateExercise, type ValidationResult } from '../services/validator';
 import { useAppStore } from '../store/useAppStore';
 import type { CompilationState, CompileResult } from '../types';
@@ -54,20 +55,20 @@ export function PracticeExercisePage(){
   if(!exercise)return <div className="page empty-state">Задача не найдена.</div>;
 
   const isSaved=bookmarks.some(item=>item.type==='exercise'&&item.targetId===exercise.id);
-  const busy=compileState==='queued'||compileState==='compiling';
+  const busy=isCompilationBusy(compileState);
   const setEditorSource=(value:string)=>{setSource(value);if(validation)setValidation(null);};
   const saveNow=()=>{setDraft(`exercise:${exercise.id}`,source);setSaved(true);};
   const runCompile=async()=>{
     setCompileState('queued');setValidation(null);
-    await Promise.resolve();setCompileState('compiling');
     try{
-      const compiled=await compiler.compile(source);setResult(compiled);
-      if(!compiled.ok)setCompileState('error');
-      else if(compiled.diagnostics.some(item=>item.severity==='warning'))setCompileState('warning');
-      else setCompileState('success');
+      const compiled=await compiler.compile(source,{onPhase:setCompileState});
+      setResult(compiled);
       return compiled;
-    }catch{
-      setCompileState('error');return null;
+    }catch(error){
+      setCompileState('error');
+      const message=error instanceof Error?error.message:String(error);
+      setResult({ok:false,diagnostics:[{severity:'error',line:1,message:'Компилятор не завершил запрос',explanation:'Не удалось получить ни реальную TeX-сборку, ни образовательный fallback.',suggestion:'Исходник сохранён локально. Повторите компиляцию; если ошибка сохраняется, откройте Playground и проверьте доступность движка.',source:'latex-gym',originalCompilerMessage:message}],blocks:[],elapsedMs:1,engine:'educational-preview',providerId:'compiler-manager'});
+      return null;
     }
   };
   const check=async()=>{
@@ -78,7 +79,7 @@ export function PracticeExercisePage(){
     recordAttempt(exercise.id,checked.ok,exercise.concepts,exercise.title);
   };
   const revealHint=()=>{const next=Math.min(exercise.hints.length,hintLevel+1);recordHint(exercise.id,next);};
-  const renderHints=(variant:'desktop'|'mobile')=><div className={`hint-area hint-area--${variant}`}><div className="hint-heading"><span>Подсказки</span><button onClick={revealHint} disabled={hintLevel>=exercise.hints.length}>{hintLevel>=exercise.hints.length?'Все открыты':'Открыть подсказку'}</button></div>{exercise.hints.slice(0,hintLevel).map((hint,index)=><p key={index}><b>{index+1}.</b> {hint}</p>)}{hintLevel>=exercise.hints.length&&!solution&&<button className="text-tool reveal-solution" onClick={()=>setSolution(true)}>Показать эталонное решение</button>}</div>;
+  const renderHints=(variant:'desktop'|'mobile')=><div className={`hint-area hint-area--${variant}`}><div className="hint-heading"><span>Подсказки</span><button onClick={revealHint} disabled={hintLevel>=exercise.hints.length}>{hintLevel>=exercise.hints.length?'Все открыты':'Открыть подсказку'}</button></div>{exercise.hints.slice(0,hintLevel).map((hint,index)=><p key={index}><b>{index+1}.</b> {hint}</p>)}{hintLevel>=exercise.hints.length&&!solution&&<button className="text-tool reveal-solution" onClick={()=>setSolution(true)}>Показать одно решение</button>}</div>;
 
   return <div className="practice-screen" data-compilation-state={compileState}>
     <header className="practice-top"><Link to="/practice" aria-label="Назад к практике"><BackIcon/></Link><strong>Практика</strong><button type="button" className={`icon-button practice-bookmark ${isSaved?'active':''}`} onClick={()=>toggleBookmark('exercise',exercise.id)} aria-label={isSaved?'Удалить задачу из закладок':'Сохранить задачу'}><BookmarkIcon/></button></header>
@@ -91,27 +92,23 @@ export function PracticeExercisePage(){
       </section>
       <section className="editor-pane mobile-active">
         <div className="editor-pane-inner">
-          <div className="editor-status-line"><span className={`compile-state compile-state--${compileState}`}>{stateLabel(compileState)}</span><span>{saved?'Сохранено локально':'Сохранение…'}</span></div>
+          <div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${compileState}`}>{compilationStateLabel(compileState)}</span><span>{result?engineLabel(result):saved?'Сохранено локально':'Сохранение…'}</span></div>
           <Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={setEditorSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={235} onReset={()=>setSource(exercise.starterCode)} onCompile={()=>{void runCompile();}} onSave={saveNow} onShowShortcuts={()=>setShortcutsOpen(true)} diagnostics={result?.diagnostics??[]}/></Suspense>
-          <button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy}><PlayIcon/>{busy?'Компиляция…':'Скомпилировать'}</button>
+          <button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy}><PlayIcon/>{busy?compilationStateLabel(compileState):'Скомпилировать'}</button>
         </div>
       </section>
       <section className="result-pane mobile-active"><h2>Результат</h2><div className="result-frame"><LatexPreview result={result}/></div>
         {validation&&<div className={`validation-panel ${validation.ok?'validation-panel--ok':''}`} role="status" aria-live="polite"><h3>{validation.ok?'Решение принято':'Что нужно исправить'}</h3>{validation.items.map((item,index)=><div className="validation-row" key={index}><span>{item.ok?'✓':'×'}</span><div><strong>{item.message}</strong>{item.line&&<small>Строка {item.line}</small>}{!item.ok&&<small>{item.hint}</small>}</div></div>)}</div>}
-        {solution&&<details className="reference-solution" open><summary>Эталонное решение</summary><pre>{exercise.solution}</pre><p>Это один корректный вариант; проверка основана на требованиях, а не на полном совпадении строки.</p></details>}
+        {solution&&<details className="reference-solution" open><summary>Один корректный вариант</summary><pre>{exercise.solution}</pre><p>Это пример, а не определение правильности. Проверка основана на требованиях и структуре решения.</p></details>}
         {renderHints('mobile')}
       </section>
     </div>
     <footer className="practice-action"><button className="primary-button primary-button--large" onClick={()=>{void check();}} disabled={busy}>Проверить решение</button></footer>
-    {shortcutsOpen&&<div className="shortcut-backdrop" role="presentation" onMouseDown={()=>setShortcutsOpen(false)}><section className="shortcut-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcut-title" onMouseDown={event=>event.stopPropagation()}><button className="shortcut-close" onClick={()=>setShortcutsOpen(false)} aria-label="Закрыть">×</button><span className="eyebrow">РЕДАКТОР</span><h2 id="shortcut-title">Клавиатура</h2><dl><div><dt>Cmd/Ctrl + Enter</dt><dd>Скомпилировать</dd></div><div><dt>Cmd/Ctrl + S</dt><dd>Сохранить локальный черновик</dd></div><div><dt>Cmd/Ctrl + K</dt><dd>Поиск LaTeX gym</dd></div><div><dt>Cmd/Ctrl + /</dt><dd>Эта справка</dd></div></dl></section></div>}
+    {shortcutsOpen&&<div className="shortcut-backdrop" role="presentation" onMouseDown={()=>setShortcutsOpen(false)}><section className="shortcut-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcut-title" onMouseDown={event=>event.stopPropagation()}><button className="shortcut-close" onClick={()=>setShortcutsOpen(false)} aria-label="Закрыть">×</button><span className="eyebrow">РЕДАКТОР</span><h2 id="shortcut-title">Клавиатура</h2><dl><div><dt>Cmd/Ctrl + Enter</dt><dd>Скомпилировать</dd></div><div><dt>Cmd/Ctrl + S</dt><dd>Сохранить локальный черновик</dd></div><div><dt>Cmd/Ctrl + K</dt><dd>Поиск LaTeX Gym</dd></div><div><dt>Cmd/Ctrl + /</dt><dd>Эта справка</dd></div></dl></section></div>}
   </div>;
 }
 
-function stateLabel(state:CompilationState){
-  if(state==='queued')return 'В очереди';
-  if(state==='compiling')return 'Компиляция';
-  if(state==='success')return 'Готово';
-  if(state==='warning')return 'Есть предупреждение';
-  if(state==='error')return 'Ошибка';
-  return 'Готов к компиляции';
+function engineLabel(result:CompileResult){
+  if(result.fallbackReason)return 'Учебный fallback';
+  if(result.engine==='pdflatex')return 'pdfLaTeX';if(result.engine==='xelatex')return 'XeLaTeX';if(result.engine==='lualatex')return 'LuaLaTeX';return 'Учебный предпросмотр';
 }
