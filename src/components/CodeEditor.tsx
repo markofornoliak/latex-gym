@@ -37,22 +37,36 @@ const commandDocs:Record<string,CommandDoc>={
   usepackage:{syntax:'\\usepackage[options]{package}',summary:'Подключает пакет в преамбуле.'},
   documentclass:{syntax:'\\documentclass[options]{class}',summary:'Выбирает базовый класс документа.'},
   begin:{syntax:'\\begin{name} … \\end{name}',summary:'Открывает структурное окружение.'},
-  item:{syntax:'\\item text',summary:'Начинает элемент списка внутри list environment.'}
+  item:{syntax:'\\item text',summary:'Начинает элемент внутри окружения списка.'}
 };
 
 const commandCompletions:Completion[]=[
-  ['\\documentclass{}','Класс документа'],['\\usepackage{}','Пакет'],['\\begin{}','Окружение'],['\\end{}','Окружение'],['\\section{}','Раздел'],['\\subsection{}','Подраздел'],['\\emph{}','Смысловой акцент'],['\\textbf{}','Полужирный'],['\\frac{}{}','Дробь · math'],['\\sqrt{}','Корень · math'],['\\label{}','Метка'],['\\ref{}','Ссылка'],['\\cite{}','Цитирование'],['\\item','Пункт списка'],['\\includegraphics{}','Изображение · graphicx'],['\\alpha','α · math'],['\\beta','β · math'],['\\leq','≤ · math'],['\\sin','sin · math'],['\\log','log · math']
+  ['\\documentclass{}','Класс документа'],['\\usepackage{}','Пакет'],['\\begin{}','Окружение'],['\\end{}','Окружение'],['\\section{}','Раздел'],['\\subsection{}','Подраздел'],['\\emph{}','Смысловой акцент'],['\\textbf{}','Полужирный'],['\\frac{}{}','Дробь · математика'],['\\sqrt{}','Корень · математика'],['\\label{}','Метка'],['\\ref{}','Ссылка'],['\\cite{}','Цитирование'],['\\item','Пункт списка'],['\\includegraphics{}','Изображение · graphicx'],['\\alpha','α · математика'],['\\beta','β · математика'],['\\leq','≤ · математика'],['\\sin','sin · математика'],['\\log','log · математика']
 ].map(([label,detail])=>({label,type:'keyword',detail,apply:label}));
 
 const snippetCompletions:Completion[]=[
-  snippetCompletion('\\section{${title}}',{label:'sec',type:'text',detail:'snippet → \\section{}'}),
-  snippetCompletion('\\subsection{${title}}',{label:'subsec',type:'text',detail:'snippet → \\subsection{}'}),
-  snippetCompletion('\\frac{${numerator}}{${denominator}}',{label:'frac',type:'text',detail:'snippet → fraction'}),
-  snippetCompletion('\\begin{equation}\n  ${formula}\n\\end{equation}',{label:'eq',type:'text',detail:'snippet → equation'}),
-  snippetCompletion('\\begin{align}\n  ${left} &= ${right} \\\\\n  ${next}\n\\end{align}',{label:'align',type:'text',detail:'snippet → align · amsmath'}),
-  snippetCompletion('\\begin{itemize}\n  \\item ${item}\n\\end{itemize}',{label:'itemize',type:'text',detail:'snippet → itemize'}),
-  snippetCompletion('\\begin{figure}\n  \\centering\n  \\includegraphics[width=\\linewidth]{${file}}\n  \\caption{${caption}}\n  \\label{fig:${key}}\n\\end{figure}',{label:'fig',type:'text',detail:'snippet → figure · graphicx'})
+  snippetCompletion('\\section{${title}}',{label:'sec',type:'text',detail:'шаблон → \\section{}'}),
+  snippetCompletion('\\subsection{${title}}',{label:'subsec',type:'text',detail:'шаблон → \\subsection{}'}),
+  snippetCompletion('\\frac{${numerator}}{${denominator}}',{label:'frac',type:'text',detail:'шаблон → дробь'}),
+  snippetCompletion('\\begin{equation}\n  ${formula}\n\\end{equation}',{label:'eq',type:'text',detail:'шаблон → equation'}),
+  snippetCompletion('\\begin{align}\n  ${left} &= ${right} \\\\\n  ${next}\n\\end{align}',{label:'align',type:'text',detail:'шаблон → align · amsmath'}),
+  snippetCompletion('\\begin{itemize}\n  \\item ${item}\n\\end{itemize}',{label:'itemize',type:'text',detail:'шаблон → itemize'}),
+  snippetCompletion('\\begin{figure}\n  \\centering\n  \\includegraphics[width=\\linewidth]{${file}}\n  \\caption{${caption}}\n  \\label{fig:${key}}\n\\end{figure}',{label:'fig',type:'text',detail:'шаблон → figure · graphicx'})
 ];
+
+const mobileAccessories=[
+  {label:'\\',insert:'\\'},
+  {label:'{ }',insert:'{}',cursorOffset:-1},
+  {label:'$',insert:'$$',cursorOffset:-1},
+  {label:'_',insert:'_'},
+  {label:'^',insert:'^'},
+  {label:'&',insert:'&'},
+  {label:'\\\\',insert:'\\\\'},
+  {label:'\\frac',insert:'\\frac{}{}',cursorOffset:-3},
+  {label:'\\sqrt',insert:'\\sqrt{}',cursorOffset:-1},
+  {label:'\\begin',insert:'\\begin{}',cursorOffset:-1},
+  {label:'\\end',insert:'\\end{}',cursorOffset:-1}
+] as const;
 
 function latexCompletion(context:CompletionContext){
   const commandWord=context.matchBefore(/\\[a-zA-Z]*$/);
@@ -99,7 +113,7 @@ const commandHover=hoverTooltip((view,pos)=>{
 
 class DiagnosticMarker extends GutterMarker {
   constructor(readonly severity:Diagnostic['severity']){super();}
-  eq(other:DiagnosticMarker){return other.severity===this.severity;}
+  eq(other:GutterMarker){return other instanceof DiagnosticMarker&&other.severity===this.severity;}
   toDOM(){const marker=document.createElement('span');marker.className=`cm-diagnostic-marker cm-diagnostic-marker--${this.severity}`;marker.setAttribute('aria-hidden','true');marker.title=this.severity==='error'?'Ошибка TeX':this.severity==='warning'?'Предупреждение TeX':'Информация';return marker;}
 }
 
@@ -154,6 +168,7 @@ export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,au
       <div className="editor-tools-left"><button type="button" onClick={()=>formatEditor(viewRef.current)} className="text-tool">Форматировать</button>{onReset&&<button type="button" onClick={onReset} className="text-tool">Сбросить</button>}</div>
       <div className="editor-tools-right">{diagnostics.length>0&&<div className="editor-diagnostic-nav" aria-label="Навигация по диагностике"><span>{diagnostics.filter(item=>item.severity==='error').length} ошибок · {diagnostics.filter(item=>item.severity==='warning').length} предупреждений</span><button type="button" className="text-tool" onClick={()=>jumpDiagnostic(viewRef.current,diagnostics,-1)} aria-label="Предыдущая диагностика">↑</button><button type="button" className="text-tool" onClick={()=>jumpDiagnostic(viewRef.current,diagnostics,1)} aria-label="Следующая диагностика">↓</button></div>}<button className="icon-button" type="button" onClick={()=>setFullscreen(value=>!value)} aria-label={fullscreen?'Выйти из полноэкранного редактора':'Открыть редактор на весь экран'}><ExpandIcon/></button></div>
     </div>
+    <div className="latex-mobile-accessory" aria-label="Быстрые LaTeX-вставки">{mobileAccessories.map(item=><button type="button" key={item.label} onPointerDown={event=>event.preventDefault()} onClick={()=>insertEditorText(viewRef.current,item.insert,'cursorOffset' in item?item.cursorOffset:0)}>{item.label}</button>)}</div>
     <div ref={host} className="editor-host" />
   </div>;
 }
@@ -210,9 +225,16 @@ function jumpDiagnostic(view:EditorView|null,diagnostics:Diagnostic[],direction:
   const ordered=diagnostics.filter(item=>item.line>=1&&item.line<=view.state.doc.lines).sort((left,right)=>left.line-right.line);
   if(!ordered.length)return;
   const currentLine=view.state.doc.lineAt(view.state.selection.main.head).number;
-  const target=direction>0?(ordered.find(item=>item.line>currentLine)??ordered[0]):([...[...ordered].reverse()].find(item=>item.line<currentLine)??ordered.at(-1)!);
+  const target=direction>0?(ordered.find(item=>item.line>currentLine)??ordered[0]):([...ordered].reverse().find(item=>item.line<currentLine)??ordered.at(-1)!);
   const range=normalizeDiagnosticRange(view,target);if(!range)return;
   view.dispatch({selection:{anchor:range.from},scrollIntoView:true});view.focus();
+}
+function insertEditorText(view:EditorView|null,text:string,cursorOffset=0){
+  if(!view)return;
+  const selection=view.state.selection.main;
+  const anchor=selection.from+text.length+cursorOffset;
+  view.dispatch({changes:{from:selection.from,to:selection.to,insert:text},selection:{anchor:Math.max(selection.from,anchor)},scrollIntoView:true});
+  view.focus();
 }
 
 function completeEnvironment(view:EditorView){
