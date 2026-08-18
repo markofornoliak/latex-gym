@@ -1,4 +1,4 @@
-import { referenceEntries } from '../data/reference';
+import { curriculum } from '../data/curriculumRuntime';
 import type { ReferenceEntry } from '../types';
 
 export type LatexEditorContext={
@@ -19,6 +19,7 @@ export type EditorReferenceSuggestion={
   boost:number;
 };
 
+const {references:referenceEntries}=curriculum;
 const mathEnvironments=new Set(['equation','equation*','align','align*','gather','gather*','multline','multline*','split','cases','matrix','pmatrix','bmatrix','vmatrix','Vmatrix']);
 const structuralPreambleIds=new Set(['documentclass','usepackage']);
 const contextualIds:Record<string,string[]>={
