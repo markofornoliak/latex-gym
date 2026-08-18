@@ -55,7 +55,7 @@ jobs:
           <meta charset="utf-8">
           <title>LaTeX Gym real TeX smoke</title>
           <body data-state="starting">REAL_TEX_SMOKE_STARTING<script>
-          const source = '\\documentclass{article}\n\\begin{document}\nLaTeX Gym real TeX smoke.\n\\end{document}';
+          const source = '\\documentclass{article}\n\\begin{document}\n\\input{sections/body}\n\\end{document}';
           const worker = new Worker('./busytex.worker.js');
           let compileStarted = false;
           const fail = message => {
@@ -74,7 +74,10 @@ jobs:
               worker.postMessage({
                 type: 'compile',
                 requestId: 1,
-                files: [{ path: 'main.tex', contents: source }],
+                files: [
+                  { path: 'main.tex', contents: source },
+                  { path: 'sections/body.tex', contents: 'LaTeX Gym real multi-file TeX smoke.' }
+                ],
                 mainFile: 'main.tex',
                 bibtex: false,
                 driver: 'pdftex_bibtex8'
@@ -117,13 +120,13 @@ jobs:
             exit 1
           fi
 
-          echo 'QA real TeX: compile a minimal article and require real PDF bytes'
+          echo 'QA real TeX: compile a multi-file article and require real PDF bytes'
           timeout 150s "$CHROME" --headless --no-sandbox --disable-gpu \
             --virtual-time-budget=120000 --dump-dom \
             'http://127.0.0.1:4173/latex-gym/compiler-smoke.html' \
             > /tmp/real-tex-smoke.html 2> /tmp/real-tex-smoke.browser.log || true
           if ! grep -Fq 'REAL_TEX_SMOKE_PASS' /tmp/real-tex-smoke.html; then
-            echo 'Real TeX smoke test did not produce a PDF.'
+            echo 'Real multi-file TeX smoke test did not produce a PDF.'
             cat /tmp/real-tex-smoke.html || true
             cat /tmp/real-tex-smoke.browser.log || true
             exit 1
