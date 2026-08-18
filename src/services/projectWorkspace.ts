@@ -110,7 +110,6 @@ export function projectStageConcepts(projectId:string,stageId:string){
 }
 
 export function assessProjectStage(project:LearningProject,stageIndex:number,workspace:ProjectWorkspace,result:CompileResult):ProjectAssessment{
-  const stage=project.stages[stageIndex];
   const items:ProjectAssessmentItem[]=[];
   const paths=Object.keys(workspace.files);
   const texFiles=paths.filter(path=>path.endsWith('.tex'));
@@ -126,14 +125,50 @@ export function assessProjectStage(project:LearningProject,stageIndex:number,wor
   const unresolved=findUnresolvedInputs(workspace);
   items.push({id:'inputs',kind:'integrity',label:'Все \\input / \\include указывают на существующие файлы',ok:unresolved.length===0,detail:unresolved.length?`Не найдены: ${unresolved.join(', ')}`:undefined});
 
-  for(const check of stageSpecificChecks(project.id,stage?.id??'',workspace))items.push(check);
+  for(let index=0;index<=stageIndex;index+=1){
+    const stage=project.stages[index];
+    if(stage)items.push(...checksForStage(project.id,stage.id,workspace));
+  }
 
   return {ok:items.every(item=>item.ok),items,realCompile};
 }
 
-function stageSpecificChecks(projectId:string,stageId:string,workspace:ProjectWorkspace):ProjectAssessmentItem[]{
-  if(projectId==='academic-paper'&&stageId==='stage-10'){
-    return [
+function checksForStage(projectId:string,stageId:string,workspace:ProjectWorkspace):ProjectAssessmentItem[]{
+  const main=workspace.files[workspace.mainFile]??'';
+  const all=Object.values(workspace.files).join('\n');
+  const command=(name:string,label:string,min=1)=>patternCheck(`${projectId}:${stageId}:cmd:${name}`,label,commandCount(all,name)>=min);
+  const environment=(name:string,label:string,min=1)=>patternCheck(`${projectId}:${stageId}:env:${name}`,label,environmentCount(all,name)>=min);
+  const packageCheck=(name:string,label:string)=>patternCheck(`${projectId}:${stageId}:pkg:${name}`,label,new RegExp(`\\\\usepackage(?:\\[[^\\]]*\\])?\\{[^}]*\\b${name}\\b[^}]*\\}`).test(main));
+  const text=(value:string,label:string)=>patternCheck(`${projectId}:${stageId}:text:${value}`,label,main.includes(value));
+
+  if(projectId==='mathematical-notes'){
+    if(stageId==='structure')return [patternCheck('notes:article','Используется класс article',/\\documentclass(?:\[[^\]]*\])?\{article\}/.test(main)),environment('document','Есть document environment'),command('section','Создан смысловой раздел')];
+    if(stageId==='notation')return [patternCheck('notes:inline','В обычном тексте используется встроенная математика',/(?:\$[^$\n]+\$|\\\([^\n]+\\\))/.test(main))];
+    if(stageId==='formula')return [command('frac','Используется дробь \\frac'),patternCheck('notes:power','Используется верхний индекс',/\^[{\w]/.test(all)),patternCheck('notes:display','Есть самостоятельная формула',/(?:\\\[[\s\S]*?\\\]|\\begin\{equation\})/.test(all))];
+    if(stageId==='equation')return [environment('equation','Ключевая формула находится в equation'),command('label','У нумеруемой формулы есть label')];
+    if(stageId==='reference')return [command('ref','Текст использует \\ref вместо ручного номера')];
+  }
+
+  if(projectId==='laboratory-report'){
+    if(stageId==='sections')return ['Method','Results','Discussion'].map(title=>patternCheck(`lab:section:${title}`,`Есть раздел ${title}`,new RegExp(`\\\\section\\{${title}\\}`).test(all)));
+    if(stageId==='method')return [patternCheck('lab:method-text','В Method есть обычный связный текст',/\\section\{Method\}[\s\S]*?[A-Za-zА-Яа-я]{3,}/.test(all))];
+    if(stageId==='table')return [environment('tabular','Результаты представлены через tabular'),patternCheck('lab:table-cells','Таблица содержит разделители столбцов &',all.includes('&'))];
+    if(stageId==='figure')return [packageCheck('graphicx','Подключён graphicx'),environment('figure','Есть figure environment'),command('includegraphics','Рисунок подключён через \\includegraphics'),command('caption','У рисунка есть caption')];
+    if(stageId==='crossrefs')return [command('label','Объект получает label'),command('ref','Discussion ссылается через \\ref')];
+    if(stageId==='final')return [patternCheck('lab:no-manual-figure','Нет жёстко записанной ссылки “Figure 1”',!/Figure\s+1\b/.test(all))];
+  }
+
+  if(projectId==='academic-paper'){
+    if(stageId==='stage-1')return [patternCheck('paper:article','Корневой класс — article',/\\documentclass(?:\[[^\]]*\])?\{article\}/.test(main)),environment('document','Есть document environment')];
+    if(stageId==='stage-2')return [command('title','Задан title'),command('author','Задан author'),command('maketitle','Метаданные выводятся через \\maketitle')];
+    if(stageId==='stage-3')return ['Introduction','Method','Results','Discussion'].map(title=>patternCheck(`paper:section:${title}`,`Сохранён раздел ${title}`,new RegExp(`\\\\section\\{${title}\\}`).test(all)));
+    if(stageId==='stage-4')return [packageCheck('amsmath','Подключён amsmath'),environment('equation','Модель находится в equation'),command('label','У модели есть label')];
+    if(stageId==='stage-5')return [packageCheck('graphicx','Подключён graphicx'),environment('figure','Есть figure'),command('includegraphics','Рисунок подключён через \\includegraphics'),patternCheck('paper:caption-label','В figure caption расположен перед label',/\\begin\{figure\}[\s\S]*?\\caption\{[\s\S]*?\\label\{[\s\S]*?\\end\{figure\}/.test(all))];
+    if(stageId==='stage-6')return [packageCheck('booktabs','Подключён booktabs'),environment('table','Есть table'),environment('tabular','Есть tabular'),command('caption','У таблицы есть caption')];
+    if(stageId==='stage-7')return [command('ref','Текст использует перекрёстные ссылки',2),command('label','В проекте сохранены устойчивые label',2)];
+    if(stageId==='stage-8')return [fileCheck(workspace,'references.bib'),packageCheck('biblatex','Подключён biblatex'),patternCheck('paper:bibtex-backend','Для браузерного проекта выбран поддерживаемый backend=bibtex',/\\usepackage\[[^\]]*backend\s*=\s*bibtex[^\]]*\]\{biblatex\}/.test(main)),command('addbibresource','Подключена references.bib через \\addbibresource'),command('cite','Источник цитируется по ключу'),command('printbibliography','Библиография выводится автоматически')];
+    if(stageId==='stage-9')return [command('appendix','Приложение начинается с \\appendix'),patternCheck('paper:appendix-section','После \\appendix есть структурный раздел',/\\appendix[\s\S]*?\\section\{/.test(all))];
+    if(stageId==='stage-10')return [
       fileCheck(workspace,'sections/introduction.tex'),fileCheck(workspace,'sections/method.tex'),fileCheck(workspace,'sections/results.tex'),
       containsCheck(workspace.mainFile,workspace,'\\input{sections/introduction}','main.tex подключает introduction через \\input'),
       containsCheck(workspace.mainFile,workspace,'\\input{sections/method}','main.tex подключает method через \\input'),
@@ -141,31 +176,41 @@ function stageSpecificChecks(projectId:string,stageId:string,workspace:ProjectWo
       subfilesHaveNoDocumentClass(workspace)
     ];
   }
-  if(projectId==='technical-report'&&(stageId==='files'||stageId==='build')){
-    return [
-      fileCheck(workspace,'chapters/system.tex'),fileCheck(workspace,'chapters/validation.tex'),
-      inputTargetCheck(workspace,'chapters/system'),inputTargetCheck(workspace,'chapters/validation'),
-      subfilesHaveNoDocumentClass(workspace)
-    ];
+
+  if(projectId==='technical-report'){
+    if(stageId==='class')return [patternCheck('report:class','Корневой класс — report',/\\documentclass(?:\[[^\]]*\])?\{report\}/.test(main)),command('chapter','Документ использует главы')];
+    if(stageId==='layout')return [packageCheck('geometry','Поля задаются через geometry'),patternCheck('report:length','Геометрия использует явные единицы длины',/\\usepackage\[[^\]]*\d+(?:\.\d+)?\s*(?:mm|cm|in|pt)[^\]]*\]\{geometry\}/.test(main))];
+    if(stageId==='files')return [fileCheck(workspace,'chapters/system.tex'),fileCheck(workspace,'chapters/validation.tex'),inputTargetCheck(workspace,'chapters/system'),inputTargetCheck(workspace,'chapters/validation'),subfilesHaveNoDocumentClass(workspace)];
+    if(stageId==='headers')return [packageCheck('fancyhdr','Подключён fancyhdr'),command('pagestyle','Задан pagestyle')];
+    if(stageId==='appendix')return [command('appendix','Добавлен \\appendix'),patternCheck('report:appendix-structure','После appendix есть chapter или section',/\\appendix[\s\S]*?\\(?:chapter|section)\{/.test(all))];
+    if(stageId==='build')return [patternCheck('report:root-build','main.tex остаётся единственным root document',commandCount(main,'documentclass')===1),inputTargetCheck(workspace,'chapters/system'),inputTargetCheck(workspace,'chapters/validation')];
   }
+
+  if(projectId==='beamer-presentation'){
+    if(stageId==='frame')return [patternCheck('beamer:class','Корневой класс — beamer',/\\documentclass(?:\[[^\]]*\])?\{beamer\}/.test(main)),environment('frame','Создан первый frame')];
+    if(stageId==='structure')return [command('section','Презентация разделена на секции'),environment('frame','Есть несколько содержательных frames',2)];
+    if(stageId==='math')return [patternCheck('beamer:math','На слайде есть математическая формула',/(?:\$[^$\n]+\$|\\\[[\s\S]*?\\\])/.test(all))];
+    if(stageId==='figure')return [command('includegraphics','Результат подключён через \\includegraphics')];
+    if(stageId==='final')return [environment('frame','Сохранена последовательность нескольких frames',3)];
+  }
+
   return [];
 }
 
-function fileCheck(workspace:ProjectWorkspace,path:string):ProjectAssessmentItem{
-  return {id:`file:${path}`,kind:'stage',label:`Файл ${path} существует`,ok:path in workspace.files};
-}
-function containsCheck(path:string,workspace:ProjectWorkspace,value:string,label:string):ProjectAssessmentItem{
-  return {id:`contains:${path}:${value}`,kind:'stage',label,ok:(workspace.files[path]??'').includes(value)};
-}
+function patternCheck(id:string,label:string,ok:boolean,detail?:string):ProjectAssessmentItem{return {id,kind:'stage',label,ok,detail};}
+function fileCheck(workspace:ProjectWorkspace,path:string):ProjectAssessmentItem{return patternCheck(`file:${path}`,`Файл ${path} существует`,path in workspace.files);}
+function containsCheck(path:string,workspace:ProjectWorkspace,value:string,label:string):ProjectAssessmentItem{return patternCheck(`contains:${path}:${value}`,label,(workspace.files[path]??'').includes(value));}
 function inputTargetCheck(workspace:ProjectWorkspace,target:string):ProjectAssessmentItem{
   const source=workspace.files[workspace.mainFile]??'';
-  const pattern=new RegExp(`\\\\(?:input|include)\\{${escapeRegExp(target)}\\}`);
-  return {id:`input:${target}`,kind:'stage',label:`main.tex подключает ${target}.tex`,ok:pattern.test(source)};
+  const ok=source.includes(`\\input{${target}}`)||source.includes(`\\include{${target}}`);
+  return patternCheck(`input:${target}`,`main.tex подключает ${target}.tex`,ok);
 }
 function subfilesHaveNoDocumentClass(workspace:ProjectWorkspace):ProjectAssessmentItem{
   const offenders=Object.entries(workspace.files).filter(([path,content])=>path!==workspace.mainFile&&path.endsWith('.tex')&&/\\documentclass(?:\[[^\]]*\])?\{/.test(content)).map(([path])=>path);
   return {id:'subfile-root',kind:'integrity',label:'Подключаемые .tex-файлы не создают второй document root',ok:offenders.length===0,detail:offenders.length?`Уберите \\documentclass из: ${offenders.join(', ')}`:undefined};
 }
+function commandCount(source:string,name:string){return [...source.matchAll(new RegExp(`\\\\${name}\\b`,'g'))].length;}
+function environmentCount(source:string,name:string){return [...source.matchAll(new RegExp(`\\\\begin\\{${name}\\}`,'g'))].length;}
 
 function findUnresolvedInputs(workspace:ProjectWorkspace){
   const missing=new Set<string>();
@@ -186,4 +231,3 @@ function resolveTexPath(sourcePath:string,target:string){
   for(const part of parts){if(!part||part==='.')continue;if(part==='..')normalized.pop();else normalized.push(part);}
   return normalized.join('/');
 }
-function escapeRegExp(value:string){return value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
