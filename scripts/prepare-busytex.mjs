@@ -20,8 +20,11 @@ const EXPECTED_SHA256 = {
   'texlive-basic.js': '06a7878bb0ddd650df05ac66b4872c8a37d309617ce052c7b8184042e355eaa9',
   'texlive-basic.data': 'fa1d51b0ed1a65548232e60f9bdc3eeb3ed96bcf87250c43f2843dc64337cead',
   'ubuntu-texlive-latex-recommended.js': '02882e14e587390c9c03bdb9df34a78512731f01c7652e5d81deb04d0124bfa2',
+  'ubuntu-texlive-latex-recommended.data': 'a6ea762272218d9b4ae8fe937c379a9d7a4f656fd4fde2ac2ff95f1e69e6fd23',
   'ubuntu-texlive-latex-extra.js': '23aa09244b374c44b71e841eec9b97f22363ac5bec69c465b7f1b65253831f9f',
-  'ubuntu-texlive-science.js': '3e4fccb122c66bb80fbc82ab8f0b5a911106a141f48d9f2093630dbcf35ae304'
+  'ubuntu-texlive-latex-extra.data': '8e3581093015af2ffdbe77cee4c0aefa8d0e2a86b8e22eeb2d9fe4108c6260ee',
+  'ubuntu-texlive-science.js': '3e4fccb122c66bb80fbc82ab8f0b5a911106a141f48d9f2093630dbcf35ae304',
+  'ubuntu-texlive-science.data': '3aab1ad9e93df5bd864ed3c9b66cf43fbfee650455bc7eaeac8374b196c896b8'
 };
 
 const shared = [
@@ -56,11 +59,14 @@ async function sha256(filePath) {
 async function verify(file, target) {
   const digest = await sha256(target);
   const expected = EXPECTED_SHA256[file];
-  if (expected && digest !== expected) {
+  if (!expected) {
+    throw new Error(`BusyTeX asset ${file} is missing from the reviewed SHA-256 manifest`);
+  }
+  if (digest !== expected) {
     throw new Error(`BusyTeX asset ${file} SHA-256 mismatch: expected ${expected}, got ${digest}`);
   }
   const size = (await stat(target)).size;
-  console.log(`BUSYTEX_ASSET ${file} ${size} sha256=${digest}${expected ? ' verified' : ' UNPINNED'}`);
+  console.log(`BUSYTEX_ASSET ${file} ${size} sha256=${digest} verified`);
 }
 
 async function download(file) {
