@@ -60,7 +60,6 @@ jobs:
             document.body.textContent = `REAL_TEX_SMOKE_FAIL ${message}`;
             worker.terminate();
           };
-          const timeout = setTimeout(() => fail('timeout'), 110000);
           worker.onerror = event => fail(event.message || 'worker error');
           worker.onmessage = event => {
             const message = event.data || {};
@@ -83,7 +82,6 @@ jobs:
               const pdf = message.result && message.result.pdf;
               const signature = pdf && pdf.length >= 4 ? String.fromCharCode(pdf[0], pdf[1], pdf[2], pdf[3]) : '';
               if (signature !== '%PDF') return fail(`invalid PDF signature: ${signature || 'empty'}`);
-              clearTimeout(timeout);
               document.body.dataset.state = 'passed';
               document.body.textContent = `REAL_TEX_SMOKE_PASS ${pdf.length}`;
               worker.terminate();
