@@ -6,7 +6,7 @@ type Settings={textSize:'small'|'medium'|'large';wordWrap:boolean;autoClose:bool
 type ProjectProgress=Record<string,string[]>;
 type AttemptEvidence=Partial<Omit<MasteryEvidence,'outcome'>>;
 export type OnboardingExperience='new'|'basic'|'regular'|'advanced';
-export type OnboardingProfile={goals:string[];experience:OnboardingExperience|null;placementScore:number|null;placementTotal:number;recommendedLessonId:string|null;completedAt:string|null};
+export type OnboardingProfile={goals:string[];experience:OnboardingExperience|null;placementScore:number|null;placementTotal:number;placementEvidence:Record<string,boolean>;recommendedLessonId:string|null;completedAt:string|null};
 
 type AppState={
   version:number;
@@ -45,7 +45,7 @@ type AppState={
 };
 
 const defaultSettings:Settings={textSize:'medium',wordWrap:true,autoClose:true,lineNumbers:true};
-const defaultOnboarding:OnboardingProfile={goals:[],experience:null,placementScore:null,placementTotal:0,recommendedLessonId:null,completedAt:null};
+const defaultOnboarding:OnboardingProfile={goals:[],experience:null,placementScore:null,placementTotal:0,placementEvidence:{},recommendedLessonId:null,completedAt:null};
 const pad2=(value:number)=>String(value).padStart(2,'0');
 const today=()=>{const date=new Date();return `${date.getFullYear()}-${pad2(date.getMonth()+1)}-${pad2(date.getDate())}`;};
 const localDate=(value:string)=>{const [year,month,day]=value.split('-').map(Number);return new Date(year,month-1,day,12);};
@@ -132,8 +132,17 @@ export const useAppStore=create<AppState>()(persist((set)=>({
   onboarded:false,onboarding:defaultOnboarding,
   completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null},settings:defaultSettings,
   setOnboarded:()=>set({onboarded:true}),
-  completeOnboarding:(profile)=>set({onboarded:true,onboarding:{...profile,completedAt:new Date().toISOString()},currentLessonId:profile.recommendedLessonId??'what-is-latex'}),
-  retakeOnboarding:()=>set({onboarded:false,onboarding:{...defaultOnboarding}}),
+  completeOnboarding:(profile)=>set(state=>{
+    const conceptMastery={...state.conceptMastery};
+    const conceptScores={...state.conceptScores};
+    const now=new Date();
+    for(const [conceptId,correct] of Object.entries(profile.placementEvidence)){
+      conceptMastery[conceptId]=updateConceptMastery(conceptMastery[conceptId],correct,now,{independence:'independent',context:'placement',realCompile:false});
+      conceptScores[conceptId]=(conceptScores[conceptId]??0)+(correct?1:-1);
+    }
+    return {onboarded:true,onboarding:{...profile,completedAt:now.toISOString()},currentLessonId:profile.recommendedLessonId??'what-is-latex',conceptMastery,conceptScores};
+  }),
+  retakeOnboarding:()=>set({onboarded:false,onboarding:{...defaultOnboarding,placementEvidence:{}}}),
   setCurrentLesson:(id)=>set({currentLessonId:id}),
   completeLesson:(id,title)=>set(state=>({completedLessons:unique(state.completedLessons,id),currentLessonId:id,history:[historyItem(`Пройден урок «${title}»`,'lesson'),...state.history].slice(0,100),streak:nextStreak(state.streak)})),
   recordExerciseAttempt:(exerciseId,ok,concepts,title,evidence)=>set(state=>{
@@ -180,14 +189,16 @@ export const useAppStore=create<AppState>()(persist((set)=>({
       return {ok:true,message:'Прогресс импортирован.'};
     }catch{return {ok:false,message:'Файл прогресса имеет неверный формат.'};}
   },
-  resetProgress:()=>set({onboarded:false,onboarding:{...defaultOnboarding},completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null}})
+  resetProgress:()=>set({onboarded:false,onboarding:{...defaultOnboarding,placementEvidence:{}},completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null}})
 }),{
   name:'latex-gym-state',version:3,storage:createJSONStorage(()=>localStorage),
   migrate:(persisted,version)=>{
     const state=(persisted??{}) as Record<string,unknown>;
     const rawMastery=(state.conceptMastery??{}) as Record<string,Partial<ConceptMastery>>;
     const conceptMastery=Object.fromEntries(Object.entries(rawMastery).map(([id,value])=>[id,normalizeMastery(value)]));
-    return {...state,version:3,onboarding:state.onboarding??{...defaultOnboarding},completedProjectStages:state.completedProjectStages??{},solutionReveals:state.solutionReveals??{},conceptMastery} as unknown as AppState;
+    const oldOnboarding=(state.onboarding??{}) as Partial<OnboardingProfile>;
+    const onboarding:OnboardingProfile={...defaultOnboarding,...oldOnboarding,goals:Array.isArray(oldOnboarding.goals)?oldOnboarding.goals:[],placementEvidence:oldOnboarding.placementEvidence??{}};
+    return {...state,version:3,onboarding,completedProjectStages:state.completedProjectStages??{},solutionReveals:state.solutionReveals??{},conceptMastery} as unknown as AppState;
   }
 }));
 
