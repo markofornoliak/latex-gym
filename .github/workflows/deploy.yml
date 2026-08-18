@@ -177,6 +177,12 @@ jobs:
           capture tv-2560-debug /lesson/debug-alignment-tab 2560 1440 'Extra alignment tab'
           capture tv-3840-project /project/technical-report/build 3840 2160 'Сборка'
 
+          # Project QA protects the applied-workflow surface, not only the route heading.
+          grep -Fq 'ФАЙЛЫ' /tmp/desktop-1920-project.html
+          grep -Fq 'sections/introduction.tex' /tmp/desktop-1920-project.html
+          grep -Fq 'chapters/system.tex' /tmp/tv-3840-project.html
+          grep -Fq 'Проверить этап' /tmp/tv-3840-project.html
+
           # A second load of the same deep route exercises reload/direct-route behavior.
           "$CHROME" --headless --no-sandbox --disable-gpu --virtual-time-budget=1600 \
             --dump-dom 'http://127.0.0.1:4173/latex-gym/#/lesson/what-is-latex' > /tmp/reload.html 2>/tmp/reload.browser.log
