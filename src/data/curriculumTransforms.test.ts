@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cloneCurriculumDraft, type CurriculumDraft } from './curriculumDraft';
 import { applyDebuggingTrack } from './debuggingTrackTransform';
+import { applyEditorialEnhancements } from './editorialEnhancements';
 import { applyExplanationElaboration } from './explanationElaboration';
 import { normalizeCurriculumDraft } from './curriculumNormalize';
 import type { ConceptDefinition, CourseModule, Exercise, Lesson, ReferenceEntry } from '../types';
@@ -19,6 +20,14 @@ function fixture():CurriculumDraft{
   return {modules:[module],lessons:[lesson],exercises:[exercise],references:[reference]};
 }
 
+function editorialFixture():CurriculumDraft{
+  const exercise:Exercise={id:'e01',lessonId:'document-structure',category:'Основы',difficulty:'Начальный',mode:'Написать код',title:'До редакции',instructions:'До редакции',requirements:[],starterCode:'old',validators:[],hints:[],solution:'old',concepts:[]};
+  const lesson:Lesson={id:'document-structure',moduleId:'basics',number:1,title:'Структура',subtitle:'До редакции',difficulty:'Начальный',theory:[{id:'t1',title:'A',body:'A'},{id:'t2',title:'B',body:'B'}],examples:[],exercises:[exercise],relatedCommands:[]};
+  const module:CourseModule={id:'basics',number:1,title:'Основы',description:'Fixture',prerequisites:'Нет',difficulty:'Начальный',lessons:[lesson]};
+  const reference:ReferenceEntry={id:'frac',command:'\\frac',category:'Математика',aliases:[],title:'Дробь',description:'До редакции',syntax:'\\frac{a}{b}',example:'$\\frac{a}{b}$',related:[]};
+  return {modules:[module],lessons:[lesson],exercises:[exercise],references:[reference]};
+}
+
 const concepts:ConceptDefinition[]=[
   {id:'math-mode',title:'Математический режим',description:'Math',prerequisites:[]},
   {id:'fraction',title:'Дробь',description:'Fraction',prerequisites:['math-mode']}
@@ -32,6 +41,20 @@ describe('curriculum construction transforms',()=>{
     expect(cloned.modules[0].lessons[0]).toBe(cloned.lessons[0]);
     expect(cloned.lessons[0].exercises[0]).toBe(cloned.exercises[0]);
     expect(cloned.lessons[0]).not.toBe(input.lessons[0]);
+  });
+
+  it('applies editorial refinements on a copy before later enrichment',()=>{
+    const input=editorialFixture();
+    const before=JSON.stringify(input);
+    const output=applyEditorialEnhancements(input);
+    expect(JSON.stringify(input)).toBe(before);
+    expect(output.lessons[0].subtitle).toBe('Каждый документ на LaTeX имеет определённую структуру.');
+    expect(output.lessons[0].theory).toHaveLength(3);
+    expect(output.exercises[0].title).toBe('Заголовок и абзац');
+    expect(output.exercises[0].solution).toContain('\\section{Заголовок}');
+    expect(output.references[0].description).toContain('числитель над знаменателем');
+    expect(output.modules[0].lessons[0]).toBe(output.lessons[0]);
+    expect(output.lessons[0].exercises[0]).toBe(output.exercises[0]);
   });
 
   it('adds the debugging track on a copy with stable IDs and shared identities',()=>{
