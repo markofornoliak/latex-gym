@@ -4,11 +4,17 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "curriculum:generate": "node scripts/generate-curriculum-transforms.mjs",
+    "prepare": "npm run curriculum:generate",
+    "predev": "npm run curriculum:generate",
     "dev": "vite",
     "curriculum:check": "vitest run src/services/curriculumLinter.test.ts",
+    "prebuild": "npm run curriculum:generate",
     "build": "npm run curriculum:check && tsc -b && vite build",
     "preview": "vite preview",
+    "pretypecheck": "npm run curriculum:generate",
     "typecheck": "tsc -b --pretty false",
+    "pretest": "npm run curriculum:generate",
     "test": "vitest run"
   },
   "dependencies": {
