@@ -89,10 +89,15 @@ export function projectWorkspaceToCompilerProject(workspace:ProjectWorkspace):Co
   return {mainFile:workspace.mainFile,files};
 }
 
-export function validateProjectStage(stage:LearningProjectStage,workspace:ProjectWorkspace,compileResult:CompileResult|null,compiledRevision:number|null):ProjectStageValidation{
+export function validateProjectStage(stage:LearningProjectStage,workspace:ProjectWorkspace,compileResult:CompileResult|null,compiledRevision:number|null,previousStages:LearningProjectStage[]=[]):ProjectStageValidation{
   const mainSource=workspace.files[workspace.mainFile]??'';
   const sourceValidation=validateSourceRules(stage.validators??[],mainSource,compileResult??undefined,false);
   const projectItems=(stage.projectCriteria??[]).map(criterion=>validateProjectCriterion(criterion,workspace));
+  const inheritedFailures=previousStages.flatMap(previous=>{
+    const sourceItems=validateSourceRules(previous.validators??[],mainSource,compileResult??undefined,false).items;
+    const treeItems=(previous.projectCriteria??[]).map(criterion=>validateProjectCriterion(criterion,workspace));
+    return [...sourceItems,...treeItems].filter(item=>!item.ok).map(item=>({...item,message:`Нарушено из «${previous.title}»: ${item.message}`}));
+  });
   const currentBuild=Boolean(compileResult&&compiledRevision===workspace.revision);
   const realCompile=Boolean(currentBuild&&compileResult?.ok&&compileResult.pdf?.length&&!compileResult.fallbackReason);
   const compileItem:ValidationItem={
@@ -104,7 +109,7 @@ export function validateProjectStage(stage:LearningProjectStage,workspace:Projec
   const linksItem:ValidationItem|undefined=referenceWarnings.length?{
     ok:false,message:'В проекте остались неразрешённые ссылки или цитаты.',hint:'Исправьте ключи label/ref/cite и выполните повторную сборку.'
   }:undefined;
-  const items=[...sourceValidation.items,...projectItems,compileItem,...(linksItem?[linksItem]:[])];
+  const items=[...sourceValidation.items,...projectItems,...inheritedFailures,compileItem,...(linksItem?[linksItem]:[])];
   return {ok:items.every(item=>item.ok),items,compileVerified:realCompile,realCompile};
 }
 
