@@ -36,11 +36,12 @@ export function buildDailyWorkout(
     }
   };
 
-  // Deliberate mixture: retrieval after delay first, then underexposed knowledge,
-  // then one task that requires diagnosis or transfer rather than repetition.
+  // Reserve the cognitive roles before filling the remaining slots. Otherwise a
+  // fresh debugging exercise can be consumed as merely "new" and the workout
+  // silently loses diagnostic practice.
   take('review',2,exercise=>isDue(exercise,mastery,now));
-  take('new',2,exercise=>isNew(exercise,mastery));
   take('debugging',1,isDebuggingExercise);
+  take('new',2,exercise=>isNew(exercise,mastery));
   if(selected.length<5)take('transfer',1,isTransferExercise);
   if(selected.length<5)take('weak',5,exercise=>isWeak(exercise,mastery));
   for(const exercise of ranked){if(selected.length>=5)break;add(exercise,classifyFallback(exercise,mastery,now));}
