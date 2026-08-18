@@ -10,8 +10,6 @@ const normalizeConceptText=(value:string)=>value.toLocaleLowerCase('ru-RU').repl
 
 function countCommand(source:string,name:string){
   const escaped=escapeRegExp(name);
-  // A TeX control word ends at the first non-letter token. That includes
-  // argument delimiters, whitespace, stars, subscripts and superscripts.
   return (withoutComments(source).match(new RegExp(`\\\\${escaped}(?=[^A-Za-z@]|$)`, 'g'))??[]).length;
 }
 function hasEnvironment(source:string,name:string){
@@ -70,10 +68,14 @@ function firstLineContaining(source:string,value:string){
   return index>=0?index+1:undefined;
 }
 
+export function validateSourceRules(rules:ValidatorRule[],source:string,compileResult?:CompileResult,conceptualAnswer=false):ValidationResult{
+  const items=rules.map(rule=>validateRule(rule,source,compileResult,conceptualAnswer));
+  return {ok:items.every(item=>item.ok),items};
+}
+
 export function validateExercise(exercise:Exercise,source:string,compileResult?:CompileResult):ValidationResult{
   const conceptualAnswer=!compileResult&&(exercise.mode==='Объяснить'||exercise.mode==='Архитектура');
-  const items=exercise.validators.map(rule=>validateRule(rule,source,compileResult,conceptualAnswer));
-  return {ok:items.every(item=>item.ok),items};
+  return validateSourceRules(exercise.validators,source,compileResult,conceptualAnswer);
 }
 
 function validateRule(rule:ValidatorRule,source:string,compileResult?:CompileResult,conceptualAnswer=false):ValidationItem{
