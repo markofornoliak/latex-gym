@@ -94,18 +94,18 @@ export function validateProjectStage(stage:LearningProjectStage,workspace:Projec
   const sourceValidation=validateSourceRules(stage.validators??[],mainSource,compileResult??undefined,false);
   const projectItems=(stage.projectCriteria??[]).map(criterion=>validateProjectCriterion(criterion,workspace));
   const currentBuild=Boolean(compileResult&&compiledRevision===workspace.revision);
-  const compileOk=Boolean(currentBuild&&compileResult?.ok);
+  const realCompile=Boolean(currentBuild&&compileResult?.ok&&compileResult.pdf?.length&&!compileResult.fallbackReason);
   const compileItem:ValidationItem={
-    ok:compileOk,
-    message:compileOk?'Текущая версия проекта собирается.':'Соберите текущую версию проекта без фатальных ошибок.',
-    hint:currentBuild?'Исправьте первую содержательную ошибку TeX и соберите снова.':'После последнего изменения проект нужно собрать заново.'
+    ok:realCompile,
+    message:realCompile?'Текущая revision подтверждена реальным TeX/PDF.':'Соберите текущую revision реальным TeX-движком.',
+    hint:!currentBuild?'После последнего изменения проект нужно собрать заново.':compileResult?.fallbackReason?'Учебный предпросмотр сохраняет работу, но не подтверждает applied mastery проекта.':compileResult?.ok?'Нужен реальный PDF, а не только учебный preview.':'Исправьте первую содержательную ошибку TeX и соберите снова.'
   };
-  const referenceWarnings=compileResult?.diagnostics.filter(item=>item.severity==='warning'&&/(undefined references?|reference .* undefined|citation .* undefined|multiply defined labels?)/i.test(`${item.message} ${item.originalCompilerMessage??''}`))??[];
-  const linksItem:ValidationItem|undefined=currentBuild&&referenceWarnings.length?{
+  const referenceWarnings=currentBuild?compileResult?.diagnostics.filter(item=>item.severity==='warning'&&/(undefined references?|reference .* undefined|citation .* undefined|multiply defined labels?)/i.test(`${item.message} ${item.originalCompilerMessage??''}`))??[]:[];
+  const linksItem:ValidationItem|undefined=referenceWarnings.length?{
     ok:false,message:'В проекте остались неразрешённые ссылки или цитаты.',hint:'Исправьте ключи label/ref/cite и выполните повторную сборку.'
   }:undefined;
   const items=[...sourceValidation.items,...projectItems,compileItem,...(linksItem?[linksItem]:[])];
-  return {ok:items.every(item=>item.ok),items,compileVerified:compileOk,realCompile:Boolean(compileOk&&compileResult?.pdf?.length&&!compileResult?.fallbackReason)};
+  return {ok:items.every(item=>item.ok),items,compileVerified:realCompile,realCompile};
 }
 
 function validateProjectCriterion(criterion:ProjectStageCriterion,workspace:ProjectWorkspace):ValidationItem{
