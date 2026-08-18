@@ -110,6 +110,12 @@ export type Diagnostic = {
   explanation: string;
   suggestion?: string;
   column?: number;
+  from?: number;
+  to?: number;
+  source?: 'tex' | 'latex-gym' | 'validator';
+  relatedConcept?: string;
+  possibleFix?: string;
+  originalCompilerMessage?: string;
 };
 
 export type PreviewBlock =
@@ -121,15 +127,59 @@ export type PreviewBlock =
   | { type: 'table'; rows: string[][] }
   | { type: 'notice'; text: string };
 
+export type CompilerEngine = 'educational-preview' | 'pdflatex' | 'xelatex' | 'lualatex';
+export type CompilerPhase = 'ready' | 'queued' | 'initializing' | 'compiling' | 'resolving-references' | 'running-bibliography' | 'recompiling' | 'success' | 'warning' | 'error';
+export type CompilationState = CompilerPhase;
+
+export type CompilerCapabilities = {
+  realPdf:boolean;
+  engines:Array<Exclude<CompilerEngine,'educational-preview'>>;
+  multiFile:boolean;
+  bibtex:boolean;
+  biber:boolean;
+  multiplePasses:boolean;
+  synctex:boolean;
+  shellEscape:boolean;
+  offline:boolean;
+};
+
+export type CompilerProjectFile = {
+  path:string;
+  content:string | Uint8Array;
+};
+
+export type CompilerProject = {
+  mainFile:string;
+  files:CompilerProjectFile[];
+};
+
+export type CompilerArtifact = {
+  name:string;
+  type:'pdf'|'log'|'auxiliary'|'synctex';
+  bytes?:Uint8Array;
+  text?:string;
+};
+
 export type CompileResult = {
   ok: boolean;
   diagnostics: Diagnostic[];
   blocks: PreviewBlock[];
   elapsedMs: number;
-  engine: 'educational-preview' | 'wasm-tex';
+  engine: CompilerEngine;
+  providerId?: string;
+  pdf?: Uint8Array;
+  rawLog?: string;
+  artifacts?: CompilerArtifact[];
+  capabilities?: CompilerCapabilities;
+  fallbackReason?: string;
 };
 
-export type CompilationState = 'ready'|'queued'|'compiling'|'success'|'warning'|'error';
+export type CompileOptions = {
+  engine?: Exclude<CompilerEngine,'educational-preview'>;
+  bibliography?: 'auto'|'none'|'bibtex';
+  rerun?: boolean;
+  onPhase?: (phase:CompilerPhase)=>void;
+};
 
 export type ReferenceEntry = {
   id: string;
