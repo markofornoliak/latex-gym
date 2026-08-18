@@ -18,7 +18,7 @@ const css=stats.find(file=>/^index-[\w-]+\.css$/.test(file.name));
 const js=stats.filter(file=>file.name.endsWith('.js'));
 const largestLazy=js.filter(file=>file!==initial).sort((a,b)=>b.raw-a.raw)[0];
 
-check(initial,'initial JS',450*1024,130*1024);
+check(initial,'initial JS',320*1024,95*1024);
 if(largestLazy)check(largestLazy,'largest lazy JS',420*1024,130*1024);
 if(css)check(css,'application CSS',120*1024,25*1024);
 
