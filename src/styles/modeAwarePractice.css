@@ -1,0 +1,78 @@
+.practice-mode{display:block;margin-top:16px;color:var(--secondary);font-size:10px;letter-spacing:.07em;text-transform:uppercase}
+.hint-area--mobile{display:none}
+
+/* Conceptual work is prose, not source code. */
+.concept-answer-workspace{height:100%;display:flex;flex-direction:column;gap:20px;max-width:820px;margin:0 auto;padding:4px 0 18px}
+.concept-answer-heading{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;border-bottom:1px solid var(--soft-border);padding-bottom:16px}
+.concept-answer-heading h2{font-size:25px;margin:5px 0 0;color:var(--navy)}
+.concept-answer-heading>span{color:var(--muted);font-size:10px;white-space:nowrap;padding-top:5px}
+.concept-prompt{border-left:2px solid var(--navy);padding:2px 0 2px 14px}
+.concept-prompt>span,.concept-answer-field>span,.concept-answer-readback>span{display:block;color:var(--secondary);font-size:10px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px}
+.concept-prompt pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--navy);font:12px/1.65 var(--font-mono)}
+.concept-answer-field{display:block;flex:1}
+.concept-answer-field textarea{display:block;width:100%;min-height:230px;resize:vertical;border:1px solid var(--border);border-radius:3px;background:var(--surface);padding:16px 17px;color:var(--text);font:15px/1.7 var(--font-ui)}
+.concept-answer-field textarea:focus-visible{outline:2px solid #335a87;outline-offset:2px;border-color:#8ba0b8}
+.concept-answer-field textarea::placeholder{color:var(--muted)}
+.concept-answer-help{margin:0;color:var(--secondary);font-size:11px;line-height:1.6}
+.concept-review-panel{display:grid;gap:14px}
+.concept-answer-readback{border:1px solid var(--soft-border);background:var(--surface);padding:14px 16px}
+.concept-answer-readback p{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;color:var(--text);font-size:13px;line-height:1.65}
+.concept-check-empty{border-top:1px solid var(--soft-border);padding:16px 2px;color:var(--secondary)}
+.concept-check-empty strong{display:block;color:var(--navy);font-family:var(--serif);font-weight:500;font-size:15px}
+.concept-check-empty p{margin:6px 0 0;font-size:11px;line-height:1.6}
+
+/* Debugging keeps the real editor but makes the diagnostic method explicit. */
+.debug-method{border-top:1px solid var(--border);border-bottom:1px solid var(--soft-border);padding:14px 0;margin:18px 0 4px}
+.debug-method strong{font-family:var(--font-serif);font-size:14px;font-weight:500;color:var(--navy)}
+.debug-method ol{margin:8px 0 0;padding-left:19px;color:var(--secondary);font-size:10.5px;line-height:1.65}
+.debug-signal{border-left:3px solid #66758a;background:var(--surface);padding:12px 14px;margin-bottom:12px}
+.debug-signal>span{display:block;color:var(--muted);font:9px/1.4 var(--font-mono);letter-spacing:.08em;margin-bottom:7px}
+.debug-signal code{display:block;white-space:pre-wrap;overflow-wrap:anywhere;padding:8px 9px;margin-bottom:9px;background:rgba(6,26,58,.035);font:10.5px/1.5 var(--font-mono);color:var(--text)}
+.debug-signal strong{display:block;color:var(--navy);font-size:12px}
+.debug-signal p{margin:5px 0 0;color:var(--secondary);font-size:10.5px;line-height:1.55}
+.debug-signal--error{border-left-color:#8b2f2f}.debug-signal--warning{border-left-color:#9a6b16}.debug-signal--ok{border-left-color:var(--success)}
+
+/* Reproduce this document: target and learner output share one comparison surface. */
+.reconstruction-method{border-left:2px solid #8d98a7;padding-left:12px;color:var(--secondary);font-size:11px;line-height:1.6;margin:14px 0 0}
+.target-runtime-status{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 10px;padding:7px 1px;color:var(--secondary);font-size:10px}
+.target-runtime-status strong{color:var(--navy);font:10px/1.3 var(--font-mono);font-weight:500}
+.reconstruction-comparison{display:grid;gap:13px}
+.reconstruction-note{display:flex;flex-direction:column;gap:4px;padding-bottom:11px;border-bottom:1px solid var(--soft-border)}
+.reconstruction-note strong{color:var(--navy);font-size:11px}
+.reconstruction-note span{color:var(--secondary);font-size:10px;line-height:1.5}
+.reconstruction-grid{display:grid;gap:12px}
+.reconstruction-grid>section{min-width:0}
+.reconstruction-grid>section>header{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:7px}
+.reconstruction-grid>section>header span{color:var(--navy);font-size:9.5px;letter-spacing:.08em;font-weight:700}
+.reconstruction-grid>section>header small{color:var(--muted);font:9px/1.3 var(--font-mono)}
+.reconstruction-grid .result-frame{padding:10px;min-height:210px}
+.reconstruction-grid .pdf-frame{min-height:300px}
+.reconstruction-grid .compiler-log{display:none}
+
+@media(max-width:599px){
+  .hint-area--desktop{display:none}.hint-area--mobile{display:block}
+  .concept-answer-workspace{padding-top:3px;gap:16px}.concept-answer-heading h2{font-size:21px}.concept-answer-heading>span{display:none}
+  .concept-answer-field textarea{min-height:42vh;font-size:16px;padding:14px}
+  .debug-method{margin-top:14px}.debug-method ol{font-size:11px}
+  .reconstruction-grid{grid-template-columns:1fr}.reconstruction-grid .pdf-frame{min-height:48vh}
+}
+
+@media(min-width:600px) and (max-width:1023px){
+  .concept-answer-workspace{min-height:390px;padding:18px 0}.concept-answer-field textarea{min-height:260px}
+  .reconstruction-grid{grid-template-columns:1fr 1fr}.reconstruction-grid .pdf-frame{min-height:360px}
+}
+
+@media(min-width:1024px){
+  .practice-screen--concept-answer .editor-pane{display:flex!important;align-items:stretch}
+  .practice-screen--concept-answer .concept-answer-workspace{width:min(100%,760px)}
+  .practice-screen--reconstruction .result-pane{min-width:430px;max-width:780px;width:42%}
+  .reconstruction-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+@media(min-width:1920px){
+  .practice-screen--reconstruction .result-pane{min-width:650px;max-width:980px;width:43%}
+  .concept-answer-field textarea{font-size:17px;min-height:360px}
+  .reconstruction-grid .pdf-frame{min-height:410px}
+}
+
+@media(prefers-reduced-motion:reduce){.concept-answer-field textarea{scroll-behavior:auto}}
