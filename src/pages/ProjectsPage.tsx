@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
 import { ChevronIcon } from '../components/Icons';
-import { projects } from '../data/projects';
+import { curriculum } from '../data/curriculumRuntime';
 import { useAppStore } from '../store/useAppStore';
+
+const {projects}=curriculum;
 
 export function ProjectsPage(){
   const progress=useAppStore(state=>state.completedProjectStages);
