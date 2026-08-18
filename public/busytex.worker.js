@@ -4,9 +4,13 @@
  * BusyTeX source code is MIT licensed; release binaries contain TeX Live components
  * under their respective licenses. The runtime is loaded lazily and is not bundled
  * into the application shell.
+ *
+ * Keep this release pinned. A BusyTeX upgrade must be an explicit LaTeX Gym change
+ * followed by the real-PDF CI smoke test; never move production through /latest/.
  */
 
-const RELEASE_BASE = 'https://github.com/busytex/busytex/releases/latest/download';
+const BUSYTEX_RELEASE = 'build_native_ff0318af379bd80fb72b9b928d4744b5d9c9077d_12853073565_1';
+const RELEASE_BASE = `https://github.com/busytex/busytex/releases/download/${BUSYTEX_RELEASE}`;
 importScripts(`${RELEASE_BASE}/busytex_pipeline.js`);
 
 let pipeline = null;
