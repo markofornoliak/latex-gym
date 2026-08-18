@@ -24,7 +24,8 @@ function RealPdfPreview({result}:{result:CompileResult}){
   const [url,setUrl]=useState<string|null>(null);
   useEffect(()=>{
     if(!result.pdf?.length){setUrl(null);return;}
-    const objectUrl=URL.createObjectURL(new Blob([result.pdf],{type:'application/pdf'}));
+    const bytes=new Uint8Array(result.pdf);
+    const objectUrl=URL.createObjectURL(new Blob([bytes.buffer],{type:'application/pdf'}));
     setUrl(objectUrl);
     return()=>URL.revokeObjectURL(objectUrl);
   },[result.pdf]);
