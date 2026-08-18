@@ -6,6 +6,7 @@ export type ValidationResult = { ok:boolean; items:ValidationItem[] };
 const escapeRegExp=(value:string)=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 const withoutComments=(source:string)=>source.replace(/(^|[^\\])%.*$/gm,'$1');
 const normalizeGroupWhitespace=(source:string)=>source.replace(/[ \t]+}/g,'}');
+const normalizeConceptText=(value:string)=>value.toLocaleLowerCase('ru-RU').replace(/[—–]/g,'-').replace(/[^\p{L}\p{N}.@_+\\-]+/gu,' ').replace(/\s+/g,' ').trim();
 
 function countCommand(source:string,name:string){
   const escaped=escapeRegExp(name);
@@ -29,6 +30,19 @@ function hasDocumentClassOption(source:string,option:string){
 function hasStructuralText(source:string,value:string){
   if(source.includes(value))return true;
   return normalizeGroupWhitespace(source).includes(normalizeGroupWhitespace(value));
+}
+function hasConceptualText(source:string,value:string){
+  if(hasStructuralText(source,value))return true;
+  const required=value.split(/\s*→\s*/).map(normalizeConceptText).filter(Boolean);
+  if(required.length<2)return normalizeConceptText(source).includes(normalizeConceptText(value));
+  const answer=normalizeConceptText(source);
+  let cursor=0;
+  for(const part of required){
+    const index=answer.indexOf(part,cursor);
+    if(index<0)return false;
+    cursor=index+part.length;
+  }
+  return true;
 }
 function hasParagraph(source:string){
   const body=source.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/)?.[1]??source;
@@ -57,11 +71,12 @@ function firstLineContaining(source:string,value:string){
 }
 
 export function validateExercise(exercise:Exercise,source:string,compileResult?:CompileResult):ValidationResult{
-  const items=exercise.validators.map(rule=>validateRule(rule,source,compileResult));
+  const conceptualAnswer=!compileResult&&(exercise.mode==='Объяснить'||exercise.mode==='Архитектура');
+  const items=exercise.validators.map(rule=>validateRule(rule,source,compileResult,conceptualAnswer));
   return {ok:items.every(item=>item.ok),items};
 }
 
-function validateRule(rule:ValidatorRule,source:string,compileResult?:CompileResult):ValidationItem{
+function validateRule(rule:ValidatorRule,source:string,compileResult?:CompileResult,conceptualAnswer=false):ValidationItem{
   let ok=false;let line: number|undefined;
   switch(rule.type){
     case 'documentClass':ok=new RegExp(`\\\\documentclass(?:\\[[^\\]]*\\])?\\{${escapeRegExp(rule.value)}\\}`).test(withoutComments(source));break;
@@ -69,7 +84,7 @@ function validateRule(rule:ValidatorRule,source:string,compileResult?:CompileRes
     case 'environment':ok=hasEnvironment(source,rule.value);break;
     case 'command':ok=countCommand(source,rule.value)>=(rule.min??1);break;
     case 'package':ok=hasPackage(source,rule.value);break;
-    case 'containsText':ok=hasStructuralText(source,rule.value);line=firstLineContaining(source,rule.value);break;
+    case 'containsText':ok=conceptualAnswer?hasConceptualText(source,rule.value):hasStructuralText(source,rule.value);line=ok?undefined:firstLineContaining(source,rule.value);break;
     case 'forbiddenText':ok=!source.includes(rule.value);line=ok?undefined:firstLineContaining(source,rule.value);break;
     case 'regex':try{ok=new RegExp(rule.value,rule.flags).test(source);}catch{ok=false;}break;
     case 'paragraph':ok=hasParagraph(source);break;
@@ -81,4 +96,4 @@ function validateRule(rule:ValidatorRule,source:string,compileResult?:CompileRes
   return {ok,message:rule.message,hint:rule.hint,line};
 }
 
-export const validatorInternals={countCommand,hasEnvironment,hasPackage,hasDocumentClassOption,hasStructuralText,environmentsBalanced};
+export const validatorInternals={countCommand,hasEnvironment,hasPackage,hasDocumentClassOption,hasStructuralText,hasConceptualText,environmentsBalanced};

@@ -39,6 +39,17 @@ describe('semantic validation',()=>{
     expect(validatorInternals.hasStructuralText('$x=1, \\text{если } y=0$','\\text{если}')).toBe(true);
   });
 
+  it('accepts equivalent prose for an ordered conceptual pipeline',()=>{
+    const exercise:Exercise={id:'concept-order',lessonId:'foundation',category:'Основы',difficulty:'Начальный',mode:'Архитектура',title:'Pipeline',instructions:'Explain order.',requirements:['source → compiler → document'],starterCode:'document.pdf → source.tex → compiler',validators:[{type:'containsText',value:'source.tex → compiler → document.pdf',message:'Порядок верный.',hint:'Сначала source, затем compiler.'}],hints:[],solution:'source.tex → compiler → document.pdf',concepts:['compiler']};
+    expect(validateExercise(exercise,'Сначала source.tex поступает в compiler, после чего получается document.pdf.').ok).toBe(true);
+    expect(validateExercise(exercise,'Сначала document.pdf, затем compiler и source.tex.').ok).toBe(false);
+  });
+
+  it('does not loosen structural containsText checks when a compile result is present',()=>{
+    const exercise:Exercise={id:'code-order',lessonId:'foundation',category:'Основы',difficulty:'Начальный',mode:'Архитектура',title:'Pipeline source',instructions:'Write exact structure.',requirements:['ordered marker'],starterCode:'\\documentclass{article}',validators:[{type:'containsText',value:'PREAMBLE → BODY',message:'Граница есть.',hint:'Добавьте маркер.'}],hints:[],solution:'PREAMBLE → BODY',concepts:['preamble']};
+    expect(validateExercise(exercise,'PREAMBLE text BODY',compiled).ok).toBe(false);
+  });
+
   it('reports the approximate line for a failed forbidden-text rule',()=>{
     const exercise:Exercise={id:'synthetic',lessonId:'synthetic',category:'Отладка',difficulty:'Начальный',mode:'Рефакторинг',title:'No manual break',instructions:'Remove manual break.',requirements:['No \\\\'],starterCode:'First.\\\\\nSecond.',validators:[{type:'forbiddenText',value:'\\\\',message:'Ручной перенос удалён.',hint:'Используйте пустую строку.'}],hints:[],solution:'First.\n\nSecond.',concepts:['paragraph']};
     const result=validateExercise(exercise,'First.\nSecond.\\\\',compiled);
