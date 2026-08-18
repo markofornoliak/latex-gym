@@ -18,7 +18,7 @@
 .concept-answer-readback{border:1px solid var(--soft-border);background:var(--surface);padding:14px 16px}
 .concept-answer-readback p{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;color:var(--text);font-size:13px;line-height:1.65}
 .concept-check-empty{border-top:1px solid var(--soft-border);padding:16px 2px;color:var(--secondary)}
-.concept-check-empty strong{display:block;color:var(--navy);font-family:var(--serif);font-weight:500;font-size:15px}
+.concept-check-empty strong{display:block;color:var(--navy);font-family:var(--font-serif);font-weight:500;font-size:15px}
 .concept-check-empty p{margin:6px 0 0;font-size:11px;line-height:1.6}
 
 /* Debugging keeps the real editor but makes the diagnostic method explicit. */
