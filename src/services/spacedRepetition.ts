@@ -36,9 +36,6 @@ export function buildDailyWorkout(
     }
   };
 
-  // Reserve the cognitive roles before filling the remaining slots. Otherwise a
-  // fresh debugging exercise can be consumed as merely "new" and the workout
-  // silently loses diagnostic practice.
   take('review',2,exercise=>isDue(exercise,mastery,now));
   take('debugging',1,isDebuggingExercise);
   take('new',2,exercise=>isNew(exercise,mastery));
@@ -100,6 +97,6 @@ function reasonText(exercise:Exercise,reason:WorkoutReason,mastery:Record<string
   if(reason==='weak')return 'Недавние ошибки или низкая устойчивость требуют ещё одного подхода.';
   if(reason==='debugging')return 'Тренировка чтения ошибок и поиска первопричины.';
   if(reason==='transfer')return 'Применение знакомых конструкций в другом контексте.';
-  return 'Концепт ещё почти не имеет практического evidence.';
+  return 'По этому концепту пока мало самостоятельной практики.';
 }
 function seeded(id:string,seed:number){let value=seed;for(const char of id)value=(value*33+char.charCodeAt(0))>>>0;return value;}
