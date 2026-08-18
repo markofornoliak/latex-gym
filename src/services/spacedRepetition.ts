@@ -4,7 +4,7 @@ export type WorkoutReason='review'|'new'|'weak'|'debugging'|'transfer';
 export type DailyWorkoutItem={exercise:Exercise;reason:WorkoutReason;explanation:string};
 
 export function buildDailyWorkout(
-  exercises:Exercise[],
+  exercises:readonly Exercise[],
   conceptScores:Record<string,number>,
   completedLessonIds:string[],
   daySeed=new Date().toISOString().slice(0,10),
@@ -46,7 +46,7 @@ export function buildDailyWorkout(
 }
 
 export function selectDailyTraining(
-  exercises:Exercise[],
+  exercises:readonly Exercise[],
   conceptScores:Record<string,number>,
   completedLessonIds:string[],
   daySeed=new Date().toISOString().slice(0,10),
@@ -78,25 +78,27 @@ function isDue(exercise:Exercise,mastery:Record<string,ConceptMastery>,now:numbe
 }
 function isNew(exercise:Exercise,mastery:Record<string,ConceptMastery>){return exercise.concepts.some(id=>!mastery[id]||mastery[id].attempts===0);}
 function isWeak(exercise:Exercise,mastery:Record<string,ConceptMastery>){return exercise.concepts.some(id=>{const state=mastery[id];return Boolean(state&&(state.score<.62||(state.attempts>1&&state.mistakeCount/state.attempts>.34)));});}
-function isDebuggingExercise(exercise:Exercise){return exercise.category==='Отладка'||exercise.mode==='Исправить ошибку'||exercise.mode==='Найти ошибку';}
-function isTransferExercise(exercise:Exercise){return exercise.mode==='Рефакторинг'||exercise.mode==='Воссоздать результат'||exercise.mode==='Архитектура'||exercise.mode==='Собрать документ';}
+function isDebuggingExercise(exercise:Exercise){return exercise.category==='Отладка'||exercise.concepts.some(id=>id==='debugging'||id==='compile-error')||exercise.mode==='Отладка';}
+function isTransferExercise(exercise:Exercise){return exercise.mode==='Воссоздать результат'||exercise.mode==='Архитектура'||exercise.mode==='Рефакторинг'||exercise.difficulty==='Экспертный';}
 function classifyFallback(exercise:Exercise,mastery:Record<string,ConceptMastery>,now:number):WorkoutReason{
   if(isDue(exercise,mastery,now))return 'review';
-  if(isWeak(exercise,mastery))return 'weak';
   if(isDebuggingExercise(exercise))return 'debugging';
   if(isTransferExercise(exercise))return 'transfer';
+  if(isWeak(exercise,mastery))return 'weak';
   return 'new';
 }
 function reasonText(exercise:Exercise,reason:WorkoutReason,mastery:Record<string,ConceptMastery>,now:number){
+  if(reason==='debugging')return 'Диагностическая задача: чтение сигнала компилятора и исправление первопричины.';
+  if(reason==='transfer')return 'Перенос: примените знакомые понятия в другом формате задачи.';
+  const states=exercise.concepts.map(id=>({id,state:mastery[id]})).filter(item=>item.state);
   if(reason==='review'){
-    const overdue=exercise.concepts.map(id=>mastery[id]).filter(Boolean).filter(state=>state.nextReview&&new Date(state.nextReview).getTime()<=now);
-    const oldest=overdue.sort((a,b)=>new Date(a.nextReview!).getTime()-new Date(b.nextReview!).getTime())[0];
-    const days=oldest?.nextReview?Math.max(0,Math.floor((now-new Date(oldest.nextReview).getTime())/86400000)):0;
-    return days>0?`Повторение просрочено на ${days} дн.`:'Знание снова пора извлечь из памяти.';
+    const due=states.find(item=>item.state!.nextReview&&new Date(item.state!.nextReview!).getTime()<=now);
+    return due?`Пора извлечь из памяти: ${due.id}.`:'Пора повторить изученный материал.';
   }
-  if(reason==='weak')return 'Недавние ошибки или низкая устойчивость требуют ещё одного подхода.';
-  if(reason==='debugging')return 'Тренировка чтения ошибок и поиска первопричины.';
-  if(reason==='transfer')return 'Применение знакомых конструкций в другом контексте.';
-  return 'По этому концепту пока мало самостоятельной практики.';
+  if(reason==='weak'){
+    const weak=[...states].sort((a,b)=>a.state!.score-b.state!.score)[0];
+    return weak?`Укрепление нестабильного понятия: ${weak.id}.`:'Нужна дополнительная самостоятельная практика.';
+  }
+  return 'Новое или ещё не подтверждённое практикой понятие.';
 }
-function seeded(id:string,seed:number){let value=seed;for(const char of id)value=(value*33+char.charCodeAt(0))>>>0;return value;}
+function seeded(id:string,seed:number){return [...id].reduce((value,char)=>((value*33)^char.charCodeAt(0))>>>0,seed);}
