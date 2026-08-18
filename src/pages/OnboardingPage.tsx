@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wordmark } from '../components/Wordmark';
-import { getRuntimeLesson } from '../data/runtimeCatalog';
 import { useAppStore, type OnboardingExperience } from '../store/useAppStore';
 
 const goals=[
@@ -39,12 +38,21 @@ export function OnboardingPage() {
   const [answers,setAnswers]=useState<Array<{task:PlacementTask;correct:boolean}>>([]);
   const [feedback,setFeedback]=useState<{correct:boolean;explanation:string}|null>(null);
   const [finished,setFinished]=useState(false);
+  const [recommendedLessonTitle,setRecommendedLessonTitle]=useState<string|null>(null);
 
   const currentTask=useMemo(()=>chooseTask(tasks,answers.map(answer=>answer.task.id),ability),[answers,ability]);
   const score=answers.filter(answer=>answer.correct).length;
   const recommendation=recommendLesson(score,answers.length,experience);
-  const recommendedLesson=getRuntimeLesson(recommendation);
   const recommendedTrack=trackForGoals(selectedGoals);
+
+  useEffect(()=>{
+    if(!finished){setRecommendedLessonTitle(null);return;}
+    let active=true;
+    void import('../data/runtimeCatalog').then(module=>{
+      if(active)setRecommendedLessonTitle(module.getRuntimeLesson(recommendation)?.title??'Основы LaTeX');
+    }).catch(()=>{if(active)setRecommendedLessonTitle('Основы LaTeX');});
+    return()=>{active=false;};
+  },[finished,recommendation]);
 
   const toggleGoal=(id:string)=>setSelectedGoals(current=>current.includes(id)?current.filter(goal=>goal!==id):[...current,id]);
   const continueFromGoals=()=>{if(selectedGoals.length)setStep(2);};
@@ -76,7 +84,7 @@ export function OnboardingPage() {
 
       {step===3&&!finished&&currentTask&&<main className="onboarding-stage placement-stage"><div className="placement-heading"><span className="eyebrow">ДИАГНОСТИКА УРОВНЯ · {Math.min(answers.length+1,6)} ИЗ 6</span><span>Адаптивная сложность</span></div><h1>{currentTask.prompt}</h1>{currentTask.code&&<pre className="placement-code"><code>{currentTask.code}</code></pre>}<div className="placement-options">{currentTask.options.map(option=><button type="button" key={option.id} onClick={()=>answerTask(option.id)} disabled={Boolean(feedback)}>{option.label}</button>)}</div>{feedback&&<div className={`placement-feedback ${feedback.correct?'correct':'incorrect'}`} role="status"><strong>{feedback.correct?'Верно':'Не совсем'}</strong><p>{feedback.explanation}</p><button className="primary-button" onClick={nextPlacement}>{answers.length>=6?'Результат':'Следующая задача'}</button></div>}<p className="placement-note">Здесь нет вопросов на запоминание названий. Мы проверяем, как вы читаете, исправляете и структурируете LaTeX.</p></main>}
 
-      {step===3&&finished&&<main className="onboarding-stage placement-result"><span className="eyebrow">ДИАГНОСТИКА ЗАВЕРШЕНА</span><h1>{score} / {answers.length}</h1><p className="onboarding-lead">Стартовая точка выбрана по выполненным микрозаданиям. Диагностика создаёт начальную оценку уверенности по проверенным концептам, но не объявляет их «освоенными».</p><dl><div><dt>Рекомендуемый старт</dt><dd>{recommendedLesson?.title??'Основы LaTeX'}</dd></div><div><dt>Маршрут</dt><dd>{recommendedTrack}</dd></div><div><dt>Первый принцип</dt><dd>Структура → компиляция → диагностика → исправление</dd></div></dl><button className="primary-button primary-button--large" onClick={finish}>Перейти к тренировке</button><button className="text-tool placement-retry" onClick={()=>{setAnswers([]);setFeedback(null);setFinished(false);setAbility(experience?experienceAbility(experience):0);}}>Пройти диагностику ещё раз</button></main>}
+      {step===3&&finished&&<main className="onboarding-stage placement-result"><span className="eyebrow">ДИАГНОСТИКА ЗАВЕРШЕНА</span><h1>{score} / {answers.length}</h1><p className="onboarding-lead">Стартовая точка выбрана по выполненным микрозаданиям. Диагностика создаёт начальную оценку уверенности по проверенным концептам, но не объявляет их «освоенными».</p><dl><div><dt>Рекомендуемый старт</dt><dd>{recommendedLessonTitle??'Основы LaTeX'}</dd></div><div><dt>Маршрут</dt><dd>{recommendedTrack}</dd></div><div><dt>Первый принцип</dt><dd>Структура → компиляция → диагностика → исправление</dd></div></dl><button className="primary-button primary-button--large" onClick={finish}>Перейти к тренировке</button><button className="text-tool placement-retry" onClick={()=>{setAnswers([]);setFeedback(null);setFinished(false);setAbility(experience?experienceAbility(experience):0);}}>Пройти диагностику ещё раз</button></main>}
     </div>
   </div>;
 }
