@@ -76,18 +76,24 @@ async function verify(file, target) {
 async function fetchAsset(file) {
   let lastError = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    let response;
     try {
-      const response = await fetch(`${BASE}/${file}`, { redirect: 'follow' });
-      if (response.ok && response.body) return response;
-      const error = new Error(`BusyTeX asset ${file} failed: HTTP ${response.status}`);
-      if (!RETRYABLE_STATUS.has(response.status) || attempt === MAX_ATTEMPTS) throw error;
-      lastError = error;
+      response = await fetch(`${BASE}/${file}`, { redirect: 'follow' });
     } catch (error) {
       lastError = error;
       if (attempt === MAX_ATTEMPTS) throw error;
+      const delay = 750 * (2 ** (attempt - 1));
+      console.warn(`BusyTeX: retry ${file} after transport failure ${attempt}/${MAX_ATTEMPTS} (${error?.message || 'network error'})`);
+      await sleep(delay);
+      continue;
     }
+
+    if (response.ok && response.body) return response;
+    const error = new Error(`BusyTeX asset ${file} failed: HTTP ${response.status}`);
+    if (!RETRYABLE_STATUS.has(response.status) || attempt === MAX_ATTEMPTS) throw error;
+    lastError = error;
     const delay = 750 * (2 ** (attempt - 1));
-    console.warn(`BusyTeX: retry ${file} after attempt ${attempt}/${MAX_ATTEMPTS} (${lastError?.message || 'network error'})`);
+    console.warn(`BusyTeX: retry ${file} after HTTP ${response.status} ${attempt}/${MAX_ATTEMPTS}`);
     await sleep(delay);
   }
   throw lastError ?? new Error(`BusyTeX asset ${file} could not be downloaded`);
