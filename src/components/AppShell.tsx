@@ -2,14 +2,14 @@ import { lazy, Suspense, useEffect, useState, type CSSProperties, type ReactNode
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { lessons } from '../data/courses';
 import { useAppStore } from '../store/useAppStore';
-import { BookIcon, HomeIcon, PenIcon, ReferenceIcon, SearchIcon, SettingsIcon } from './Icons';
+import { BookIcon, PenIcon, ProjectIcon, ReferenceIcon, SearchIcon, SettingsIcon } from './Icons';
 import { Wordmark } from './Wordmark';
 
 const CommandPalette=lazy(()=>import('./CommandPalette'));
 const nav=[
-  {to:'/home',label:'Главная',Icon:HomeIcon},
-  {to:'/courses',label:'Курсы',Icon:BookIcon},
+  {to:'/courses',label:'Обучение',Icon:BookIcon},
   {to:'/practice',label:'Практика',Icon:PenIcon},
+  {to:'/projects',label:'Проекты',Icon:ProjectIcon},
   {to:'/reference',label:'Справочник',Icon:ReferenceIcon}
 ];
 
@@ -35,12 +35,12 @@ export function AppShell({children,plain=false}:{children:ReactNode;plain?:boole
   return <div className={`app ${showMobileNav?'app--mobile-nav':''} ${immersive?'app--immersive':''}`} style={{'--text-scale':scale} as CSSProperties}>
     <a className="skip-link" href="#main-content">К содержимому</a>
     {!plain&&!immersive&&<header className="topbar">
-      <Link to="/home" className="topbar-logo" aria-label="LaTeX gym — главная"><Wordmark/></Link>
+      <Link to="/home" className="topbar-logo" aria-label="LaTeX Gym — тренировочная панель"><Wordmark/></Link>
       <nav className="desktop-nav" aria-label="Основная навигация">{nav.map(({to,label,Icon})=><NavLink key={to} to={to} className={({isActive})=>isActive?'active':''}><Icon/><span>{label}</span></NavLink>)}</nav>
       <div className="topbar-actions">
-        <button className="search-trigger" onClick={()=>setPalette(true)} aria-label="Поиск по LaTeX gym"><SearchIcon/><span>⌘K</span></button>
+        <button className="search-trigger" onClick={()=>setPalette(true)} aria-label="Поиск по LaTeX Gym"><SearchIcon/><span>⌘K</span></button>
         <details className="progress-menu">
-          <summary aria-label={`Общий прогресс ${percent}%`}><ProgressRing percent={percent}/></summary>
+          <summary aria-label={`Прогресс курса ${percent}%`}><ProgressRing percent={percent}/></summary>
           <div className="progress-popover">
             <h3>Прогресс обучения</h3>
             <p>Пройдено уроков: <strong>{completed.length} / {lessons.length}</strong></p>

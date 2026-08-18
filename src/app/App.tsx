@@ -1,7 +1,8 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { HashRouter, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '../components/AppShell';
 import { RouteErrorBoundary } from '../components/RouteErrorBoundary';
+import { useAppStore } from '../store/useAppStore';
 
 const BookmarksPage=lazy(()=>import('../pages/BookmarksPage').then(module=>({default:module.BookmarksPage})));
 const CoursePage=lazy(()=>import('../pages/CoursePage').then(module=>({default:module.CoursePage})));
@@ -22,10 +23,11 @@ const SettingsPage=lazy(()=>import('../pages/SettingsPage').then(module=>({defau
 
 function RouteFallback(){return <div className="route-loading" role="status" aria-live="polite">Загрузка…</div>;}
 function Wrapped({children}:{children:ReactNode}){return <AppShell>{children}</AppShell>;}
+function RootRoute(){const onboarded=useAppStore(state=>state.onboarded);return onboarded?<Navigate to="/home" replace/>:<AppShell plain><OnboardingPage/></AppShell>;}
 
 export function App(){
   return <RouteErrorBoundary><HashRouter><Suspense fallback={<RouteFallback/>}><Routes>
-    <Route path="/" element={<AppShell plain><OnboardingPage/></AppShell>}/>
+    <Route path="/" element={<RootRoute/>}/>
     <Route path="/home" element={<Wrapped><HomePage/></Wrapped>}/>
     <Route path="/courses" element={<Wrapped><CoursesPage/></Wrapped>}/>
     <Route path="/course/:courseId" element={<Wrapped><CoursePage/></Wrapped>}/>

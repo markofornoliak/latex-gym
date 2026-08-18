@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diagnoseLatex } from './compilerDiagnostics';
+import { diagnoseLatex, parseTexLog } from './compilerDiagnostics';
 
 describe('compiler diagnostics',()=>{
   it('recognizes an undefined control sequence typo with a useful suggestion',()=>{
@@ -33,5 +33,26 @@ describe('compiler diagnostics',()=>{
     const diagnostics=diagnoseLatex('\\includegraphics{figures/result.pdf}');
     expect(diagnostics.some(item=>item.message.includes('File')&&item.severity==='error')).toBe(false);
     expect(diagnoseLatex('\\includegraphics{}').some(item=>item.message==='File name is empty')).toBe(true);
+  });
+
+  it('keeps the original TeX error while adding a learner explanation and source range',()=>{
+    const source='\\documentclass{article}\n\\begin{document}\n\\section{Broken\n\\end{document}';
+    const log='! Missing } inserted.\n<inserted text>\n                }\nl.3 \\section{Broken';
+    const [diagnostic]=parseTexLog(log,source);
+    expect(diagnostic.severity).toBe('error');
+    expect(diagnostic.line).toBe(3);
+    expect(diagnostic.source).toBe('tex');
+    expect(diagnostic.originalCompilerMessage).toContain('! Missing } inserted.');
+    expect(diagnostic.explanation).toContain('фигурные скобки');
+    expect(diagnostic.from).toBeGreaterThan(0);
+    expect(diagnostic.to).toBeGreaterThan(diagnostic.from!);
+  });
+
+  it('distinguishes a real TeX warning from a fatal error',()=>{
+    const source='\\documentclass{article}\n\\begin{document}\nText\n\\end{document}';
+    const diagnostics=parseTexLog('LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.',source);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].severity).toBe('warning');
+    expect(diagnostics[0].originalCompilerMessage).toContain('LaTeX Warning');
   });
 });
