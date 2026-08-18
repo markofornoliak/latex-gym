@@ -5,10 +5,13 @@ import type { Bookmark, ConceptMastery, HistoryEntry, MasteryEvidence } from '..
 type Settings={textSize:'small'|'medium'|'large';wordWrap:boolean;autoClose:boolean;lineNumbers:boolean};
 type ProjectProgress=Record<string,string[]>;
 type AttemptEvidence=Partial<Omit<MasteryEvidence,'outcome'>>;
+export type OnboardingExperience='new'|'basic'|'regular'|'advanced';
+export type OnboardingProfile={goals:string[];experience:OnboardingExperience|null;placementScore:number|null;placementTotal:number;recommendedLessonId:string|null;completedAt:string|null};
 
 type AppState={
   version:number;
   onboarded:boolean;
+  onboarding:OnboardingProfile;
   completedLessons:string[];
   completedExercises:string[];
   completedProjectStages:ProjectProgress;
@@ -25,6 +28,8 @@ type AppState={
   streak:{count:number;lastActive:string|null};
   settings:Settings;
   setOnboarded:()=>void;
+  completeOnboarding:(profile:Omit<OnboardingProfile,'completedAt'>)=>void;
+  retakeOnboarding:()=>void;
   setCurrentLesson:(id:string)=>void;
   completeLesson:(id:string,title:string)=>void;
   recordExerciseAttempt:(exerciseId:string,ok:boolean,concepts:string[],title:string,evidence?:AttemptEvidence)=>void;
@@ -40,6 +45,7 @@ type AppState={
 };
 
 const defaultSettings:Settings={textSize:'medium',wordWrap:true,autoClose:true,lineNumbers:true};
+const defaultOnboarding:OnboardingProfile={goals:[],experience:null,placementScore:null,placementTotal:0,recommendedLessonId:null,completedAt:null};
 const pad2=(value:number)=>String(value).padStart(2,'0');
 const today=()=>{const date=new Date();return `${date.getFullYear()}-${pad2(date.getMonth()+1)}-${pad2(date.getDate())}`;};
 const localDate=(value:string)=>{const [year,month,day]=value.split('-').map(Number);return new Date(year,month-1,day,12);};
@@ -103,8 +109,6 @@ export function updateConceptMastery(previous:ConceptMastery|undefined,ok:boolea
   const mistakeCount=base.mistakeCount+(ok?0:1);
   const strength=evidenceStrength(evidence);
   const learningRate=attempts<4?.28:.16;
-  // Evidence quality matters: a revealed solution is positive exposure, but not
-  // equivalent to delayed independent use in a new context.
   const target=ok?strength:0;
   const score=clamp(base.score*(1-learningRate)+target*learningRate,0,1);
   const successGrowth=1+strength*(.14+score*.28);
@@ -125,9 +129,11 @@ export function updateConceptMastery(previous:ConceptMastery|undefined,ok:boolea
 
 export const useAppStore=create<AppState>()(persist((set)=>({
   version:3,
-  onboarded:false,
+  onboarded:false,onboarding:defaultOnboarding,
   completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null},settings:defaultSettings,
   setOnboarded:()=>set({onboarded:true}),
+  completeOnboarding:(profile)=>set({onboarded:true,onboarding:{...profile,completedAt:new Date().toISOString()},currentLessonId:profile.recommendedLessonId??'what-is-latex'}),
+  retakeOnboarding:()=>set({onboarded:false,onboarding:{...defaultOnboarding}}),
   setCurrentLesson:(id)=>set({currentLessonId:id}),
   completeLesson:(id,title)=>set(state=>({completedLessons:unique(state.completedLessons,id),currentLessonId:id,history:[historyItem(`Пройден урок «${title}»`,'lesson'),...state.history].slice(0,100),streak:nextStreak(state.streak)})),
   recordExerciseAttempt:(exerciseId,ok,concepts,title,evidence)=>set(state=>{
@@ -160,6 +166,7 @@ export const useAppStore=create<AppState>()(persist((set)=>({
       const conceptMastery=Object.fromEntries(Object.entries(importedMastery).map(([id,value])=>[id,normalizeMastery(value)]));
       set(state=>({
         onboarded:progress.onboarded??state.onboarded,
+        onboarding:progress.onboarding??state.onboarding,
         completedLessons:Array.isArray(progress.completedLessons)?progress.completedLessons:state.completedLessons,
         completedExercises:Array.isArray(progress.completedExercises)?progress.completedExercises:state.completedExercises,
         completedProjectStages:projects.completedStages??progress.completedProjectStages??state.completedProjectStages,
@@ -173,14 +180,14 @@ export const useAppStore=create<AppState>()(persist((set)=>({
       return {ok:true,message:'Прогресс импортирован.'};
     }catch{return {ok:false,message:'Файл прогресса имеет неверный формат.'};}
   },
-  resetProgress:()=>set({onboarded:false,completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null}})
+  resetProgress:()=>set({onboarded:false,onboarding:{...defaultOnboarding},completedLessons:[],completedExercises:[],completedProjectStages:{},currentLessonId:'what-is-latex',bookmarks:[],attempts:{},successfulAttempts:{},hintsUsed:{},solutionReveals:{},drafts:{},conceptScores:{},conceptMastery:{},history:[],streak:{count:0,lastActive:null}})
 }),{
   name:'latex-gym-state',version:3,storage:createJSONStorage(()=>localStorage),
   migrate:(persisted,version)=>{
     const state=(persisted??{}) as Record<string,unknown>;
     const rawMastery=(state.conceptMastery??{}) as Record<string,Partial<ConceptMastery>>;
     const conceptMastery=Object.fromEntries(Object.entries(rawMastery).map(([id,value])=>[id,normalizeMastery(value)]));
-    return {...state,version:3,completedProjectStages:state.completedProjectStages??{},solutionReveals:state.solutionReveals??{},conceptMastery} as unknown as AppState;
+    return {...state,version:3,onboarding:state.onboarding??{...defaultOnboarding},completedProjectStages:state.completedProjectStages??{},solutionReveals:state.solutionReveals??{},conceptMastery} as unknown as AppState;
   }
 }));
 
@@ -192,7 +199,7 @@ export function exportProgress(){
     schemaVersion:3,
     exportedAt:new Date().toISOString(),
     progress:{
-      onboarded:state.onboarded,completedLessons:state.completedLessons,completedExercises:state.completedExercises,currentLessonId:state.currentLessonId,
+      onboarded:state.onboarded,onboarding:state.onboarding,completedLessons:state.completedLessons,completedExercises:state.completedExercises,currentLessonId:state.currentLessonId,
       bookmarks:state.bookmarks,attempts:state.attempts,successfulAttempts:state.successfulAttempts,hintsUsed:state.hintsUsed,solutionReveals:state.solutionReveals,
       drafts:otherDrafts,conceptScores:state.conceptScores,conceptMastery:state.conceptMastery,history:state.history,streak:state.streak
     },
