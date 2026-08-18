@@ -1,10 +1,18 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BackIcon, ChevronIcon, PlayIcon } from '../components/Icons';
 import { LatexPreview } from '../components/LatexPreview';
 import { getProject } from '../data/projects';
 import { compiler } from '../services/compiler';
 import { compilationStateLabel, isCompilationBusy } from '../services/compilerState';
+import {
+  encodeProjectAsset,
+  encodedProjectAssetSize,
+  isEncodedProjectAsset,
+  isSupportedProjectAsset,
+  PROJECT_ASSET_MAX_BYTES,
+  toBinaryAwareCompilerProject
+} from '../services/projectAssets';
 import { recordProjectStageEvidence } from '../services/projectMastery';
 import {
   addWorkspaceFile,
@@ -13,7 +21,6 @@ import {
   normalizeProjectFilePath,
   projectFileDraftKey,
   projectStageConcepts,
-  toCompilerProject,
   type ProjectAssessment,
   type ProjectWorkspace
 } from '../services/projectWorkspace';
@@ -67,6 +74,7 @@ export function ProjectPage(){
   const next=project.stages[index+1];
   const filePaths=sortProjectFiles(Object.keys(workspace.files),workspace.mainFile);
   const multiFile=filePaths.length>1;
+  const activeIsAsset=isEncodedProjectAsset(activeSource);
 
   const saveWorkspace=()=>{
     for(const [path,content] of Object.entries(workspace.files))setDraft(projectFileDraftKey(project.id,path),content);
@@ -76,20 +84,33 @@ export function ProjectPage(){
     setDraft(projectFileDraftKey(project.id,activeFile),workspace.files[activeFile]??'');
     setActiveFile(path);setFileError('');
   };
+  const invalidateBuild=()=>{if(result)setResult(null);if(assessment)setAssessment(null);if(state!=='ready')setState('ready');};
   const updateSource=(value:string)=>{
     setWorkspace(current=>current?{...current,files:{...current.files,[activeFile]:value}}:current);
-    if(result)setResult(null);if(assessment)setAssessment(null);if(state!=='ready')setState('ready');
+    invalidateBuild();
   };
   const addFile=()=>{
     const normalized=normalizeProjectFilePath(newFileName);
     const added=addWorkspaceFile(workspace,newFileName);
     if(added.error||!normalized){setFileError(added.error??'Проверьте путь файла.');return;}
-    setWorkspace(added.workspace);setDraft(projectFileDraftKey(project.id,normalized),added.workspace.files[normalized]);setActiveFile(normalized);setNewFileName('');setFileError('');setResult(null);setAssessment(null);
+    setWorkspace(added.workspace);setDraft(projectFileDraftKey(project.id,normalized),added.workspace.files[normalized]);setActiveFile(normalized);setNewFileName('');setFileError('');invalidateBuild();
+  };
+  const uploadAsset=async(event:ChangeEvent<HTMLInputElement>)=>{
+    const file=event.target.files?.[0];event.target.value='';
+    if(!file)return;
+    const path=normalizeProjectFilePath(file.name);
+    if(!path||!isSupportedProjectAsset(path)){setFileError('Поддерживаются PDF, PNG и JPEG с безопасным относительным именем.');return;}
+    if(file.size>PROJECT_ASSET_MAX_BYTES){setFileError('Файл слишком большой. Для локального проекта ограничение — 5 МБ на один asset.');return;}
+    try{
+      const encoded=encodeProjectAsset(new Uint8Array(await file.arrayBuffer()));
+      setWorkspace(current=>current?{...current,files:{...current.files,[path]:encoded}}:current);
+      setDraft(projectFileDraftKey(project.id,path),encoded);setActiveFile(path);setFileError('');invalidateBuild();
+    }catch{setFileError('Не удалось прочитать файл. Исходники проекта не изменены.');}
   };
   const runCompile=async()=>{
     saveWorkspace();setState('queued');setAssessment(null);
     try{
-      const compiled=await compiler.compile(toCompilerProject(workspace),{onPhase:setState});
+      const compiled=await compiler.compile(toBinaryAwareCompilerProject(workspace),{onPhase:setState});
       setResult(compiled);
       return compiled;
     }catch(error){
@@ -123,13 +144,13 @@ export function ProjectPage(){
       <section className="project-editor">
         <div className="project-files" aria-label="Файлы проекта">
           <div className="project-files-head"><div><span className="eyebrow">ФАЙЛЫ</span><strong>{filePaths.length} · корень {workspace.mainFile}</strong></div><span>{multiFile?'Многофайловый проект':'Один файл'}</span></div>
-          <div className="project-file-list" role="tablist" aria-label="Исходные файлы">{filePaths.map(path=><button key={path} type="button" role="tab" aria-selected={activeFile===path} className={activeFile===path?'active':''} onClick={()=>selectFile(path)}><span>{fileKind(path)}</span><strong>{path}</strong>{path===workspace.mainFile&&<small>root</small>}</button>)}</div>
-          <div className="project-add-file"><label htmlFor="project-new-file">Добавить файл</label><div><input id="project-new-file" value={newFileName} onChange={event=>{setNewFileName(event.target.value);setFileError('');}} placeholder="sections/discussion.tex" onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addFile();}}}/><button type="button" className="secondary-button" onClick={addFile}>Добавить</button></div>{fileError&&<small role="alert">{fileError}</small>}</div>
+          <div className="project-file-list" role="tablist" aria-label="Файлы проекта">{filePaths.map(path=><button key={path} type="button" role="tab" aria-selected={activeFile===path} className={activeFile===path?'active':''} onClick={()=>selectFile(path)}><span>{fileKind(path)}</span><strong>{path}</strong>{path===workspace.mainFile&&<small>root</small>}</button>)}</div>
+          <div className="project-add-file"><label htmlFor="project-new-file">Добавить исходный файл</label><div><input id="project-new-file" value={newFileName} onChange={event=>{setNewFileName(event.target.value);setFileError('');}} placeholder="sections/discussion.tex" onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addFile();}}}/><button type="button" className="secondary-button" onClick={addFile}>Добавить</button><label className="project-upload-button">PDF / изображение<input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" onChange={event=>{void uploadAsset(event);}}/></label></div>{fileError&&<small role="alert">{fileError}</small>}</div>
         </div>
 
-        <div className="project-active-file"><span>{activeFile}</span>{activeFile!==workspace.mainFile&&result?.diagnostics.length?<small>Диагностика TeX относится к общей сборке проекта; точные диапазоны subfile пока не симулируются.</small>:null}</div>
+        <div className="project-active-file"><span>{activeFile}</span>{activeFile!==workspace.mainFile&&result?.diagnostics.length&&!activeIsAsset?<small>Диагностика TeX относится к общей сборке проекта; точные диапазоны subfile пока не симулируются.</small>:null}</div>
         <div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${state}`}>{compilationStateLabel(state)}</span><span>{result?engineLabel(result):saved?'Все изменения сохранены локально':'Сохранение…'}</span></div>
-        <Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={activeSource} onChange={updateSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onCompile={()=>{void runCompile();}} onSave={saveWorkspace} diagnostics={activeFile===workspace.mainFile?(result?.diagnostics??[]):[]}/></Suspense>
+        {activeIsAsset?<div className="project-asset-inspector" role="region" aria-label={`Файл ${activeFile}`}><span>{fileKind(activeFile)}</span><h2>{activeFile}</h2><p>{formatBytes(encodedProjectAssetSize(activeSource))} · хранится локально и передаётся TeX как бинарный файл при сборке.</p><label className="secondary-button">Заменить файл<input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" onChange={event=>{void uploadAsset(event);}}/></label></div>:<Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={activeSource} onChange={updateSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onCompile={()=>{void runCompile();}} onSave={saveWorkspace} diagnostics={activeFile===workspace.mainFile?(result?.diagnostics??[]):[]}/></Suspense>}
         {assessment&&<section className={`project-assessment ${assessment.ok?'project-assessment--ok':''}`} aria-live="polite"><header><div><span className="eyebrow">ПРОВЕРКА ЭТАПА</span><h2>{assessment.ok?'Этап подтверждён':'Проект ещё не готов'}</h2></div><small>{assessment.realCompile?'Проверено реальным TeX':'Проверка без подтверждённого real-PDF'}</small></header><div>{assessment.items.map(item=><div className="project-assessment-row" key={item.id}><span aria-hidden="true">{item.ok?'✓':'×'}</span><p><strong>{item.label}</strong>{item.detail&&<small>{item.detail}</small>}</p></div>)}</div></section>}
         <div className="project-editor-actions"><button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy}><PlayIcon/>{busy?compilationStateLabel(state):'Скомпилировать проект'}</button><button className="primary-button" onClick={primaryAction} disabled={busy||currentDone&&!next}>{currentDone?(next?'Продолжить':'Проект завершён'):'Проверить этап'}{currentDone&&next&&<ChevronIcon/>}</button></div>
       </section>
@@ -140,5 +161,6 @@ export function ProjectPage(){
 
 function engineLabel(result:CompileResult){if(result.fallbackReason)return 'Учебный fallback';if(result.engine==='pdflatex')return 'pdfLaTeX';if(result.engine==='xelatex')return 'XeLaTeX';if(result.engine==='lualatex')return 'LuaLaTeX';return 'Учебный предпросмотр';}
 function sortProjectFiles(files:string[],mainFile:string){return [...files].sort((a,b)=>a===mainFile?-1:b===mainFile?1:a.localeCompare(b));}
-function fileKind(path:string){if(path.endsWith('.tex'))return 'TEX';if(path.endsWith('.bib'))return 'BIB';if(/\.(png|jpe?g|pdf|svg)$/i.test(path))return 'IMG';return 'FILE';}
-function pluralFiles(count:number){const mod10=count%10,mod100=count%100;return mod10===1&&mod100!==11?'файла':mod10>=2&&mod10<=4&&(mod100<12||mod100>14)?'файлов':'файлов';}
+function fileKind(path:string){if(path.endsWith('.tex'))return 'TEX';if(path.endsWith('.bib'))return 'BIB';if(path.toLowerCase().endsWith('.pdf'))return 'PDF';if(/\.(png|jpe?g)$/i.test(path))return 'IMG';return 'FILE';}
+function pluralFiles(count:number){const mod10=count%10,mod100=count%100;return mod10===1&&mod100!==11?'файла':mod10>=2&&mod10<=4&&(mod100<12||mod100>14)?'файла':'файлов';}
+function formatBytes(bytes:number){if(bytes<1024)return `${bytes} Б`;if(bytes<1024*1024)return `${(bytes/1024).toFixed(1)} КБ`;return `${(bytes/1024/1024).toFixed(1)} МБ`;}
