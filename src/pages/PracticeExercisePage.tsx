@@ -19,6 +19,7 @@ export function PracticeExercisePage(){
   const setDraft=useAppStore(state=>state.setDraft);
   const recordAttempt=useAppStore(state=>state.recordExerciseAttempt);
   const recordHint=useAppStore(state=>state.recordHint);
+  const recordSolutionReveal=useAppStore(state=>state.recordSolutionReveal);
   const hintsUsed=useAppStore(state=>state.hintsUsed);
   const bookmarks=useAppStore(state=>state.bookmarks);
   const toggleBookmark=useAppStore(state=>state.toggleBookmark);
@@ -28,6 +29,7 @@ export function PracticeExercisePage(){
   const [validation,setValidation]=useState<ValidationResult|null>(null);
   const [compileState,setCompileState]=useState<CompilationState>('ready');
   const [solution,setSolution]=useState(false);
+  const [hintOpenedThisAttempt,setHintOpenedThisAttempt]=useState(false);
   const [saved,setSaved]=useState(true);
   const [shortcutsOpen,setShortcutsOpen]=useState(false);
   const hintLevel=exercise?(hintsUsed[exercise.id]??0):0;
@@ -35,7 +37,7 @@ export function PracticeExercisePage(){
   useEffect(()=>{
     if(!exercise)return;
     setSource(drafts[`exercise:${exercise.id}`]??exercise.starterCode);
-    setResult(null);setValidation(null);setSolution(false);setCompileState('ready');setSaved(true);
+    setResult(null);setValidation(null);setSolution(false);setHintOpenedThisAttempt(false);setCompileState('ready');setSaved(true);
     const key=`latex-gym:scroll:${exercise.id}`;
     const restored=Number(sessionStorage.getItem(key)??0);
     requestAnimationFrame(()=>window.scrollTo({top:restored,behavior:'auto'}));
@@ -76,10 +78,15 @@ export function PracticeExercisePage(){
     if(!compiled)return;
     const checked=validateExercise(exercise,source,compiled);
     setValidation(checked);
-    recordAttempt(exercise.id,checked.ok,exercise.concepts,exercise.title);
+    recordAttempt(exercise.id,checked.ok,exercise.concepts,exercise.title,{
+      independence:solution?'revealed':hintOpenedThisAttempt?'hinted':'independent',
+      context:'practice',
+      realCompile:Boolean(compiled.pdf?.length&&!compiled.fallbackReason)
+    });
   };
-  const revealHint=()=>{const next=Math.min(exercise.hints.length,hintLevel+1);recordHint(exercise.id,next);};
-  const renderHints=(variant:'desktop'|'mobile')=><div className={`hint-area hint-area--${variant}`}><div className="hint-heading"><span>Подсказки</span><button onClick={revealHint} disabled={hintLevel>=exercise.hints.length}>{hintLevel>=exercise.hints.length?'Все открыты':'Открыть подсказку'}</button></div>{exercise.hints.slice(0,hintLevel).map((hint,index)=><p key={index}><b>{index+1}.</b> {hint}</p>)}{hintLevel>=exercise.hints.length&&!solution&&<button className="text-tool reveal-solution" onClick={()=>setSolution(true)}>Показать одно решение</button>}</div>;
+  const revealHint=()=>{const next=Math.min(exercise.hints.length,hintLevel+1);recordHint(exercise.id,next);setHintOpenedThisAttempt(true);};
+  const revealSolution=()=>{setSolution(true);recordSolutionReveal(exercise.id);};
+  const renderHints=(variant:'desktop'|'mobile')=><div className={`hint-area hint-area--${variant}`}><div className="hint-heading"><span>Подсказки</span><button onClick={revealHint} disabled={hintLevel>=exercise.hints.length}>{hintLevel>=exercise.hints.length?'Все открыты':'Открыть подсказку'}</button></div>{exercise.hints.slice(0,hintLevel).map((hint,index)=><p key={index}><b>{index+1}.</b> {hint}</p>)}{hintLevel>=exercise.hints.length&&!solution&&<button className="text-tool reveal-solution" onClick={revealSolution}>Показать одно решение</button>}</div>;
 
   return <div className="practice-screen" data-compilation-state={compileState}>
     <header className="practice-top"><Link to="/practice" aria-label="Назад к практике"><BackIcon/></Link><strong>Практика</strong><button type="button" className={`icon-button practice-bookmark ${isSaved?'active':''}`} onClick={()=>toggleBookmark('exercise',exercise.id)} aria-label={isSaved?'Удалить задачу из закладок':'Сохранить задачу'}><BookmarkIcon/></button></header>
@@ -99,7 +106,7 @@ export function PracticeExercisePage(){
       </section>
       <section className="result-pane mobile-active"><h2>Результат</h2><div className="result-frame"><LatexPreview result={result}/></div>
         {validation&&<div className={`validation-panel ${validation.ok?'validation-panel--ok':''}`} role="status" aria-live="polite"><h3>{validation.ok?'Решение принято':'Что нужно исправить'}</h3>{validation.items.map((item,index)=><div className="validation-row" key={index}><span>{item.ok?'✓':'×'}</span><div><strong>{item.message}</strong>{item.line&&<small>Строка {item.line}</small>}{!item.ok&&<small>{item.hint}</small>}</div></div>)}</div>}
-        {solution&&<details className="reference-solution" open><summary>Один корректный вариант</summary><pre>{exercise.solution}</pre><p>Это пример, а не определение правильности. Проверка основана на требованиях и структуре решения.</p></details>}
+        {solution&&<details className="reference-solution" open><summary>Один корректный вариант</summary><pre>{exercise.solution}</pre><p>Это пример, а не определение правильности. Раскрытое решение даёт более слабое evidence mastery, чем самостоятельное решение.</p></details>}
         {renderHints('mobile')}
       </section>
     </div>
