@@ -119,7 +119,7 @@ export function assessProjectStage(project:LearningProject,stageIndex:number,wor
   items.push({id:'compiler',kind:'compiler',label:multiFile?'Многофайловый проект собирается реальным TeX':'Документ компилируется',ok:result.ok&&(!multiFile||realCompile),detail:result.fallbackReason&&multiFile?'Учебный предпросмотр не подтверждает корректность нескольких файлов.':undefined});
   items.push({id:'main-file',kind:'integrity',label:`Корневой документ — ${workspace.mainFile}`,ok:Boolean(workspace.files[workspace.mainFile])});
 
-  const roots=texFiles.filter(path=>/\\documentclass(?:\[[^\]]*\])?\{/.test(workspace.files[path]??''));
+  const roots=texFiles.filter(path=>/\\documentclass(?:\[[^\]]*\])?\{/.test(stripLatexComments(workspace.files[path]??'')));
   items.push({id:'single-root',kind:'integrity',label:'В проекте один корневой документ с \\documentclass',ok:roots.length===1&&roots[0]===workspace.mainFile,detail:roots.length>1?`Найдены корни: ${roots.join(', ')}`:roots.length===0?'\\documentclass не найден.':undefined});
 
   const unresolved=findUnresolvedInputs(workspace);
@@ -134,12 +134,11 @@ export function assessProjectStage(project:LearningProject,stageIndex:number,wor
 }
 
 function checksForStage(projectId:string,stageId:string,workspace:ProjectWorkspace):ProjectAssessmentItem[]{
-  const main=workspace.files[workspace.mainFile]??'';
-  const all=Object.values(workspace.files).join('\n');
+  const main=stripLatexComments(workspace.files[workspace.mainFile]??'');
+  const all=Object.entries(workspace.files).filter(([path])=>path.endsWith('.tex')).map(([,content])=>stripLatexComments(content)).join('\n');
   const command=(name:string,label:string,min=1)=>patternCheck(`${projectId}:${stageId}:cmd:${name}`,label,commandCount(all,name)>=min);
   const environment=(name:string,label:string,min=1)=>patternCheck(`${projectId}:${stageId}:env:${name}`,label,environmentCount(all,name)>=min);
   const packageCheck=(name:string,label:string)=>patternCheck(`${projectId}:${stageId}:pkg:${name}`,label,new RegExp(`\\\\usepackage(?:\\[[^\\]]*\\])?\\{[^}]*\\b${name}\\b[^}]*\\}`).test(main));
-  const text=(value:string,label:string)=>patternCheck(`${projectId}:${stageId}:text:${value}`,label,main.includes(value));
 
   if(projectId==='mathematical-notes'){
     if(stageId==='structure')return [patternCheck('notes:article','Используется класс article',/\\documentclass(?:\[[^\]]*\])?\{article\}/.test(main)),environment('document','Есть document environment'),command('section','Создан смысловой раздел')];
@@ -151,7 +150,7 @@ function checksForStage(projectId:string,stageId:string,workspace:ProjectWorkspa
 
   if(projectId==='laboratory-report'){
     if(stageId==='sections')return ['Method','Results','Discussion'].map(title=>patternCheck(`lab:section:${title}`,`Есть раздел ${title}`,new RegExp(`\\\\section\\{${title}\\}`).test(all)));
-    if(stageId==='method')return [patternCheck('lab:method-text','В Method есть обычный связный текст',/\\section\{Method\}[\s\S]*?[A-Za-zА-Яа-я]{3,}/.test(all))];
+    if(stageId==='method')return [patternCheck('lab:method-text','В Method есть обычный связный текст',sectionBodyHasText(all,'Method'))];
     if(stageId==='table')return [environment('tabular','Результаты представлены через tabular'),patternCheck('lab:table-cells','Таблица содержит разделители столбцов &',all.includes('&'))];
     if(stageId==='figure')return [packageCheck('graphicx','Подключён graphicx'),environment('figure','Есть figure environment'),command('includegraphics','Рисунок подключён через \\includegraphics'),command('caption','У рисунка есть caption')];
     if(stageId==='crossrefs')return [command('label','Объект получает label'),command('ref','Discussion ссылается через \\ref')];
@@ -199,24 +198,31 @@ function checksForStage(projectId:string,stageId:string,workspace:ProjectWorkspa
 
 function patternCheck(id:string,label:string,ok:boolean,detail?:string):ProjectAssessmentItem{return {id,kind:'stage',label,ok,detail};}
 function fileCheck(workspace:ProjectWorkspace,path:string):ProjectAssessmentItem{return patternCheck(`file:${path}`,`Файл ${path} существует`,path in workspace.files);}
-function containsCheck(path:string,workspace:ProjectWorkspace,value:string,label:string):ProjectAssessmentItem{return patternCheck(`contains:${path}:${value}`,label,(workspace.files[path]??'').includes(value));}
+function containsCheck(path:string,workspace:ProjectWorkspace,value:string,label:string):ProjectAssessmentItem{return patternCheck(`contains:${path}:${value}`,label,stripLatexComments(workspace.files[path]??'').includes(value));}
 function inputTargetCheck(workspace:ProjectWorkspace,target:string):ProjectAssessmentItem{
-  const source=workspace.files[workspace.mainFile]??'';
+  const source=stripLatexComments(workspace.files[workspace.mainFile]??'');
   const ok=source.includes(`\\input{${target}}`)||source.includes(`\\include{${target}}`);
   return patternCheck(`input:${target}`,`main.tex подключает ${target}.tex`,ok);
 }
 function subfilesHaveNoDocumentClass(workspace:ProjectWorkspace):ProjectAssessmentItem{
-  const offenders=Object.entries(workspace.files).filter(([path,content])=>path!==workspace.mainFile&&path.endsWith('.tex')&&/\\documentclass(?:\[[^\]]*\])?\{/.test(content)).map(([path])=>path);
+  const offenders=Object.entries(workspace.files).filter(([path,content])=>path!==workspace.mainFile&&path.endsWith('.tex')&&/\\documentclass(?:\[[^\]]*\])?\{/.test(stripLatexComments(content))).map(([path])=>path);
   return {id:'subfile-root',kind:'integrity',label:'Подключаемые .tex-файлы не создают второй document root',ok:offenders.length===0,detail:offenders.length?`Уберите \\documentclass из: ${offenders.join(', ')}`:undefined};
 }
 function commandCount(source:string,name:string){return [...source.matchAll(new RegExp(`\\\\${name}\\b`,'g'))].length;}
 function environmentCount(source:string,name:string){return [...source.matchAll(new RegExp(`\\\\begin\\{${name}\\}`,'g'))].length;}
+function sectionBodyHasText(source:string,title:string){
+  const match=new RegExp(`\\\\section\\{${title}\\}([\\s\\S]*?)(?=\\\\section\\{|\\\\end\\{document\\}|$)`).exec(source);
+  if(!match)return false;
+  const withoutCommands=match[1].replace(/\\[A-Za-z@]+(?:\[[^\]]*\])?(?:\{[^}]*\})?/g,' ').replace(/[{}$&_~^]/g,' ');
+  return /[A-Za-zА-Яа-я]{3,}/.test(withoutCommands);
+}
 
 function findUnresolvedInputs(workspace:ProjectWorkspace){
   const missing=new Set<string>();
   for(const [sourcePath,source] of Object.entries(workspace.files)){
     if(!sourcePath.endsWith('.tex'))continue;
-    for(const match of source.matchAll(/\\(?:input|include)\{([^}]+)\}/g)){
+    const activeSource=stripLatexComments(source);
+    for(const match of activeSource.matchAll(/\\(?:input|include)\{([^}]+)\}/g)){
       const target=resolveTexPath(sourcePath,match[1]);
       if(!(target in workspace.files))missing.add(target);
     }
@@ -230,4 +236,14 @@ function resolveTexPath(sourcePath:string,target:string){
   const normalized:string[]=[];
   for(const part of parts){if(!part||part==='.')continue;if(part==='..')normalized.pop();else normalized.push(part);}
   return normalized.join('/');
+}
+function stripLatexComments(source:string){return source.split('\n').map(stripCommentLine).join('\n');}
+function stripCommentLine(line:string){
+  for(let index=0;index<line.length;index+=1){
+    if(line[index]!=='%')continue;
+    let slashes=0;
+    for(let cursor=index-1;cursor>=0&&line[cursor]==='\\';cursor-=1)slashes+=1;
+    if(slashes%2===0)return line.slice(0,index);
+  }
+  return line;
 }
