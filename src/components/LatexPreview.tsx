@@ -1,27 +1,70 @@
+import { useEffect, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import type { CompileResult, PreviewBlock } from '../types';
+import type { CompileResult, Diagnostic, PreviewBlock } from '../types';
 
 export function LatexPreview({result,emptyText='Здесь появится результат компиляции'}:{result?:CompileResult|null;emptyText?:string}) {
-  if(!result) return <div className="preview-empty">{emptyText}</div>;
-  if(!result.ok) return <div className="diagnostics" role="status">
-    {result.diagnostics.map((d,i)=><div className={`diagnostic diagnostic--${d.severity}`} key={`${d.line}-${i}`}>
-      <div><strong>Строка {d.line}.</strong> {d.message}</div>
-      <p>{d.explanation}</p>{d.suggestion&&<p className="diagnostic-suggestion">{d.suggestion}</p>}
-    </div>)}
+  if(!result)return <div className="preview-empty">{emptyText}</div>;
+  if(!result.ok)return <div className="compile-result compile-result--failed" role="status" aria-live="polite">
+    <DiagnosticsList diagnostics={result.diagnostics}/>
+    <CompilerLog result={result}/>
   </div>;
-  return <article className="paper-preview" aria-label="Результат LaTeX">
-    {result.blocks.map((block,i)=><PreviewBlockView block={block} key={i}/>) }
-    {result.diagnostics.filter(d=>d.severity!=='error').map((d,i)=><aside className="preview-warning" key={`w${i}`}>{d.message}</aside>)}
-  </article>;
+  if(result.pdf?.length)return <RealPdfPreview result={result}/>;
+  return <div className="compile-result compile-result--educational">
+    <div className="preview-engine-note"><strong>Учебный предпросмотр</strong><span>Это не PDF-сборка TeX.</span></div>
+    <article className="paper-preview" aria-label="Учебный предпросмотр LaTeX">
+      {result.blocks.map((block,i)=><PreviewBlockView block={block} key={i}/>) }
+    </article>
+    {result.diagnostics.length>0&&<DiagnosticsList diagnostics={result.diagnostics}/>} 
+    <CompilerLog result={result}/>
+  </div>;
+}
+
+function RealPdfPreview({result}:{result:CompileResult}){
+  const [url,setUrl]=useState<string|null>(null);
+  useEffect(()=>{
+    if(!result.pdf?.length){setUrl(null);return;}
+    const objectUrl=URL.createObjectURL(new Blob([result.pdf],{type:'application/pdf'}));
+    setUrl(objectUrl);
+    return()=>URL.revokeObjectURL(objectUrl);
+  },[result.pdf]);
+
+  return <div className="real-pdf-result">
+    <div className="pdf-toolbar" aria-label="Управление PDF">
+      <span className="pdf-engine"><strong>{engineName(result.engine)}</strong><small>{result.elapsedMs} мс</small></span>
+      <span className="pdf-actions">{url&&<><a className="text-tool" href={url} target="_blank" rel="noreferrer">Открыть PDF</a><a className="text-tool" href={url} download="latex-gym.pdf">Скачать PDF</a></>}</span>
+    </div>
+    {url?<iframe className="pdf-frame" src={`${url}#view=FitH`} title="PDF, собранный TeX"/>:<div className="preview-empty">Подготовка PDF…</div>}
+    {result.diagnostics.length>0&&<DiagnosticsList diagnostics={result.diagnostics}/>} 
+    <CompilerLog result={result}/>
+  </div>;
+}
+
+function DiagnosticsList({diagnostics}:{diagnostics:Diagnostic[]}){
+  if(!diagnostics.length)return null;
+  return <div className="diagnostics" aria-label="Диагностика компиляции">
+    {diagnostics.map((diagnostic,index)=><article className={`diagnostic diagnostic--${diagnostic.severity}`} key={`${diagnostic.severity}-${diagnostic.line}-${diagnostic.message}-${index}`}>
+      <header><span>{severityName(diagnostic.severity)}</span><strong>Строка {diagnostic.line}</strong></header>
+      {diagnostic.originalCompilerMessage&&diagnostic.source==='tex'&&<div className="diagnostic-original"><small>TeX</small><pre>{diagnostic.originalCompilerMessage}</pre></div>}
+      <div className="diagnostic-explanation"><small>LaTeX Gym</small><strong>{diagnostic.message}</strong><p>{diagnostic.explanation}</p>{diagnostic.suggestion&&<p className="diagnostic-suggestion">{diagnostic.suggestion}</p>}</div>
+    </article>)}
+  </div>;
+}
+
+function CompilerLog({result}:{result:CompileResult}){
+  if(!result.rawLog)return null;
+  return <details className="compiler-log"><summary>Оригинальный журнал TeX</summary><div className="compiler-log-meta"><span>Движок: {engineName(result.engine)}</span><span>Провайдер: {result.providerId??result.engine}</span></div><pre>{result.rawLog}</pre></details>;
 }
 
 function PreviewBlockView({block}:{block:PreviewBlock}) {
-  if(block.type==='title') return <header className="preview-title"><h1>{block.text}</h1>{block.meta&&<p>{block.meta}</p>}</header>;
-  if(block.type==='heading') { const T=block.level===1?'h2':block.level===2?'h3':'h4'; return <T>{block.text}</T>; }
-  if(block.type==='paragraph') return <p>{block.text}</p>;
-  if(block.type==='math') return <div className={block.display?'preview-math preview-math--display':'preview-math'} dangerouslySetInnerHTML={{__html:katex.renderToString(block.latex,{throwOnError:false,displayMode:block.display,strict:'ignore'})}}/>;
-  if(block.type==='list') { const T=block.ordered?'ol':'ul'; return <T>{block.items.map((item,i)=><li key={i}>{item}</li>)}</T>; }
-  if(block.type==='table') return <table className="preview-table"><tbody>{block.rows.map((row,i)=><tr key={i}>{row.map((cell,j)=><td key={j}>{cell}</td>)}</tr>)}</tbody></table>;
+  if(block.type==='title')return <header className="preview-title"><h1>{block.text}</h1>{block.meta&&<p>{block.meta}</p>}</header>;
+  if(block.type==='heading'){const T=block.level===1?'h2':block.level===2?'h3':'h4';return <T>{block.text}</T>;}
+  if(block.type==='paragraph')return <p>{block.text}</p>;
+  if(block.type==='math')return <div className={block.display?'preview-math preview-math--display':'preview-math'} dangerouslySetInnerHTML={{__html:katex.renderToString(block.latex,{throwOnError:false,displayMode:block.display,strict:'ignore'})}}/>;
+  if(block.type==='list'){const T=block.ordered?'ol':'ul';return <T>{block.items.map((item,i)=><li key={i}>{item}</li>)}</T>;}
+  if(block.type==='table')return <table className="preview-table"><tbody>{block.rows.map((row,i)=><tr key={i}>{row.map((cell,j)=><td key={j}>{cell}</td>)}</tr>)}</tbody></table>;
   return <div className="preview-object">{block.text}</div>;
 }
+
+function severityName(severity:Diagnostic['severity']){if(severity==='error')return 'Ошибка';if(severity==='warning')return 'Предупреждение';return 'Информация';}
+function engineName(engine:CompileResult['engine']){if(engine==='pdflatex')return 'pdfLaTeX';if(engine==='xelatex')return 'XeLaTeX';if(engine==='lualatex')return 'LuaLaTeX';return 'Educational Preview';}
