@@ -112,8 +112,6 @@ function migratePlacementEvidence(raw:Record<string,boolean>|undefined){
   const migrated:Record<string,boolean>={};
   for(const [legacyId,value] of Object.entries(raw??{})){
     const id=canonicalKey(legacyId);
-    // If historical aliases disagree, keep the conservative signal: any failure means
-    // confidence in the canonical concept should not be overstated.
     migrated[id]=id in migrated?migrated[id]&&Boolean(value):Boolean(value);
   }
   return migrated;
@@ -230,23 +228,25 @@ export const useAppStore=create<AppState>()(persist((set)=>({
       if(!parsed||typeof parsed!=='object')throw new Error('invalid');
       const progress=(parsed.progress&&typeof parsed.progress==='object'?parsed.progress:parsed) as Partial<AppState>;
       const projects=(parsed.projects&&typeof parsed.projects==='object'?parsed.projects:{}) as {completedStages?:ProjectProgress;drafts?:Record<string,string>};
-      const conceptMastery=migrateConceptMastery(progress.conceptMastery as Record<string,Partial<ConceptMastery>>|undefined);
-      const conceptScores=migrateConceptScores(progress.conceptScores);
+      const importedMastery=migrateConceptMastery(progress.conceptMastery as Record<string,Partial<ConceptMastery>>|undefined);
+      const importedScores=migrateConceptScores(progress.conceptScores);
       const oldOnboarding=(progress.onboarding??{}) as Partial<OnboardingProfile>;
-      const onboarding:OnboardingProfile={...state.onboarding,...oldOnboarding,goals:Array.isArray(oldOnboarding.goals)?oldOnboarding.goals:state.onboarding.goals,placementEvidence:migratePlacementEvidence(oldOnboarding.placementEvidence??state.onboarding.placementEvidence)};
-      set(state=>({
-        onboarded:progress.onboarded??state.onboarded,
-        onboarding,
-        completedLessons:Array.isArray(progress.completedLessons)?progress.completedLessons:state.completedLessons,
-        completedExercises:Array.isArray(progress.completedExercises)?progress.completedExercises:state.completedExercises,
-        completedProjectStages:projects.completedStages??progress.completedProjectStages??state.completedProjectStages,
-        currentLessonId:typeof progress.currentLessonId==='string'?progress.currentLessonId:state.currentLessonId,
-        bookmarks:Array.isArray(progress.bookmarks)?progress.bookmarks:state.bookmarks,
-        attempts:progress.attempts??state.attempts,successfulAttempts:progress.successfulAttempts??state.successfulAttempts,
-        hintsUsed:progress.hintsUsed??state.hintsUsed,solutionReveals:progress.solutionReveals??state.solutionReveals,
-        drafts:{...state.drafts,...(progress.drafts??{}),...(projects.drafts??{})},conceptScores:{...state.conceptScores,...conceptScores},conceptMastery:{...state.conceptMastery,...conceptMastery},
-        history:Array.isArray(progress.history)?progress.history:state.history,streak:progress.streak??state.streak,settings:{...state.settings,...((parsed.settings??progress.settings) as Partial<Settings>|undefined)}
-      }));
+      set(state=>{
+        const onboarding:OnboardingProfile={...state.onboarding,...oldOnboarding,goals:Array.isArray(oldOnboarding.goals)?oldOnboarding.goals:state.onboarding.goals,placementEvidence:migratePlacementEvidence(oldOnboarding.placementEvidence??state.onboarding.placementEvidence)};
+        return {
+          onboarded:progress.onboarded??state.onboarded,
+          onboarding,
+          completedLessons:Array.isArray(progress.completedLessons)?progress.completedLessons:state.completedLessons,
+          completedExercises:Array.isArray(progress.completedExercises)?progress.completedExercises:state.completedExercises,
+          completedProjectStages:projects.completedStages??progress.completedProjectStages??state.completedProjectStages,
+          currentLessonId:typeof progress.currentLessonId==='string'?progress.currentLessonId:state.currentLessonId,
+          bookmarks:Array.isArray(progress.bookmarks)?progress.bookmarks:state.bookmarks,
+          attempts:progress.attempts??state.attempts,successfulAttempts:progress.successfulAttempts??state.successfulAttempts,
+          hintsUsed:progress.hintsUsed??state.hintsUsed,solutionReveals:progress.solutionReveals??state.solutionReveals,
+          drafts:{...state.drafts,...(progress.drafts??{}),...(projects.drafts??{})},conceptScores:{...state.conceptScores,...importedScores},conceptMastery:{...state.conceptMastery,...importedMastery},
+          history:Array.isArray(progress.history)?progress.history:state.history,streak:progress.streak??state.streak,settings:{...state.settings,...((parsed.settings??progress.settings) as Partial<Settings>|undefined)}
+        };
+      });
       return {ok:true,message:'Прогресс импортирован.'};
     }catch{return {ok:false,message:'Файл прогресса имеет неверный формат.'};}
   },
