@@ -1,4 +1,4 @@
-import { lessons } from './courses';
+import { cloneCurriculumDraft, type CurriculumDraft } from './curriculumDraft';
 import type { LearningBlock, Lesson } from '../types';
 
 const withoutTerminal=(value:string)=>value.trim().replace(/[.!?]+$/,'');
@@ -50,7 +50,11 @@ function elaborateBlock(block:LearningBlock,lesson:Lesson,index:number):Learning
   return block;
 }
 
-for(const lesson of lessons){
-  lesson.theory=lesson.theory.map((block,index)=>({...block,body:appendOnce(block.body,lessonDetail(lesson,index))}));
-  if(lesson.content)lesson.content=lesson.content.map((block,index)=>elaborateBlock(block,lesson,index));
+export function applyExplanationElaboration(input:CurriculumDraft):CurriculumDraft{
+  const draft=cloneCurriculumDraft(input);
+  for(const lesson of draft.lessons){
+    lesson.theory=lesson.theory.map((block,index)=>({...block,body:appendOnce(block.body,lessonDetail(lesson,index))}));
+    if(lesson.content)lesson.content=lesson.content.map((block,index)=>elaborateBlock(block,lesson,index));
+  }
+  return draft;
 }
