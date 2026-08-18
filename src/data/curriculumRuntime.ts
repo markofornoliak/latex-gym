@@ -1,22 +1,22 @@
 /*
  * Curriculum construction boundary.
  *
- * One legacy editorial step still mutates the initial seed graph first because later
- * enrichment historically depends on those edits. Expansion and deep-curriculum
- * construction are generated as deterministic copy-on-write transforms from
- * byte-preserved legacy source fixtures. Every subsequent step is also pure.
- * The finalized graph is normalized, validated, indexed and deeply frozen before
- * runtime code can observe it.
+ * The seed graph is never mutated. Every construction step is an explicit
+ * copy-on-write transform, followed by canonical normalization, structural lint,
+ * concept-graph construction, immutable indexes and a final deep freeze.
+ *
+ * Expansion/deep transforms are generated deterministically from byte-preserved
+ * legacy source fixtures so the large historical curriculum remains auditable while
+ * runtime construction stays side-effect free.
  *
  * This boundary is the only supported entry point for application curriculum reads.
  */
-import './editorialEnhancements';
-
 import { exercises as seedExercises, lessons as seedLessons, modules as seedModules } from './courses';
 import { concepts } from './concepts';
 import { applyCurriculumExpansion } from './curriculumExpansion.generated';
 import { applyDeepCurriculum } from './deepCurriculum.generated';
 import { applyDebuggingTrack } from './debuggingTrackTransform';
+import { applyEditorialEnhancements } from './editorialEnhancements';
 import { applyExplanationElaboration } from './explanationElaboration';
 import { normalizeCurriculumDraft } from './curriculumNormalize';
 import { projects } from './projects';
@@ -24,12 +24,13 @@ import { referenceEntries as seedReferences } from './reference';
 import { buildCurriculumGraph } from '../services/curriculumGraph';
 import { lintCurriculum, type CurriculumIssue } from '../services/curriculumLinter';
 
-const expanded=applyCurriculumExpansion({
+const editorial=applyEditorialEnhancements({
   modules:seedModules,
   lessons:seedLessons,
   exercises:seedExercises,
   references:seedReferences
 });
+const expanded=applyCurriculumExpansion(editorial);
 const deepened=applyDeepCurriculum(expanded);
 const withDebugging=applyDebuggingTrack(deepened);
 const explained=applyExplanationElaboration(withDebugging);
