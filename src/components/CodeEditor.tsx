@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { Compartment, EditorState } from '@codemirror/state';
-import { Decoration, EditorView, crosshairCursor, drawSelection, dropCursor, highlightActiveLine, hoverTooltip, keymap, lineNumbers, rectangularSelection } from '@codemirror/view';
+import { Compartment, EditorState, RangeSetBuilder } from '@codemirror/state';
+import { Decoration, EditorView, GutterMarker, crosshairCursor, drawSelection, dropCursor, gutter, highlightActiveLine, hoverTooltip, keymap, lineNumbers, rectangularSelection } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { bracketMatching, defaultHighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, snippetCompletion, type Completion, type CompletionContext } from '@codemirror/autocomplete';
@@ -57,7 +57,9 @@ const snippetCompletions:Completion[]=[
 function latexCompletion(context:CompletionContext){
   const commandWord=context.matchBefore(/\\[a-zA-Z]*$/);
   if(commandWord){
-    const preamble=context.state.doc.sliceString(0,Math.min(context.state.doc.length,context.state.doc.toString().indexOf('\\begin{document}')>=0?context.state.doc.toString().indexOf('\\begin{document}'):context.state.doc.length));
+    const source=context.state.doc.toString();
+    const documentStart=source.indexOf('\\begin{document}');
+    const preamble=context.state.doc.sliceString(0,Math.min(context.state.doc.length,documentStart>=0?documentStart:context.state.doc.length));
     const hasAmsmath=/\\usepackage(?:\[[^\]]*\])?\{[^}]*amsmath[^}]*\}/.test(preamble);
     const hasGraphicx=/\\usepackage(?:\[[^\]]*\])?\{[^}]*graphicx[^}]*\}/.test(preamble);
     const options=commandCompletions.map(item=>{
@@ -94,6 +96,12 @@ const commandHover=hoverTooltip((view,pos)=>{
     }
   };
 });
+
+class DiagnosticMarker extends GutterMarker {
+  constructor(readonly severity:Diagnostic['severity']){super();}
+  eq(other:DiagnosticMarker){return other.severity===this.severity;}
+  toDOM(){const marker=document.createElement('span');marker.className=`cm-diagnostic-marker cm-diagnostic-marker--${this.severity}`;marker.setAttribute('aria-hidden','true');marker.title=this.severity==='error'?'Ошибка TeX':this.severity==='warning'?'Предупреждение TeX':'Информация';return marker;}
+}
 
 export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,autoClose=true,minHeight=290,onReset,onCompile,onSave,onShowShortcuts,diagnostics=[]}:EditorProps){
   const host=useRef<HTMLDivElement>(null);
@@ -138,20 +146,74 @@ export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,au
 
   useEffect(()=>{
     const view=viewRef.current;if(!view)return;
-    const ranges=diagnostics.filter(item=>item.line>0&&item.line<=view.state.doc.lines).map(item=>Decoration.line({class:`cm-diagnostic-line cm-diagnostic-line--${item.severity}`}).range(view.state.doc.line(item.line).from));
-    view.dispatch({effects:diagnosticsCompartment.reconfigure(EditorView.decorations.of(Decoration.set(ranges,true)))});
+    view.dispatch({effects:diagnosticsCompartment.reconfigure(diagnosticExtensions(view,diagnostics))});
   },[diagnostics,diagnosticsCompartment,value]);
 
   return <div className={`editor-frame ${fullscreen?'editor-frame--fullscreen':''}`} style={{'--editor-min-height':`${minHeight}px`} as CSSProperties}>
     <div className="editor-toolbar">
       <div className="editor-tools-left"><button type="button" onClick={()=>formatEditor(viewRef.current)} className="text-tool">Форматировать</button>{onReset&&<button type="button" onClick={onReset} className="text-tool">Сбросить</button>}</div>
-      <button className="icon-button" type="button" onClick={()=>setFullscreen(value=>!value)} aria-label={fullscreen?'Выйти из полноэкранного редактора':'Открыть редактор на весь экран'}><ExpandIcon/></button>
+      <div className="editor-tools-right">{diagnostics.length>0&&<div className="editor-diagnostic-nav" aria-label="Навигация по диагностике"><span>{diagnostics.filter(item=>item.severity==='error').length} ошибок · {diagnostics.filter(item=>item.severity==='warning').length} предупреждений</span><button type="button" className="text-tool" onClick={()=>jumpDiagnostic(viewRef.current,diagnostics,-1)} aria-label="Предыдущая диагностика">↑</button><button type="button" className="text-tool" onClick={()=>jumpDiagnostic(viewRef.current,diagnostics,1)} aria-label="Следующая диагностика">↓</button></div>}<button className="icon-button" type="button" onClick={()=>setFullscreen(value=>!value)} aria-label={fullscreen?'Выйти из полноэкранного редактора':'Открыть редактор на весь экран'}><ExpandIcon/></button></div>
     </div>
     <div ref={host} className="editor-host" />
   </div>;
 }
 
 function editorSettings(wordWrap:boolean,showLineNumbers:boolean,autoClose:boolean){return [showLineNumbers?lineNumbers():[],wordWrap?EditorView.lineWrapping:[],autoClose?closeBrackets():[]];}
+
+function diagnosticExtensions(view:EditorView,diagnostics:Diagnostic[]){
+  const normalized=diagnostics.map(item=>normalizeDiagnosticRange(view,item)).filter(Boolean) as Array<{item:Diagnostic;from:number;to:number}>;
+  normalized.sort((left,right)=>left.from-right.from||left.to-right.to);
+  const decorations=normalized.map(({item,from,to})=>to>from?Decoration.mark({class:`cm-diagnostic-range cm-diagnostic-range--${item.severity}`}).range(from,to):Decoration.line({class:`cm-diagnostic-line cm-diagnostic-line--${item.severity}`}).range(view.state.doc.line(item.line).from));
+  const diagnosticGutter=gutter({
+    class:'cm-diagnostic-gutter',
+    markers(currentView){
+      const builder=new RangeSetBuilder<GutterMarker>();
+      const usedLines=new Set<number>();
+      for(const diagnostic of [...diagnostics].sort((left,right)=>left.line-right.line)){
+        if(diagnostic.line<1||diagnostic.line>currentView.state.doc.lines||usedLines.has(diagnostic.line))continue;
+        usedLines.add(diagnostic.line);
+        builder.add(currentView.state.doc.line(diagnostic.line).from,currentView.state.doc.line(diagnostic.line).from,new DiagnosticMarker(diagnostic.severity));
+      }
+      return builder.finish();
+    }
+  });
+  const diagnosticHover=hoverTooltip((currentView,pos)=>{
+    const diagnostic=diagnosticAt(currentView,diagnostics,pos);
+    if(!diagnostic)return null;
+    const range=normalizeDiagnosticRange(currentView,diagnostic);
+    if(!range)return null;
+    return {pos:range.from,end:Math.max(range.from+1,range.to),above:true,create(){
+      const dom=document.createElement('div');dom.className=`cm-diagnostic-tooltip cm-diagnostic-tooltip--${diagnostic.severity}`;
+      const title=document.createElement('strong');title.textContent=diagnostic.message;dom.append(title);
+      const explanation=document.createElement('p');explanation.textContent=diagnostic.explanation;dom.append(explanation);
+      if(diagnostic.suggestion){const suggestion=document.createElement('span');suggestion.textContent=diagnostic.suggestion;dom.append(suggestion);}
+      return {dom};
+    }};
+  });
+  return [EditorView.decorations.of(Decoration.set(decorations,true)),diagnosticGutter,diagnosticHover];
+}
+
+function normalizeDiagnosticRange(view:EditorView,item:Diagnostic){
+  if(item.line<1||item.line>view.state.doc.lines)return null;
+  const line=view.state.doc.line(item.line);
+  const from=item.from===undefined?line.from:Math.max(line.from,Math.min(view.state.doc.length,item.from));
+  const requestedTo=item.to===undefined?line.to:Math.max(from,Math.min(view.state.doc.length,item.to));
+  const to=requestedTo===from&&line.to>line.from?line.to:requestedTo;
+  return {item,from,to};
+}
+function diagnosticAt(view:EditorView,diagnostics:Diagnostic[],pos:number){
+  const line=view.state.doc.lineAt(pos).number;
+  return diagnostics.find(item=>{const range=normalizeDiagnosticRange(view,item);return Boolean(range&&pos>=range.from&&pos<=Math.max(range.from+1,range.to));})??diagnostics.find(item=>item.line===line);
+}
+function jumpDiagnostic(view:EditorView|null,diagnostics:Diagnostic[],direction:1|-1){
+  if(!view||!diagnostics.length)return;
+  const ordered=diagnostics.filter(item=>item.line>=1&&item.line<=view.state.doc.lines).sort((left,right)=>left.line-right.line);
+  if(!ordered.length)return;
+  const currentLine=view.state.doc.lineAt(view.state.selection.main.head).number;
+  const target=direction>0?(ordered.find(item=>item.line>currentLine)??ordered[0]):([...[...ordered].reverse()].find(item=>item.line<currentLine)??ordered.at(-1)!);
+  const range=normalizeDiagnosticRange(view,target);if(!range)return;
+  view.dispatch({selection:{anchor:range.from},scrollIntoView:true});view.focus();
+}
 
 function completeEnvironment(view:EditorView){
   const pos=view.state.selection.main.head;
