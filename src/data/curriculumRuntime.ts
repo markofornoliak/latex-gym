@@ -11,10 +11,10 @@
 import './editorialEnhancements';
 import './curriculumExpansion';
 import './deepCurriculum';
-import './debuggingTrack';
 
 import { exercises as seedExercises, lessons as seedLessons, modules as seedModules } from './courses';
 import { concepts } from './concepts';
+import { applyDebuggingTrack } from './debuggingTrackTransform';
 import { applyExplanationElaboration } from './explanationElaboration';
 import { normalizeCurriculumDraft } from './curriculumNormalize';
 import { projects } from './projects';
@@ -22,12 +22,13 @@ import { referenceEntries as seedReferences } from './reference';
 import { buildCurriculumGraph } from '../services/curriculumGraph';
 import { lintCurriculum, type CurriculumIssue } from '../services/curriculumLinter';
 
-const explained=applyExplanationElaboration({
+const withDebugging=applyDebuggingTrack({
   modules:seedModules,
   lessons:seedLessons,
   exercises:seedExercises,
   references:seedReferences
 });
+const explained=applyExplanationElaboration(withDebugging);
 const {draft,report:normalization}=normalizeCurriculumDraft(explained,concepts);
 const {modules,lessons,exercises,references}=draft;
 
