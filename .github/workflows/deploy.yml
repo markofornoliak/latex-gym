@@ -171,6 +171,7 @@ jobs:
           capture phone-320-foundation /lesson/what-is-latex 320 568 'Что такое LaTeX'
           capture phone-360-practice /practice/deep-001 360 800 'ЗАДАНИЕ 1 ИЗ 3'
           capture phone-390-command /lesson/commands-foundation 390 844 'Команды'
+          capture phone-390-project /project/academic-paper/stage-10 390 844 'Архитектура публикации'
           capture phone-430-first-document /lesson/first-document-foundation 430 932 'Первый документ'
           capture tablet-768-reference /reference/frac 768 1024 'Дробь'
           capture tablet-1024-project /project/academic-paper/stage-4 1024 1366 'Математическая модель'
@@ -181,6 +182,8 @@ jobs:
           capture tv-3840-project /project/technical-report/build 3840 2160 'Сборка'
 
           # Project QA protects the applied-workflow surface, not only the route heading.
+          grep -Fq 'ФАЙЛЫ' /tmp/phone-390-project.html
+          grep -Fq 'sections/introduction.tex' /tmp/phone-390-project.html
           grep -Fq 'ФАЙЛЫ' /tmp/desktop-1920-project.html
           grep -Fq 'sections/introduction.tex' /tmp/desktop-1920-project.html
           grep -Fq 'chapters/system.tex' /tmp/tv-3840-project.html
