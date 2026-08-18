@@ -1,19 +1,21 @@
 /*
  * Curriculum construction boundary.
  *
- * Three legacy construction modules still mutate the seed arrays in a deterministic
- * phase. Every migrated step after that boundary is an explicit copy-on-write
- * transform. The finalized graph is normalized, validated, indexed and deeply
- * frozen before runtime code can observe it.
+ * One legacy editorial step still mutates the initial seed graph first because later
+ * enrichment historically depends on those edits. Expansion and deep-curriculum
+ * construction are generated as deterministic copy-on-write transforms from
+ * byte-preserved legacy source fixtures. Every subsequent step is also pure.
+ * The finalized graph is normalized, validated, indexed and deeply frozen before
+ * runtime code can observe it.
  *
  * This boundary is the only supported entry point for application curriculum reads.
  */
 import './editorialEnhancements';
-import './curriculumExpansion';
-import './deepCurriculum';
 
 import { exercises as seedExercises, lessons as seedLessons, modules as seedModules } from './courses';
 import { concepts } from './concepts';
+import { applyCurriculumExpansion } from './curriculumExpansion.generated';
+import { applyDeepCurriculum } from './deepCurriculum.generated';
 import { applyDebuggingTrack } from './debuggingTrackTransform';
 import { applyExplanationElaboration } from './explanationElaboration';
 import { normalizeCurriculumDraft } from './curriculumNormalize';
@@ -22,12 +24,14 @@ import { referenceEntries as seedReferences } from './reference';
 import { buildCurriculumGraph } from '../services/curriculumGraph';
 import { lintCurriculum, type CurriculumIssue } from '../services/curriculumLinter';
 
-const withDebugging=applyDebuggingTrack({
+const expanded=applyCurriculumExpansion({
   modules:seedModules,
   lessons:seedLessons,
   exercises:seedExercises,
   references:seedReferences
 });
+const deepened=applyDeepCurriculum(expanded);
+const withDebugging=applyDebuggingTrack(deepened);
 const explained=applyExplanationElaboration(withDebugging);
 const {draft,report:normalization}=normalizeCurriculumDraft(explained,concepts);
 const {modules,lessons,exercises,references}=draft;
@@ -52,7 +56,6 @@ const conceptById=freezeRecord(Object.fromEntries(concepts.map(concept=>[concept
 const referenceById=freezeRecord(Object.fromEntries(references.map(entry=>[entry.id,entry])));
 const projectById=freezeRecord(Object.fromEntries(projects.map(project=>[project.id,project])));
 
-// Freeze only after every construction transform and every index has been produced.
 deepFreeze(modules);deepFreeze(lessons);deepFreeze(exercises);deepFreeze(concepts);deepFreeze(references);deepFreeze(projects);
 
 export const curriculum=Object.freeze({
