@@ -20,6 +20,7 @@ import './styles/interactionPolish.css';
 import './styles/compilerWorkspace.css';
 import './styles/trainingDashboard.css';
 import './styles/onboardingFlow.css';
+import './styles/modeAwarePractice.css';
 
 registerSW({ immediate: true });
 createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
