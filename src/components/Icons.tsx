@@ -5,6 +5,7 @@ const base = { width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'curren
 export const HomeIcon=(p:P)=><svg {...base} {...p}><path d="M3.5 10.5 12 3.7l8.5 6.8v9.2h-6v-5.8h-5v5.8h-6z"/></svg>;
 export const BookIcon=(p:P)=><svg {...base} {...p}><path d="M4.5 4.2c2.7-.6 5.2-.1 7.5 1.4v14c-2.3-1.5-4.8-2-7.5-1.4z"/><path d="M19.5 4.2c-2.7-.6-5.2-.1-7.5 1.4v14c2.3-1.5 4.8-2 7.5-1.4z"/></svg>;
 export const PenIcon=(p:P)=><svg {...base} {...p}><path d="m4 20 3.8-1 10-10-2.8-2.8-10 10z"/><path d="m13.8 7.4 2.8 2.8"/></svg>;
+export const ProjectIcon=(p:P)=><svg {...base} {...p}><path d="M4 5.5h6l1.5 2H20v11H4z"/><path d="M7.5 11h9M7.5 14.5h6"/></svg>;
 export const ReferenceIcon=(p:P)=><svg {...base} {...p}><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>;
 export const BookmarkIcon=(p:P)=><svg {...base} {...p}><path d="M6.5 3.5h11v17L12 17l-5.5 3.5z"/></svg>;
 export const BackIcon=(p:P)=><svg {...base} {...p}><path d="m15 5-7 7 7 7"/></svg>;
