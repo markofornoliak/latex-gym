@@ -41,7 +41,7 @@ export function analyzeLatexContext(source:string,pos=source.length):LatexEditor
     inMath:isMathContext(before,environmentStack),
     environment,
     environmentStack,
-    packages:extractPackages(before)
+    packages:extractPackages(source)
   };
 }
 
@@ -128,14 +128,8 @@ function completionLabel(entry:ReferenceEntry){
 }
 
 function completionApply(entry:ReferenceEntry){
-  const syntax=entry.syntax.trim();
-  if(syntax.startsWith(entry.command)){
-    return syntax
-      .replace(/\[options\]/gi,'')
-      .replace(/\{(?:title|text|key|file|value|name|expression|numerator|denominator|package|class|length|position)\}/gi,'{}')
-      .replace(/\s*\.\.\.\s*/g,'');
-  }
-  return entry.command;
+  const requiredArguments=entry.arguments?.filter(argument=>argument.required).length??0;
+  return `${entry.command}${'{}'.repeat(requiredArguments)}`;
 }
 
 function suggestionDetail(entry:ReferenceEntry,packageLoaded:boolean){
