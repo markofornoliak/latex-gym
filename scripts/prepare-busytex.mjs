@@ -4,7 +4,16 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 
-const RELEASE = 'build_native_ff0318af379bd80fb72b9b928d4744b5d9c9077d_12853073565_1';
+async function resolveLatestRelease() {
+  const probe = await fetch('https://github.com/busytex/busytex/releases/latest/download/busytex_pipeline.js', { redirect: 'manual' });
+  const location = probe.headers.get('location') || '';
+  const match = location.match(/\/releases\/download\/([^/]+)\/busytex_pipeline\.js/);
+  if (!match) throw new Error(`Unable to resolve BusyTeX release tag from ${location || `HTTP ${probe.status}`}`);
+  console.log(`BUSYTEX_RESOLVED_RELEASE=${match[1]}`);
+  return match[1];
+}
+
+const RELEASE = process.env.BUSYTEX_RELEASE || await resolveLatestRelease();
 const BASE = `https://github.com/busytex/busytex/releases/download/${RELEASE}`;
 const destination = process.env.BUSYTEX_DEST || path.resolve('dist', 'busytex');
 const mode = process.argv[2] === 'full' ? 'full' : 'smoke';
