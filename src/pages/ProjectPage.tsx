@@ -32,8 +32,6 @@ export function ProjectPage(){
 
   useEffect(()=>{
     if(!project||!stage)return;
-    // One project owns one evolving source document. Old per-stage drafts remain a
-    // migration fallback so existing users do not lose work after this change.
     const existing=drafts[workspaceKey]??drafts[legacyStageKey];
     setSource(existing??stage.starterCode);setResult(null);setState('ready');setSaved(true);
   },[project?.id,stage?.id,workspaceKey,legacyStageKey]);
@@ -48,6 +46,7 @@ export function ProjectPage(){
   const busy=isCompilationBusy(state);
   const currentDone=projectProgress.includes(stage.id);
   const next=project.stages[index+1];
+  const updateSource=(value:string)=>{setSource(value);if(result)setResult(null);if(state!=='ready')setState('ready');};
   const runCompile=async()=>{
     setState('queued');
     try{
@@ -71,7 +70,7 @@ export function ProjectPage(){
     <main className="project-main">
       <header className="project-header"><span className="eyebrow">ПРОЕКТ · ЭТАП {index+1} ИЗ {project.stages.length}</span><h1>{stage.title}</h1><p>{stage.objective}</p></header>
       <section className="project-requirements"><span className="eyebrow">КРИТЕРИИ ЭТАПА</span><ul>{stage.requirements.map(requirement=><li key={requirement}>{requirement}</li>)}</ul>{index>0&&<p className="project-integrity-note">Продолжайте тот же документ: требования предыдущих этапов должны оставаться рабочими.</p>}</section>
-      <section className="project-editor"><div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${state}`}>{compilationStateLabel(state)}</span><span>{result?engineLabel(result):saved?'Сохранено как единый проект':'Сохранение…'}</span></div><Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={setSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onReset={index===0?()=>setSource(stage.starterCode):undefined} onCompile={()=>{void runCompile();}} onSave={()=>{setDraft(workspaceKey,source);setSaved(true);}} diagnostics={result?.diagnostics??[]}/></Suspense><div className="project-editor-actions"><button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy}><PlayIcon/>{busy?compilationStateLabel(state):'Скомпилировать'}</button><button className="primary-button" onClick={finish}>{currentDone?'Этап пройден':next?'Завершить и продолжить':'Завершить проект'}{next&&<ChevronIcon/>}</button></div></section>
+      <section className="project-editor"><div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${state}`}>{compilationStateLabel(state)}</span><span>{result?engineLabel(result):saved?'Сохранено как единый проект':'Сохранение…'}</span></div><Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={updateSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onReset={index===0?()=>updateSource(stage.starterCode):undefined} onCompile={()=>{void runCompile();}} onSave={()=>{setDraft(workspaceKey,source);setSaved(true);}} diagnostics={result?.diagnostics??[]}/></Suspense><div className="project-editor-actions"><button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy}><PlayIcon/>{busy?compilationStateLabel(state):'Скомпилировать'}</button><button className="primary-button" onClick={finish}>{currentDone?'Этап пройден':next?'Завершить и продолжить':'Завершить проект'}{next&&<ChevronIcon/>}</button></div></section>
     </main>
     <aside className="project-preview"><span className="eyebrow">РЕЗУЛЬТАТ</span><div className="project-paper"><LatexPreview result={result}/></div><p>{result?.pdf?'Это реальный PDF текущего проектного документа.':result?.fallbackReason?'Реальный TeX недоступен: показан явно обозначенный учебный fallback.':'Скомпилируйте проект, чтобы проверить его реальным TeX-движком.'}</p></aside>
   </div>;
