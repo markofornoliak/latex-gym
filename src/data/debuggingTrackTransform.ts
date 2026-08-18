@@ -1,4 +1,4 @@
-import { exercises, lessonIndex, lessons, modules } from './courses';
+import { cloneCurriculumDraft, type CurriculumDraft } from './curriculumDraft';
 import type { CourseModule, Exercise, LearningBlock, Lesson, ValidatorRule } from '../types';
 
 const c=(id:string,title:string,body:string):LearningBlock=>({id,type:'concept',title,body});
@@ -13,12 +13,12 @@ const specs:Spec[]=[
   {
     id:'debug-undefined-control',title:'Undefined control sequence',subtitle:'Неизвестная команда: опечатка или отсутствующая зависимость.',objective:'Отделять ошибку имени команды от ошибки содержимого аргумента.',
     content:[c('du-1','Что сообщает ошибка','Компилятор встретил управляющую последовательность, которой нет в текущем наборе определений. Сначала проверьте точное написание, затем — пакет, который должен определять команду.'),m('du-2','Опечатка','Одна пропущенная буква создаёт другое имя команды.','\\secton{Results}','\\section{Results}'),m('du-3','Отсутствующий пакет','Корректно написанная команда тоже может быть неизвестна, если её пакет не подключён.','\\includegraphics{plot.pdf}','\\usepackage{graphicx}\n...\n\\includegraphics{plot.pdf}'),check('du-4','Что проверять раньше: аргумент команды или само имя?','Сначала имя команды и наличие определяющего её пакета.')],
-    tasks:[{title:'Опечатка section',instructions:'Исправьте неизвестную команду.',starter:'\\secton{Results}',solution:'\\section{Results}',validators:[has('\\section{Results}','Команда исправлена.','Правильное имя — section.')]},{title:'graphicx',instructions:'Добавьте зависимость для includegraphics.',starter:'\\documentclass{article}\n\\begin{document}\n\\includegraphics{plot.pdf}\n\\end{document}',solution:'\\documentclass{article}\n\\usepackage{graphicx}\n\\begin{document}\n\\includegraphics{plot.pdf}\n\\end{document}',validators:[{type:'package',value:'graphicx',message:'graphicx подключён в преамбуле.',hint:'Добавьте usepackage{graphicx} до begin{document}.'}]},{title:'Не маскируйте ошибку',instructions:'Удалите неизвестную команду вместо добавления случайного пакета.',starter:'\\usepackage{amsmath}\n\\mysterycommand{Text}',solution:'Text',validators:[forbid('\\mysterycommand','Неизвестная команда удалена.','Если команда не нужна по смыслу, не ищите пакет наугад.')] }] 
+    tasks:[{title:'Опечатка section',instructions:'Исправьте неизвестную команду.',starter:'\\secton{Results}',solution:'\\section{Results}',validators:[has('\\section{Results}','Команда исправлена.','Правильное имя — section.')]},{title:'graphicx',instructions:'Добавьте зависимость для includegraphics.',starter:'\\documentclass{article}\n\\begin{document}\n\\includegraphics{plot.pdf}\n\\end{document}',solution:'\\documentclass{article}\n\\usepackage{graphicx}\n\\begin{document}\n\\includegraphics{plot.pdf}\n\\end{document}',validators:[{type:'package',value:'graphicx',message:'graphicx подключён в преамбуле.',hint:'Добавьте usepackage{graphicx} до begin{document}.'}]},{title:'Не маскируйте ошибку',instructions:'Удалите неизвестную команду вместо добавления случайного пакета.',starter:'\\usepackage{amsmath}\n\\mysterycommand{Text}',solution:'Text',validators:[forbid('\\mysterycommand','Неизвестная команда удалена.','Если команда не нужна по смыслу, не ищите пакет наугад.')]}]
   },
   {
     id:'debug-missing-brace',title:'Missing } inserted',subtitle:'Нарушенная граница аргумента часто проявляется позже места ошибки.',objective:'Локализовать незакрытый обязательный аргумент и восстановить группировку.',
     content:[c('db-1','Почему строка может быть неточной','TeX продолжает читать токены, пока не становится ясно, что структура невозможна. Поэтому указанная строка — место обнаружения, а не всегда место причины.'),m('db-2','Незакрытый заголовок','section ожидает завершение аргумента.','\\section{Method\nText follows.','\\section{Method}\nText follows.'),m('db-3','Вложенные аргументы','Проверяйте скобки снаружи внутрь и не считайте визуальное выравнивание доказательством баланса.','\\textbf{Result \\emph{important}','\\textbf{Result \\emph{important}}'),check('db-4','Почему добавлять } в конец файла — плохая стратегия?','Это может скрыть место причины и изменить область действия команд; закрывать нужно конкретный незавершённый аргумент.')],
-    tasks:[{title:'Закройте section',instructions:'Исправьте обязательный аргумент.',starter:'\\section{Method',solution:'\\section{Method}',validators:[has('\\section{Method}','section закрыт.','Добавьте } после Method.')]},{title:'Вложенное выделение',instructions:'Согласуйте обе пары скобок.',starter:'\\textbf{Result \\emph{important}',solution:'\\textbf{Result \\emph{important}}',validators:[has('\\emph{important}}','Обе группы закрыты.','Нужна скобка для emph и для textbf.')]},{title:'Не добавляйте лишнюю скобку',instructions:'Удалите лишнюю закрывающую скобку.',starter:'\\section{Method}}',solution:'\\section{Method}',validators:[forbid('}}','Лишняя скобка удалена.','У section одна группа аргумента.')] }]
+    tasks:[{title:'Закройте section',instructions:'Исправьте обязательный аргумент.',starter:'\\section{Method',solution:'\\section{Method}',validators:[has('\\section{Method}','section закрыт.','Добавьте } после Method.')]},{title:'Вложенное выделение',instructions:'Согласуйте обе пары скобок.',starter:'\\textbf{Result \\emph{important}',solution:'\\textbf{Result \\emph{important}}',validators:[has('\\emph{important}}','Обе группы закрыты.','Нужна скобка для emph и для textbf.')]},{title:'Не добавляйте лишнюю скобку',instructions:'Удалите лишнюю закрывающую скобку.',starter:'\\section{Method}}',solution:'\\section{Method}',validators:[forbid('}}','Лишняя скобка удалена.','У section одна группа аргумента.')]}]
   },
   {
     id:'debug-alignment-tab',title:'Extra alignment tab',subtitle:'& имеет смысл только внутри структуры с ожидаемым числом столбцов.',objective:'Сопоставлять число ячеек строки с объявленной моделью tabular/align.',
@@ -42,12 +42,23 @@ const specs:Spec[]=[
   }
 ];
 
-let counter=1;
-const built:Lesson[]=specs.map(spec=>{
-  const lessonExercises:Exercise[]=spec.tasks.map((task,index)=>({id:`debug-${String(counter++).padStart(3,'0')}`,lessonId:spec.id,category:'Отладка',difficulty:index===0?'Средний':'Продвинутый',mode:index===2?'Рефакторинг':'Исправить ошибку',title:task.title,instructions:task.instructions,requirements:task.validators.map(rule=>rule.message),starterCode:task.starter,validators:task.validators,hints:task.validators.map(rule=>rule.hint),solution:task.solution,concepts:['debugging','compile-error'],prerequisites:['debugging']}));
-  return {id:spec.id,moduleId:'debugging-track',number:0,title:spec.title,subtitle:spec.subtitle,difficulty:'Продвинутый',theory:[],content:spec.content,pedagogy:{objective:spec.objective,prerequisites:['debugging'],introduces:[],reinforces:['debugging','compile-error'],misconceptions:['Сообщение ошибки — симптом конкретного нарушения модели, а не повод менять код наугад.'],practiceObjective:'Локализовать причину, внести минимальное исправление и снова проверить структуру.',masteryCriteria:['Объясняет сообщение своими словами.','Исправляет причину минимальным изменением.']},examples:[{id:`${spec.id}-example`,title:'Минимальный сломанный пример',description:'Сначала локализуйте нарушение, затем сравните с минимальным исправлением.',code:spec.tasks[0].starter}],exercises:lessonExercises,relatedCommands:[]};
-});
-const module:CourseModule={id:'debugging-track',number:0,title:'Диагностика',description:'Реальные сообщения компилятора и системная локализация причин.',prerequisites:'Базовая структура, math mode, таблицы и пакеты',difficulty:'Продвинутый',lessons:built};
-modules.push(module);lessons.push(...built);exercises.push(...built.flatMap(lesson=>lesson.exercises));
-modules.forEach((item,index)=>{item.number=index+1;});lessons.forEach((lesson,index)=>{lesson.number=index+1;});
-lessonIndex.clear();lessons.forEach((lesson,index)=>lessonIndex.set(lesson.id,index));
+function buildDebuggingLessons(){
+  let counter=1;
+  return specs.map(spec=>{
+    const lessonExercises:Exercise[]=spec.tasks.map((task,index)=>({id:`debug-${String(counter++).padStart(3,'0')}`,lessonId:spec.id,category:'Отладка',difficulty:index===0?'Средний':'Продвинутый',mode:index===2?'Рефакторинг':'Исправить ошибку',title:task.title,instructions:task.instructions,requirements:task.validators.map(rule=>rule.message),starterCode:task.starter,validators:task.validators,hints:task.validators.map(rule=>rule.hint),solution:task.solution,concepts:['debugging','compile-error'],prerequisites:['debugging']}));
+    return {id:spec.id,moduleId:'debugging-track',number:0,title:spec.title,subtitle:spec.subtitle,difficulty:'Продвинутый',theory:[],content:spec.content,pedagogy:{objective:spec.objective,prerequisites:['debugging'],introduces:[],reinforces:['debugging','compile-error'],misconceptions:['Сообщение ошибки — симптом конкретного нарушения модели, а не повод менять код наугад.'],practiceObjective:'Локализовать причину, внести минимальное исправление и снова проверить структуру.',masteryCriteria:['Объясняет сообщение своими словами.','Исправляет причину минимальным изменением.']},examples:[{id:`${spec.id}-example`,title:'Минимальный сломанный пример',description:'Сначала локализуйте нарушение, затем сравните с минимальным исправлением.',code:spec.tasks[0].starter}],exercises:lessonExercises,relatedCommands:[]} satisfies Lesson;
+  });
+}
+
+export function applyDebuggingTrack(input:CurriculumDraft):CurriculumDraft{
+  const draft=cloneCurriculumDraft(input);
+  if(draft.modules.some(module=>module.id==='debugging-track'))return draft;
+  const built=buildDebuggingLessons();
+  const module:CourseModule={id:'debugging-track',number:0,title:'Диагностика',description:'Реальные сообщения компилятора и системная локализация причин.',prerequisites:'Базовая структура, math mode, таблицы и пакеты',difficulty:'Продвинутый',lessons:built};
+  draft.modules.push(module);
+  draft.lessons.push(...built);
+  draft.exercises.push(...built.flatMap(lesson=>lesson.exercises));
+  draft.modules.forEach((item,index)=>{item.number=index+1;});
+  draft.lessons.forEach((lesson,index)=>{lesson.number=index+1;});
+  return draft;
+}

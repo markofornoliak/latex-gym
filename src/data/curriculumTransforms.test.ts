@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cloneCurriculumDraft, type CurriculumDraft } from './curriculumDraft';
+import { applyDebuggingTrack } from './debuggingTrackTransform';
 import { applyExplanationElaboration } from './explanationElaboration';
 import { normalizeCurriculumDraft } from './curriculumNormalize';
 import type { ConceptDefinition, CourseModule, Exercise, Lesson, ReferenceEntry } from '../types';
@@ -31,6 +32,28 @@ describe('curriculum construction transforms',()=>{
     expect(cloned.modules[0].lessons[0]).toBe(cloned.lessons[0]);
     expect(cloned.lessons[0].exercises[0]).toBe(cloned.exercises[0]);
     expect(cloned.lessons[0]).not.toBe(input.lessons[0]);
+  });
+
+  it('adds the debugging track on a copy with stable IDs and shared identities',()=>{
+    const input=fixture();
+    const before=JSON.stringify(input);
+    const first=applyDebuggingTrack(input);
+    const second=applyDebuggingTrack(input);
+    expect(JSON.stringify(input)).toBe(before);
+    expect(first.modules).toHaveLength(input.modules.length+1);
+    expect(first.lessons).toHaveLength(input.lessons.length+6);
+    expect(first.exercises).toHaveLength(input.exercises.length+18);
+    const debugModule=first.modules.at(-1)!;
+    expect(debugModule.id).toBe('debugging-track');
+    expect(debugModule.lessons.map(lesson=>lesson.id)).toEqual(['debug-undefined-control','debug-missing-brace','debug-alignment-tab','debug-missing-math','debug-undefined-environment','debug-file-not-found']);
+    expect(first.exercises.slice(-18).map(exercise=>exercise.id)).toEqual(Array.from({length:18},(_,index)=>`debug-${String(index+1).padStart(3,'0')}`));
+    expect(debugModule.lessons[0]).toBe(first.lessons[input.lessons.length]);
+    expect(debugModule.lessons[0].exercises[0]).toBe(first.exercises[input.exercises.length]);
+    expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+    const reapplied=applyDebuggingTrack(first);
+    expect(reapplied.modules).toHaveLength(first.modules.length);
+    expect(reapplied.lessons).toHaveLength(first.lessons.length);
+    expect(reapplied.exercises).toHaveLength(first.exercises.length);
   });
 
   it('elaborates explanations without mutating the input and is deterministic',()=>{
