@@ -1,20 +1,15 @@
+import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
-import { mkdir, stat, unlink } from 'node:fs/promises';
+import { mkdir, readFile, stat, unlink } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 
-async function resolveLatestRelease() {
-  const probe = await fetch('https://github.com/busytex/busytex/releases/latest/download/busytex_pipeline.js', { redirect: 'manual' });
-  const location = probe.headers.get('location') || '';
-  const match = location.match(/\/releases\/download\/([^/]+)\/busytex_pipeline\.js/);
-  if (!match) throw new Error(`Unable to resolve BusyTeX release tag from ${location || `HTTP ${probe.status}`}`);
-  console.log(`BUSYTEX_RESOLVED_RELEASE=${match[1]}`);
-  return match[1];
-}
-
-const RELEASE = process.env.BUSYTEX_RELEASE || await resolveLatestRelease();
-const BASE = `https://github.com/busytex/busytex/releases/download/${RELEASE}`;
+// BusyTeX no longer publishes its WASM bundle in the current native GitHub release.
+// The project's own GitHub Pages deployment still serves the browser runtime used by
+// busytex.github.io. We mirror that runtime into LaTeX Gym at build time and print
+// SHA-256 hashes; once validated, these hashes become the immutable supply-chain pin.
+const BASE = process.env.BUSYTEX_ASSET_BASE || 'https://busytex.github.io/dist';
 const destination = process.env.BUSYTEX_DEST || path.resolve('dist', 'busytex');
 const mode = process.argv[2] === 'full' ? 'full' : 'smoke';
 
@@ -43,27 +38,29 @@ async function existsWithContent(filePath) {
   }
 }
 
+async function sha256(filePath) {
+  return createHash('sha256').update(await readFile(filePath)).digest('hex');
+}
+
 async function download(file) {
   const target = path.join(destination, file);
-  if (await existsWithContent(target)) {
-    console.log(`BusyTeX: keep ${file}`);
-    return;
+  if (!(await existsWithContent(target))) {
+    const response = await fetch(`${BASE}/${file}`, { redirect: 'follow' });
+    if (!response.ok || !response.body) {
+      throw new Error(`BusyTeX asset ${file} failed: HTTP ${response.status}`);
+    }
+
+    try {
+      await pipeline(Readable.fromWeb(response.body), createWriteStream(target));
+      if ((await stat(target)).size === 0) throw new Error(`BusyTeX asset ${file} is empty`);
+    } catch (error) {
+      await unlink(target).catch(() => {});
+      throw error;
+    }
   }
 
-  const response = await fetch(`${BASE}/${file}`, { redirect: 'follow' });
-  if (!response.ok || !response.body) {
-    throw new Error(`BusyTeX asset ${file} failed: HTTP ${response.status}`);
-  }
-
-  try {
-    await pipeline(Readable.fromWeb(response.body), createWriteStream(target));
-    const size = (await stat(target)).size;
-    if (size === 0) throw new Error(`BusyTeX asset ${file} is empty`);
-    console.log(`BusyTeX: ${file} (${(size / 1024 / 1024).toFixed(1)} MiB)`);
-  } catch (error) {
-    await unlink(target).catch(() => {});
-    throw error;
-  }
+  const size = (await stat(target)).size;
+  console.log(`BUSYTEX_ASSET ${file} ${size} sha256=${await sha256(target)}`);
 }
 
 await mkdir(destination, { recursive: true });
