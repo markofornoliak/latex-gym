@@ -1,39 +1,46 @@
 /*
  * Curriculum construction boundary.
  *
- * Legacy enrichment modules are intentionally imported here, in one deterministic
- * phase. They may mutate the seed arrays while the curriculum is being built.
- * After this module evaluates, all public curriculum data is normalized, validated,
- * indexed and deeply frozen. Runtime components must treat it as immutable.
+ * Three legacy construction modules still mutate the seed arrays in a deterministic
+ * phase. Every migrated step after that boundary is an explicit copy-on-write
+ * transform. The finalized graph is normalized, validated, indexed and deeply
+ * frozen before runtime code can observe it.
  *
  * This boundary is the only supported entry point for application curriculum reads.
- * Construction modules will be migrated to pure transforms behind this contract.
  */
 import './editorialEnhancements';
 import './curriculumExpansion';
 import './deepCurriculum';
 import './debuggingTrack';
-import './explanationElaboration';
 
-import { exercises, lessons, modules } from './courses';
+import { exercises as seedExercises, lessons as seedLessons, modules as seedModules } from './courses';
 import { concepts } from './concepts';
-import { normalizeCurriculumConcepts } from './curriculumNormalize';
+import { applyExplanationElaboration } from './explanationElaboration';
+import { normalizeCurriculumDraft } from './curriculumNormalize';
 import { projects } from './projects';
-import { referenceEntries } from './reference';
+import { referenceEntries as seedReferences } from './reference';
 import { buildCurriculumGraph } from '../services/curriculumGraph';
 import { lintCurriculum, type CurriculumIssue } from '../services/curriculumLinter';
 
-const normalization=normalizeCurriculumConcepts(lessons,exercises,concepts);
+const explained=applyExplanationElaboration({
+  modules:seedModules,
+  lessons:seedLessons,
+  exercises:seedExercises,
+  references:seedReferences
+});
+const {draft,report:normalization}=normalizeCurriculumDraft(explained,concepts);
+const {modules,lessons,exercises,references}=draft;
+
 if(normalization.unresolved.length){
   const unresolved=[...new Set(normalization.unresolved.map(item=>item.conceptId))].sort();
   throw new Error(`Curriculum normalization produced unknown concepts (${unresolved.length}): ${unresolved.join(', ')}`);
 }
 
-const issues=lintCurriculum(lessons,exercises,referenceEntries,{modules,concepts,projects});
+const issues=lintCurriculum(lessons,exercises,references,{modules,concepts,projects});
 const errors=issues.filter(issue=>issue.severity==='error');
 if(errors.length)throw new Error(formatCurriculumErrors(errors));
 
-const {graph,issues:graphIssues}=buildCurriculumGraph({concepts,lessons,exercises,references:referenceEntries,projects});
+const {graph,issues:graphIssues}=buildCurriculumGraph({concepts,lessons,exercises,references,projects});
 if(graphIssues.some(issue=>issue.code==='concept-cycle'))throw new Error(`Curriculum graph contains a dependency cycle:\n${graphIssues.map(issue=>issue.message).join('\n')}`);
 
 const moduleById=freezeRecord(Object.fromEntries(modules.map(module=>[module.id,module])));
@@ -41,18 +48,18 @@ const lessonById=freezeRecord(Object.fromEntries(lessons.map(lesson=>[lesson.id,
 const lessonPositionById=freezeRecord(Object.fromEntries(lessons.map((lesson,index)=>[lesson.id,index])));
 const exerciseById=freezeRecord(Object.fromEntries(exercises.map(exercise=>[exercise.id,exercise])));
 const conceptById=freezeRecord(Object.fromEntries(concepts.map(concept=>[concept.id,concept])));
-const referenceById=freezeRecord(Object.fromEntries(referenceEntries.map(entry=>[entry.id,entry])));
+const referenceById=freezeRecord(Object.fromEntries(references.map(entry=>[entry.id,entry])));
 const projectById=freezeRecord(Object.fromEntries(projects.map(project=>[project.id,project])));
 
 // Freeze only after every construction transform and every index has been produced.
-deepFreeze(modules);deepFreeze(lessons);deepFreeze(exercises);deepFreeze(concepts);deepFreeze(referenceEntries);deepFreeze(projects);
+deepFreeze(modules);deepFreeze(lessons);deepFreeze(exercises);deepFreeze(concepts);deepFreeze(references);deepFreeze(projects);
 
 export const curriculum=Object.freeze({
   modules:modules as readonly typeof modules[number][],
   lessons:lessons as readonly typeof lessons[number][],
   exercises:exercises as readonly typeof exercises[number][],
   concepts:concepts as readonly typeof concepts[number][],
-  references:referenceEntries as readonly typeof referenceEntries[number][],
+  references:references as readonly typeof references[number][],
   projects:projects as readonly typeof projects[number][],
   moduleById,
   lessonById,
@@ -69,7 +76,7 @@ export const curriculum=Object.freeze({
     lessonCount:lessons.length,
     exerciseCount:exercises.length,
     conceptCount:concepts.length,
-    referenceCount:referenceEntries.length,
+    referenceCount:references.length,
     projectCount:projects.length,
     normalizedConceptTags:normalization.changes.length
   })

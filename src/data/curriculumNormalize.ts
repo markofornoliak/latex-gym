@@ -1,7 +1,6 @@
-import { conceptById } from './concepts';
-import { exercises, lessons } from './courses';
 import { canonicalConceptId, canonicalConceptIds } from './conceptAliases';
-import type { ConceptDefinition, Exercise, LearningBlock, Lesson } from '../types';
+import { cloneCurriculumDraft, type CurriculumDraft } from './curriculumDraft';
+import type { ConceptDefinition, Exercise, LearningBlock } from '../types';
 
 export type CurriculumNormalizationChange={
   kind:'exercise-concept'|'exercise-prerequisite'|'lesson-prerequisite'|'lesson-introduces'|'lesson-reinforces';
@@ -15,7 +14,18 @@ export type CurriculumNormalizationReport={
   unresolved:readonly {sourceId:string;conceptId:string;kind:CurriculumNormalizationChange['kind']}[];
 };
 
-export function normalizeCurriculumConcepts(targetLessons:Lesson[]=lessons,targetExercises:Exercise[]=exercises,concepts:readonly ConceptDefinition[]=[...conceptById.values()]):CurriculumNormalizationReport{
+export type CurriculumNormalizationResult={
+  draft:CurriculumDraft;
+  report:CurriculumNormalizationReport;
+};
+
+/**
+ * Canonicalize curriculum concept metadata without mutating the input graph.
+ * The whole graph is cloned once so shared module/lesson/exercise identities remain
+ * consistent inside the returned draft.
+ */
+export function normalizeCurriculumDraft(input:CurriculumDraft,concepts:readonly ConceptDefinition[]):CurriculumNormalizationResult{
+  const draft=cloneCurriculumDraft(input);
   const known=new Set(concepts.map(concept=>concept.id));
   const changes:CurriculumNormalizationChange[]=[];
   const unresolved:CurriculumNormalizationReport['unresolved'][number][]=[];
@@ -33,7 +43,7 @@ export function normalizeCurriculumConcepts(targetLessons:Lesson[]=lessons,targe
     return result;
   };
 
-  for(const lesson of targetLessons){
+  for(const lesson of draft.lessons){
     if(!lesson.content&&lesson.theory.length){
       lesson.content=lesson.theory.map((item,index):LearningBlock=>{
         if(item.code)return {id:`${lesson.id}-structured-${index+1}`,type:'syntax',title:item.title,body:item.body,code:item.code,note:item.note};
@@ -48,7 +58,7 @@ export function normalizeCurriculumConcepts(targetLessons:Lesson[]=lessons,targe
     pedagogy.introduces=normalizeList(pedagogy.introduces,lesson.id,'lesson-introduces');
     pedagogy.reinforces=normalizeList(pedagogy.reinforces,lesson.id,'lesson-reinforces');
   }
-  for(const exercise of targetExercises)seenExercises.add(exercise);
+  for(const exercise of draft.exercises)seenExercises.add(exercise);
 
   for(const exercise of seenExercises){
     exercise.concepts=normalizeList(exercise.concepts,exercise.id,'exercise-concept');
@@ -57,13 +67,14 @@ export function normalizeCurriculumConcepts(targetLessons:Lesson[]=lessons,targe
 
   // Preserve the previous useful enrichment behavior: an exercise can reinforce a
   // canonical concept even if old lesson metadata omitted that reinforcement.
-  for(const lesson of targetLessons){
+  for(const lesson of draft.lessons){
     if(!lesson.pedagogy)continue;
     const exerciseConcepts=canonicalConceptIds(lesson.exercises.flatMap(exercise=>exercise.concepts));
     lesson.pedagogy.reinforces=[...new Set([...lesson.pedagogy.reinforces,...exerciseConcepts.filter(id=>!lesson.pedagogy!.introduces.includes(id))])];
   }
 
-  return Object.freeze({changes:Object.freeze(changes),unresolved:Object.freeze(unresolved)});
+  const report=Object.freeze({changes:Object.freeze(changes),unresolved:Object.freeze(unresolved)});
+  return {draft,report};
 }
 
 export function normalizeConceptRecord<T>(record:Record<string,T>,merge:(existing:T|undefined,incoming:T,canonicalId:string,legacyId:string)=>T){
