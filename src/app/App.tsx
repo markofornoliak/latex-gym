@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AppShell } from '../components/AppShell';
 import { RouteErrorBoundary } from '../components/RouteErrorBoundary';
 import { useAppStore } from '../store/useAppStore';
@@ -24,6 +24,7 @@ const SettingsPage=lazy(()=>import('../pages/SettingsPage').then(module=>({defau
 function RouteFallback(){return <div className="route-loading" role="status" aria-live="polite">Загрузка…</div>;}
 function Wrapped({children}:{children:ReactNode}){return <AppShell>{children}</AppShell>;}
 function RootRoute(){const onboarded=useAppStore(state=>state.onboarded);return onboarded?<Navigate to="/home" replace/>:<AppShell plain><OnboardingPage/></AppShell>;}
+function PracticeExerciseRoute(){const {exerciseId}=useParams();return <PracticeExercisePage key={exerciseId}/>;}
 
 export function App(){
   return <RouteErrorBoundary><HashRouter><Suspense fallback={<RouteFallback/>}><Routes>
@@ -33,7 +34,7 @@ export function App(){
     <Route path="/course/:courseId" element={<Wrapped><CoursePage/></Wrapped>}/>
     <Route path="/lesson/:lessonId" element={<Wrapped><LessonPage/></Wrapped>}/>
     <Route path="/practice" element={<Wrapped><PracticePage/></Wrapped>}/>
-    <Route path="/practice/:exerciseId" element={<Wrapped><PracticeExercisePage/></Wrapped>}/>
+    <Route path="/practice/:exerciseId" element={<Wrapped><PracticeExerciseRoute/></Wrapped>}/>
     <Route path="/projects" element={<Wrapped><ProjectsPage/></Wrapped>}/>
     <Route path="/project/:projectId" element={<Wrapped><ProjectPage/></Wrapped>}/>
     <Route path="/project/:projectId/:stageId" element={<Wrapped><ProjectPage/></Wrapped>}/>
