@@ -146,6 +146,7 @@ export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,au
   const callbacks=useRef({onChange,onCompile,onSave,onShowShortcuts});
   const [fullscreen,setFullscreen]=useState(false);
   const [referenceId,setReferenceId]=useState<string|null>(null);
+  const [cursorReferenceId,setCursorReferenceId]=useState<string|null>(null);
   const settingsCompartment=useMemo(()=>new Compartment(),[]);
   const diagnosticsCompartment=useMemo(()=>new Compartment(),[]);
   const referenceEntry=getReferenceEntry(referenceId??undefined);
@@ -163,12 +164,16 @@ export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,au
         {key:'Enter',run:completeEnvironment},
         ...closeBracketsKeymap,...completionKeymap,...historyKeymap,...defaultKeymap,indentWithTab
       ]),
-      EditorView.updateListener.of(update=>{if(update.docChanged)callbacks.current.onChange(update.state.doc.toString());}),
+      EditorView.updateListener.of(update=>{
+        if(update.docChanged)callbacks.current.onChange(update.state.doc.toString());
+        if(update.docChanged||update.selectionSet)setCursorReferenceId(referenceAtPosition(update.view,update.state.selection.main.head)?.entry.id??null);
+      }),
       settingsCompartment.of(editorSettings(wordWrap,showLineNumbers,autoClose)),
       diagnosticsCompartment.of([]),
       EditorView.theme({'&':{fontSize:'13px',height:'100%'},'.cm-content':{fontFamily:'var(--font-mono)',lineHeight:'1.72',padding:'14px 0'},'.cm-gutters':{background:'transparent',borderRight:'1px solid var(--soft-border)',color:'var(--muted)'},'.cm-activeLine,.cm-activeLineGutter':{backgroundColor:'rgba(6,26,58,.035)'},'&.cm-focused':{outline:'none'}})
     ]});
     const view=new EditorView({state,parent:host.current});viewRef.current=view;
+    setCursorReferenceId(referenceAtPosition(view,view.state.selection.main.head)?.entry.id??null);
     return()=>{view.destroy();viewRef.current=null;};
   },[]);
 
@@ -190,7 +195,7 @@ export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,au
 
   return <div className={`editor-frame ${fullscreen?'editor-frame--fullscreen':''}`} style={{'--editor-min-height':`${minHeight}px`} as CSSProperties}>
     <div className="editor-toolbar">
-      <div className="editor-tools-left"><button type="button" onClick={()=>formatEditor(viewRef.current)} className="text-tool">Форматировать</button>{onReset&&<button type="button" onClick={onReset} className="text-tool">Сбросить</button>}</div>
+      <div className="editor-tools-left"><button type="button" onClick={()=>formatEditor(viewRef.current)} className="text-tool">Форматировать</button>{onReset&&<button type="button" onClick={onReset} className="text-tool">Сбросить</button>}<button type="button" onClick={()=>cursorReferenceId&&setReferenceId(cursorReferenceId)} className="text-tool" disabled={!cursorReferenceId} aria-label="Открыть справку для команды под курсором">Справка</button></div>
       <div className="editor-tools-right">{diagnostics.length>0&&<div className="editor-diagnostic-nav" aria-label="Навигация по диагностике"><span>{diagnostics.filter(item=>item.severity==='error').length} ошибок · {diagnostics.filter(item=>item.severity==='warning').length} предупреждений</span><button type="button" className="text-tool" onClick={()=>jumpDiagnostic(viewRef.current,diagnostics,-1)} aria-label="Предыдущая диагностика">↑</button><button type="button" className="text-tool" onClick={()=>jumpDiagnostic(viewRef.current,diagnostics,1)} aria-label="Следующая диагностика">↓</button></div>}<button className="icon-button" type="button" onClick={()=>setFullscreen(value=>!value)} aria-label={fullscreen?'Выйти из полноэкранного редактора':'Открыть редактор на весь экран'}><ExpandIcon/></button></div>
     </div>
     <div className="latex-mobile-accessory" aria-label="Быстрые LaTeX-вставки">{mobileAccessories.map(item=><button type="button" key={item.label} onPointerDown={event=>event.preventDefault()} onClick={()=>insertEditorText(viewRef.current,item.insert,'cursorOffset' in item?item.cursorOffset:0)}>{item.label}</button>)}</div>
