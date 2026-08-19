@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   validate:
-    if: ${{ github.event_name == 'pull_request' || (!contains(github.event.head_commit.message, '[curriculum-data-patched]') && !contains(github.event.head_commit.message, '[validation-report]')) }}
+    if: ${{ github.event_name == 'pull_request' || !contains(github.event.head_commit.message, '[curriculum-data-patched]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout validation branch
@@ -21,19 +21,8 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
 
       - name: Apply confirmed curriculum metadata correction
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const path = 'src/data/curriculumSource.json';
-          const source = JSON.parse(fs.readFileSync(path, 'utf8'));
-          const compiler = source.concepts.find(concept => concept.id === 'compiler');
-          if (!compiler) throw new Error('compiler concept not found');
-          if (JSON.stringify(compiler.prerequisites) !== JSON.stringify(['source-file'])) {
-            throw new Error(`Unexpected compiler prerequisites: ${JSON.stringify(compiler.prerequisites)}`);
-          }
-          compiler.prerequisites = ['latex-model'];
-          fs.writeFileSync(path, `${JSON.stringify(source)}\n`, 'utf8');
-          NODE
+        run: >-
+          node -e "const fs=require('node:fs');const p='src/data/curriculumSource.json';const s=JSON.parse(fs.readFileSync(p,'utf8'));const c=s.concepts.find(x=>x.id==='compiler');if(!c)throw new Error('compiler concept not found');const old=JSON.stringify(c.prerequisites);if(old===JSON.stringify(['source-file']))c.prerequisites=['latex-model'];else if(old!==JSON.stringify(['latex-model']))throw new Error('Unexpected compiler prerequisites: '+old);fs.writeFileSync(p,JSON.stringify(s)+'\n','utf8');"
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -44,69 +33,49 @@ jobs:
       - name: Install dependencies without lifecycle scripts
         run: npm ci --ignore-scripts
 
-      - name: Run full validation and publish branch-local report
+      - name: Generate corrected snapshot candidate
         shell: bash
         run: |
-          set -uo pipefail
-          REPORT=.curriculum-linter-validation.txt
-          : > "$REPORT"
-          FAILED=0
-          run_check() {
-            local label="$1"
-            shift
-            echo "===== ${label} =====" | tee -a "$REPORT"
-            "$@" >> "$REPORT" 2>&1
-            local status=$?
-            echo "status=${status}" | tee -a "$REPORT"
-            if [ "$status" -ne 0 ]; then FAILED=1; fi
-          }
-
-          echo "base_commit=${GITHUB_SHA}" >> "$REPORT"
-          echo "node=$(node --version)" >> "$REPORT"
-          echo "npm=$(npm --version)" >> "$REPORT"
-
           set +e
-          LATEX_GYM_WRITE_CURRICULUM_SNAPSHOT=1 npx vitest run scripts/curriculumSnapshot.generate.test.ts >> "$REPORT" 2>&1
-          SNAPSHOT_STATUS=$?
+          LATEX_GYM_WRITE_CURRICULUM_SNAPSHOT=1 npx vitest run scripts/curriculumSnapshot.generate.test.ts
+          STATUS=$?
           set -e
-          echo "initial_snapshot_status=${SNAPSHOT_STATUS}" >> "$REPORT"
-          if [ ! -f src/data/curriculumSnapshot.generated.json ]; then
-            echo "snapshot artifact missing" >> "$REPORT"
-            FAILED=1
-          else
-            node <<'NODE' >> "$REPORT" 2>&1
-            const fs = require('node:fs');
-            const snapshot = JSON.parse(fs.readFileSync('src/data/curriculumSnapshot.generated.json', 'utf8'));
-            const path = 'src/data/curriculumBaseline.json';
-            const baseline = JSON.parse(fs.readFileSync(path, 'utf8'));
-            baseline.semanticFingerprint = snapshot.semanticFingerprint;
-            fs.writeFileSync(path, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
-            console.log(`[curriculum-baseline] fingerprint=${snapshot.semanticFingerprint}`);
-            NODE
-          fi
+          test -f src/data/curriculumSnapshot.generated.json
+          echo "Initial snapshot test status: ${STATUS} (baseline mismatch is expected before fingerprint refresh)."
 
-          set +e
-          run_check "curriculum snapshot" npm run curriculum:snapshot
-          run_check "curriculum integrity" npm run curriculum:check
-          run_check "typecheck" npm run typecheck
-          run_check "test" npm test
-          run_check "production build" npm run build
-          run_check "prepare real-TeX smoke runtime" node scripts/prepare-busytex.mjs smoke
-          set -e
+      - name: Refresh semantic fingerprint
+        run: >-
+          node -e "const fs=require('node:fs');const snapshot=JSON.parse(fs.readFileSync('src/data/curriculumSnapshot.generated.json','utf8'));const p='src/data/curriculumBaseline.json';const baseline=JSON.parse(fs.readFileSync(p,'utf8'));baseline.semanticFingerprint=snapshot.semanticFingerprint;fs.writeFileSync(p,JSON.stringify(baseline,null,2)+'\n','utf8');console.log('[curriculum-baseline] fingerprint='+snapshot.semanticFingerprint);"
 
-          echo "overall_status=${FAILED}" >> "$REPORT"
+      - name: Regenerate validated snapshot
+        run: npm run curriculum:snapshot
+
+      - name: Curriculum integrity checks
+        run: npm run curriculum:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Prepare real-TeX smoke runtime
+        run: node scripts/prepare-busytex.mjs smoke
+
+      - name: Persist validated curriculum data on validation branch
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if [ "$FAILED" -eq 0 ]; then
-            git add src/data/curriculumSource.json src/data/curriculumBaseline.json src/data/curriculumSnapshot.generated.json "$REPORT"
-            git commit -m "[curriculum-data-patched] Align compiler prerequisite metadata"
-            git push origin HEAD
+          git add src/data/curriculumSource.json src/data/curriculumBaseline.json src/data/curriculumSnapshot.generated.json
+          if git diff --cached --quiet; then
+            echo "No generated curriculum changes to persist."
             exit 0
           fi
-
-          git checkout -- src/data/curriculumSource.json src/data/curriculumBaseline.json src/data/curriculumSnapshot.generated.json
-          git add "$REPORT"
-          git commit -m "[validation-report] Capture curriculum validation failure"
-          git push origin HEAD
-          exit 1
+          git commit -m "[curriculum-data-patched] Align compiler prerequisite metadata"
+          git push origin HEAD:${{ github.head_ref }}
