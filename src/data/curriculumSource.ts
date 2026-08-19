@@ -1,13 +1,10 @@
 import sourceJson from './curriculumSource.json';
 import { canonicalConceptId } from './conceptAliases';
-import type { ConceptDefinition, CourseModule, Exercise, LearningProject, Lesson, ReferenceEntry } from '../types';
+import { assertCanonicalCurriculumSchema } from './curriculumSchema';
+import type { CanonicalCurriculumSource } from './curriculumSchema';
+import type { Exercise, Lesson } from '../types';
 
-export type CanonicalCurriculumSource={
-  modules:CourseModule[];
-  concepts:ConceptDefinition[];
-  references:ReferenceEntry[];
-  projects:LearningProject[];
-};
+export type { CanonicalCurriculumSource } from './curriculumSchema';
 
 export type MaterializedCurriculum=CanonicalCurriculumSource&{
   lessons:Lesson[];
@@ -21,7 +18,9 @@ export type MaterializedCurriculum=CanonicalCurriculumSource&{
  * and exercise catalogs are derived when the build runs, so an educational fact is
  * never maintained in two authoring structures.
  */
-export const curriculumSource=sourceJson as unknown as CanonicalCurriculumSource;
+const rawCurriculumSource:unknown=sourceJson;
+assertCanonicalCurriculumSchema(rawCurriculumSource);
+export const curriculumSource=rawCurriculumSource;
 
 export function materializeCurriculumSource():MaterializedCurriculum{
   const source=structuredClone(curriculumSource);
