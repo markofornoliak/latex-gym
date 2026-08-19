@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { BackIcon, BookmarkIcon, PlayIcon } from '../components/Icons';
 import { LatexPreview } from '../components/LatexPreview';
 import { getRuntimeExercise, getRuntimeLesson } from '../data/runtimeCatalog';
+import { useCompilationSession } from '../hooks/useCompilationSession';
+import { useDocumentDraft } from '../hooks/useDocumentDraft';
 import { compiler } from '../services/compiler';
 import { compilationStateLabel, isCompilationBusy } from '../services/compilerState';
 import { getExerciseInteraction, initialExerciseDraft } from '../services/exerciseInteraction';
@@ -16,27 +18,25 @@ type MobilePracticeView='task'|'code'|'result';
 export function PracticeExercisePage(){
   const {exerciseId}=useParams();
   const exercise=getRuntimeExercise(exerciseId);
-  const interaction=useMemo(()=>exercise?getExerciseInteraction(exercise):null,[exercise?.mode]);
+  const interaction=useMemo(()=>exercise?getExerciseInteraction(exercise):null,[exercise?.id,exercise?.mode]);
   const settings=useAppStore(state=>state.settings);
-  const drafts=useAppStore(state=>state.drafts);
-  const setDraft=useAppStore(state=>state.setDraft);
   const recordAttempt=useAppStore(state=>state.recordExerciseAttempt);
   const recordHint=useAppStore(state=>state.recordHint);
   const recordSolutionReveal=useAppStore(state=>state.recordSolutionReveal);
   const hintsUsed=useAppStore(state=>state.hintsUsed);
   const bookmarks=useAppStore(state=>state.bookmarks);
   const toggleBookmark=useAppStore(state=>state.toggleBookmark);
-  const draftKey=exercise?`exercise:${exercise.id}`:'';
-  const initial=exercise?initialExerciseDraft(exercise,drafts[draftKey]):'';
-  const [source,setSource]=useState(initial);
-  const [result,setResult]=useState<CompileResult|null>(null);
+  const draftKey=exercise?`exercise:${exercise.id}`:'exercise:missing';
+  const draft=useDocumentDraft({key:draftKey,initialValue:exercise?.starterCode??'',normalizeLoaded:saved=>exercise?initialExerciseDraft(exercise,saved):''});
+  const source=draft.value;
+  const compilation=useCompilationSession(error=>compilerFailure(error,'Компилятор не завершил запрос','Исходник сохранён локально. Повторите компиляцию; если ошибка сохраняется, откройте Playground и проверьте доступность движка.'));
+  const result=compilation.result;
+  const compileState=compilation.state;
   const [targetResult,setTargetResult]=useState<CompileResult|null>(null);
   const [validation,setValidation]=useState<ValidationResult|null>(null);
-  const [compileState,setCompileState]=useState<CompilationState>('ready');
   const [targetCompileState,setTargetCompileState]=useState<CompilationState>('ready');
   const [solution,setSolution]=useState(false);
   const [hintOpenedThisAttempt,setHintOpenedThisAttempt]=useState(false);
-  const [saved,setSaved]=useState(true);
   const [shortcutsOpen,setShortcutsOpen]=useState(false);
   const [mobileView,setMobileView]=useState<MobilePracticeView>('task');
   const mobileScroll=useRef<Record<MobilePracticeView,number>>({task:0,code:0,result:0});
@@ -44,32 +44,15 @@ export function PracticeExercisePage(){
 
   useEffect(()=>{
     if(!exercise)return;
-    setSource(initialExerciseDraft(exercise,drafts[`exercise:${exercise.id}`]));
-    setResult(null);setTargetResult(null);setValidation(null);setSolution(false);setHintOpenedThisAttempt(false);setCompileState('ready');setTargetCompileState('ready');setSaved(true);setMobileView('task');mobileScroll.current={task:0,code:0,result:0};
-    const key=`latex-gym:scroll:${exercise.id}`;
-    const restored=Number(sessionStorage.getItem(key)??0);
-    requestAnimationFrame(()=>window.scrollTo({top:restored,behavior:'auto'}));
+    compilation.reset();setTargetResult(null);setValidation(null);setSolution(false);setHintOpenedThisAttempt(false);setTargetCompileState('ready');setMobileView('task');mobileScroll.current={task:0,code:0,result:0};
+    const key=`latex-gym:scroll:${exercise.id}`;const restored=Number(sessionStorage.getItem(key)??0);requestAnimationFrame(()=>window.scrollTo({top:restored,behavior:'auto'}));
     return()=>{sessionStorage.setItem(key,String(window.scrollY));};
   },[exercise?.id]);
 
   useEffect(()=>{
-    if(!exercise||!draftKey)return;
-    setSaved(false);
-    const id=window.setTimeout(()=>{setDraft(draftKey,source);setSaved(true);},280);
-    return()=>window.clearTimeout(id);
-  },[source,exercise?.id,draftKey,setDraft]);
-
-  useEffect(()=>{
-    let active=true;
-    if(!exercise||interaction?.kind!=='reconstruction')return;
+    let active=true;if(!exercise||interaction?.kind!=='reconstruction')return;
     setTargetResult(null);setTargetCompileState('queued');
-    void compiler.compile(exercise.solution,{onPhase:phase=>{if(active)setTargetCompileState(phase);}}).then(compiled=>{
-      if(active)setTargetResult(compiled);
-    }).catch(error=>{
-      if(!active)return;
-      setTargetCompileState('error');
-      setTargetResult(compilerFailure(error,'Не удалось подготовить целевой документ','Исходный эталон сохранён в задаче; попробуйте открыть её повторно после загрузки TeX-движка.'));
-    });
+    void compiler.compile(exercise.solution,{onPhase:phase=>{if(active)setTargetCompileState(phase);}}).then(compiled=>{if(active)setTargetResult(compiled);}).catch(error=>{if(!active)return;setTargetCompileState('error');setTargetResult(compilerFailure(error,'Не удалось подготовить целевой документ','Исходный эталон сохранён в задаче; попробуйте открыть её повторно после загрузки TeX-движка.'));});
     return()=>{active=false;};
   },[exercise?.id,interaction?.kind]);
 
@@ -79,51 +62,22 @@ export function PracticeExercisePage(){
   if(!exercise||!interaction)return <div className="page empty-state">Задача не найдена.</div>;
 
   const isSaved=bookmarks.some(item=>item.type==='exercise'&&item.targetId===exercise.id);
-  const busy=isCompilationBusy(compileState);
+  const busy=compilation.busy;
   const targetBusy=interaction.kind==='reconstruction'&&isCompilationBusy(targetCompileState);
   const workspaceBusy=busy||targetBusy;
-  const switchMobileView=(next:MobilePracticeView)=>{
-    if(next===mobileView)return;
-    mobileScroll.current[mobileView]=window.scrollY;
-    setMobileView(next);
-    requestAnimationFrame(()=>window.scrollTo({top:mobileScroll.current[next],behavior:'auto'}));
-  };
-  const setExerciseSource=(value:string)=>{setSource(value);if(validation)setValidation(null);if(result)setResult(null);if(compileState!=='ready')setCompileState('ready');};
-  const resetEditor=()=>{setExerciseSource(exercise.starterCode);};
-  const saveNow=()=>{setDraft(draftKey,source);setSaved(true);};
+  const switchMobileView=(next:MobilePracticeView)=>{if(next===mobileView)return;mobileScroll.current[mobileView]=window.scrollY;setMobileView(next);requestAnimationFrame(()=>window.scrollTo({top:mobileScroll.current[next],behavior:'auto'}));};
+  const setExerciseSource=(value:string)=>{draft.setValue(value);if(validation)setValidation(null);if(result||compileState!=='ready')compilation.invalidate();};
+  const resetEditor=()=>setExerciseSource(exercise.starterCode);
+  const saveNow=()=>{void draft.saveNow();};
   const runCompile=async()=>{
     if(interaction.kind==='concept-answer'||targetBusy)return null;
-    setCompileState('queued');setValidation(null);
-    try{
-      const compiled=await compiler.compile(source,{onPhase:setCompileState});
-      setResult(compiled);switchMobileView('result');
-      return compiled;
-    }catch(error){
-      setCompileState('error');switchMobileView('result');
-      const failed=compilerFailure(error,'Компилятор не завершил запрос','Исходник сохранён локально. Повторите компиляцию; если ошибка сохраняется, откройте Playground и проверьте доступность движка.');
-      setResult(failed);
-      return null;
-    }
+    setValidation(null);const compiled=await compilation.run(source);switchMobileView('result');return compiled;
   };
   const check=async()=>{
     if(interaction.kind==='concept-answer'){
-      const checked=validateExercise(exercise,source);
-      setValidation(checked);switchMobileView('result');
-      recordAttempt(exercise.id,checked.ok,exercise.concepts,exercise.title,{
-        independence:solution?'revealed':hintOpenedThisAttempt?'hinted':'independent',context:'practice',realCompile:false
-      });
-      return;
+      const checked=validateExercise(exercise,source);setValidation(checked);switchMobileView('result');recordAttempt(exercise.id,checked.ok,exercise.concepts,exercise.title,{independence:solution?'revealed':hintOpenedThisAttempt?'hinted':'independent',context:'practice',realCompile:false});return;
     }
-
-    const compiled=await runCompile();
-    if(!compiled)return;
-    const checked=validateExercise(exercise,source,compiled);
-    setValidation(checked);
-    recordAttempt(exercise.id,checked.ok,exercise.concepts,exercise.title,{
-      independence:solution?'revealed':hintOpenedThisAttempt?'hinted':'independent',
-      context:interaction.kind==='reconstruction'?'transfer':'practice',
-      realCompile:Boolean(compiled.pdf?.length&&!compiled.fallbackReason)
-    });
+    const compiled=await runCompile();if(!compiled)return;const checked=validateExercise(exercise,source,compiled);setValidation(checked);recordAttempt(exercise.id,checked.ok,exercise.concepts,exercise.title,{independence:solution?'revealed':hintOpenedThisAttempt?'hinted':'independent',context:interaction.kind==='reconstruction'?'transfer':'practice',realCompile:Boolean(compiled.pdf?.length&&!compiled.fallbackReason)});
   };
   const revealHint=()=>{const next=Math.min(exercise.hints.length,hintLevel+1);recordHint(exercise.id,next);setHintOpenedThisAttempt(true);};
   const revealSolution=()=>{setSolution(true);recordSolutionReveal(exercise.id);};
@@ -135,29 +89,23 @@ export function PracticeExercisePage(){
     <nav className="practice-mobile-tabs" role="tablist" aria-label="Рабочая область задачи">{mobileTabs.map(([id,label])=><button key={id} id={`practice-tab-${id}`} role="tab" aria-selected={mobileView===id} aria-controls={`practice-panel-${id}`} className={mobileView===id?'active':''} onClick={()=>switchMobileView(id)}>{label}</button>)}</nav>
     <div className="practice-workspace">
       <section id="practice-panel-task" role="tabpanel" aria-labelledby="practice-tab-task" className={`task-pane ${mobileView==='task'?'mobile-active':''}`}>
-        <div className="task-progress"><span>ЗАДАНИЕ {position} ИЗ {total}</span><div><i style={{width:`${(position/total)*100}%`}}/></div></div>
-        <span className="practice-mode">{exercise.mode}</span>
-        <h1>{exercise.instructions}</h1><p className="requirements-title">Требования:</p><ul>{exercise.requirements.map(requirement=><li key={requirement}>{requirement}</li>)}</ul>
-        {interaction.debug&&<DebugMethod/>}
-        {interaction.kind==='reconstruction'&&<p className="reconstruction-method">Цель — воспроизвести структуру документа, а не угадать исходный код. Проверка остаётся семантической: допустимы разные корректные реализации.</p>}
-        {renderHints('desktop')}
+        <div className="task-progress"><span>ЗАДАНИЕ {position} ИЗ {total}</span><div><i style={{width:`${(position/total)*100}%`}}/></div></div><span className="practice-mode">{exercise.mode}</span><h1>{exercise.instructions}</h1><p className="requirements-title">Требования:</p><ul>{exercise.requirements.map(requirement=><li key={requirement}>{requirement}</li>)}</ul>
+        {interaction.debug&&<DebugMethod/>}{interaction.kind==='reconstruction'&&<p className="reconstruction-method">Цель — воспроизвести структуру документа, а не угадать исходный код. Проверка остаётся семантической: допустимы разные корректные реализации.</p>}{renderHints('desktop')}
         <button className="primary-button practice-mobile-start" onClick={()=>switchMobileView('code')}>{interaction.kind==='concept-answer'?'Перейти к ответу':'Перейти к коду'}</button>
       </section>
       <section id="practice-panel-code" role="tabpanel" aria-labelledby="practice-tab-code" className={`editor-pane ${mobileView==='code'?'mobile-active':''}`}>
-        {interaction.kind==='concept-answer'?<ConceptAnswer value={source} onChange={setExerciseSource} starter={exercise.starterCode} saved={saved}/>:<div className="editor-pane-inner">
-          <div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${compileState}`}>{compilationStateLabel(compileState)}</span><span>{result?engineLabel(result):saved?'Сохранено локально':'Сохранение…'}</span></div>
+        {interaction.kind==='concept-answer'?<ConceptAnswer value={source} onChange={setExerciseSource} starter={exercise.starterCode} saved={draft.saved}/>:<div className="editor-pane-inner">
+          <div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${compileState}`}>{compilationStateLabel(compileState)}</span><span>{result?engineLabel(result):draft.saved?'Сохранено локально':'Сохранение…'}</span></div>
           {interaction.kind==='reconstruction'&&<div className="target-runtime-status" aria-live="polite"><span>Целевой документ</span><strong>{targetResult?engineLabel(targetResult):compilationStateLabel(targetCompileState)}</strong></div>}
           <Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={setExerciseSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={235} onReset={resetEditor} onCompile={()=>{void runCompile();}} onSave={saveNow} onShowShortcuts={()=>setShortcutsOpen(true)} diagnostics={result?.diagnostics??[]}/></Suspense>
           <button className="compile-button" onClick={()=>{void runCompile();}} disabled={workspaceBusy}><PlayIcon/>{targetBusy?'Подготовка цели…':busy?compilationStateLabel(compileState):'Скомпилировать'}</button>
         </div>}
       </section>
       <section id="practice-panel-result" role="tabpanel" aria-labelledby="practice-tab-result" className={`result-pane ${mobileView==='result'?'mobile-active':''}`}>
-        <h2>{interaction.resultTabLabel}</h2>
-        {interaction.debug&&<DebugSignal result={result}/>} 
+        <h2>{interaction.resultTabLabel}</h2>{interaction.debug&&<DebugSignal result={result}/>} 
         {interaction.kind==='reconstruction'?<ReconstructionComparison target={targetResult} targetState={targetCompileState} result={result}/>:interaction.kind==='concept-answer'?<ConceptReview answer={source} validation={validation}/>:<div className="result-frame"><LatexPreview result={result}/></div>}
         {validation&&interaction.kind!=='concept-answer'&&<ValidationPanel validation={validation}/>} 
-        {solution&&<details className="reference-solution" open><summary>Один корректный вариант</summary><pre>{exercise.solution}</pre><p>Это пример, а не определение правильности. Раскрытое решение считается более слабым свидетельством знания, чем самостоятельное решение.</p></details>}
-        {renderHints('mobile')}
+        {solution&&<details className="reference-solution" open><summary>Один корректный вариант</summary><pre>{exercise.solution}</pre><p>Это пример, а не определение правильности. Раскрытое решение считается более слабым свидетельством знания, чем самостоятельное решение.</p></details>}{renderHints('mobile')}
       </section>
     </div>
     <footer className="practice-action"><button className="primary-button primary-button--large" onClick={()=>{void check();}} disabled={workspaceBusy}>{targetBusy?'Подготовка целевого документа…':interaction.primaryActionLabel}</button></footer>
@@ -165,56 +113,12 @@ export function PracticeExercisePage(){
   </div>;
 }
 
-function ConceptAnswer({value,onChange,starter,saved}:{value:string;onChange:(value:string)=>void;starter:string;saved:boolean}){
-  return <div className="concept-answer-workspace">
-    <div className="concept-answer-heading"><div><span className="eyebrow">КОНЦЕПТУАЛЬНЫЙ ОТВЕТ</span><h2>Ответьте по существу</h2></div><span>{saved?'Сохранено локально':'Сохранение…'}</span></div>
-    {starter.trim()&&<div className="concept-prompt"><span>Исходные данные</span><pre>{starter}</pre></div>}
-    <label className="concept-answer-field"><span>Ваш ответ</span><textarea value={value} onChange={event=>onChange(event.target.value)} rows={9} spellCheck aria-describedby="concept-answer-help" placeholder="Кратко сформулируйте ответ. Точное совпадение с эталоном не требуется."/></label>
-    <p id="concept-answer-help" className="concept-answer-help">LaTeX Gym проверяет требования задачи, а не совпадение строки с одним эталонным ответом.</p>
-  </div>;
-}
-
-function ConceptReview({answer,validation}:{answer:string;validation:ValidationResult|null}){
-  return <div className="concept-review-panel">
-    <div className="concept-answer-readback"><span>Ваш ответ</span><p>{answer.trim()||'Ответ пока не введён.'}</p></div>
-    {validation?<ValidationPanel validation={validation}/>:<div className="concept-check-empty"><strong>Проверка ещё не выполнена</strong><p>Сформулируйте ответ своими словами и нажмите «Проверить ответ».</p></div>}
-  </div>;
-}
-
-function ReconstructionComparison({target,targetState,result}:{target:CompileResult|null;targetState:CompilationState;result:CompileResult|null}){
-  return <div className="reconstruction-comparison">
-    <div className="reconstruction-note"><strong>Сравнивайте структуру, а не пиксели.</strong><span>LaTeX Gym не выставляет фиктивный процент визуального совпадения: разные корректные исходники могут давать эквивалентный документ.</span></div>
-    <div className="reconstruction-grid">
-      <section><header><span>ЦЕЛЬ</span><small>{target?engineLabel(target):compilationStateLabel(targetState)}</small></header><div className="result-frame"><LatexPreview result={target} emptyText="Подготовка целевого документа…"/></div></section>
-      <section><header><span>ВАШ РЕЗУЛЬТАТ</span><small>{result?engineLabel(result):'Ещё не собран'}</small></header><div className="result-frame"><LatexPreview result={result} emptyText="Скомпилируйте свой вариант"/></div></section>
-    </div>
-  </div>;
-}
-
-function DebugMethod(){
-  return <aside className="debug-method" aria-label="Метод отладки"><strong>Метод отладки</strong><ol><li>Скомпилируйте исходник.</li><li>Читайте первое содержательное сообщение TeX.</li><li>Исправьте одну первопричину и соберите снова.</li><li>Каскад последующих ошибок оценивайте только после этого.</li></ol></aside>;
-}
-
-function DebugSignal({result}:{result:CompileResult|null}){
-  if(!result)return <div className="debug-signal debug-signal--idle"><strong>Сначала получите сигнал компилятора.</strong><p>Запустите сборку: в отладочной задаче журнал TeX — часть условия, а не служебный шум.</p></div>;
-  const diagnostic=firstMeaningfulDiagnostic(result.diagnostics);
-  if(result.ok&&!diagnostic)return <div className="debug-signal debug-signal--ok"><strong>TeX собирает документ.</strong><p>Теперь проверьте, что исправлена именно причина задачи, а не только исчез фатальный сбой.</p></div>;
-  if(!diagnostic)return null;
-  return <div className={`debug-signal debug-signal--${diagnostic.severity}`}><span>ПЕРВЫЙ СИГНАЛ</span>{diagnostic.originalCompilerMessage&&<code>{diagnostic.originalCompilerMessage}</code>}<strong>{diagnostic.message}</strong><p>{diagnostic.explanation}</p></div>;
-}
-
-function ValidationPanel({validation}:{validation:ValidationResult}){
-  return <div className={`validation-panel ${validation.ok?'validation-panel--ok':''}`} role="status" aria-live="polite"><h3>{validation.ok?'Решение принято':'Что нужно исправить'}</h3>{validation.items.map((item,index)=><div className="validation-row" key={index}><span>{item.ok?'✓':'×'}</span><div><strong>{item.message}</strong>{item.line&&<small>Строка {item.line}</small>}{!item.ok&&<small>{item.hint}</small>}</div></div>)}</div>;
-}
-
+function ConceptAnswer({value,onChange,starter,saved}:{value:string;onChange:(value:string)=>void;starter:string;saved:boolean}){return <div className="concept-answer-workspace"><div className="concept-answer-heading"><div><span className="eyebrow">КОНЦЕПТУАЛЬНЫЙ ОТВЕТ</span><h2>Ответьте по существу</h2></div><span>{saved?'Сохранено локально':'Сохранение…'}</span></div>{starter.trim()&&<div className="concept-prompt"><span>Исходные данные</span><pre>{starter}</pre></div>}<label className="concept-answer-field"><span>Ваш ответ</span><textarea value={value} onChange={event=>onChange(event.target.value)} rows={9} spellCheck aria-describedby="concept-answer-help" placeholder="Кратко сформулируйте ответ. Точное совпадение с эталоном не требуется."/></label><p id="concept-answer-help" className="concept-answer-help">LaTeX Gym проверяет требования задачи, а не совпадение строки с одним эталонным ответом.</p></div>;}
+function ConceptReview({answer,validation}:{answer:string;validation:ValidationResult|null}){return <div className="concept-review-panel"><div className="concept-answer-readback"><span>Ваш ответ</span><p>{answer.trim()||'Ответ пока не введён.'}</p></div>{validation?<ValidationPanel validation={validation}/>:<div className="concept-check-empty"><strong>Проверка ещё не выполнена</strong><p>Сформулируйте ответ своими словами и нажмите «Проверить ответ».</p></div>}</div>;}
+function ReconstructionComparison({target,targetState,result}:{target:CompileResult|null;targetState:CompilationState;result:CompileResult|null}){return <div className="reconstruction-comparison"><div className="reconstruction-note"><strong>Сравнивайте структуру, а не пиксели.</strong><span>LaTeX Gym не выставляет фиктивный процент визуального совпадения: разные корректные исходники могут давать эквивалентный документ.</span></div><div className="reconstruction-grid"><section><header><span>ЦЕЛЬ</span><small>{target?engineLabel(target):compilationStateLabel(targetState)}</small></header><div className="result-frame"><LatexPreview result={target} emptyText="Подготовка целевого документа…"/></div></section><section><header><span>ВАШ РЕЗУЛЬТАТ</span><small>{result?engineLabel(result):'Ещё не собран'}</small></header><div className="result-frame"><LatexPreview result={result} emptyText="Скомпилируйте свой вариант"/></div></section></div></div>;}
+function DebugMethod(){return <aside className="debug-method" aria-label="Метод отладки"><strong>Метод отладки</strong><ol><li>Скомпилируйте исходник.</li><li>Читайте первое содержательное сообщение TeX.</li><li>Исправьте одну первопричину и соберите снова.</li><li>Каскад последующих ошибок оценивайте только после этого.</li></ol></aside>;}
+function DebugSignal({result}:{result:CompileResult|null}){if(!result)return <div className="debug-signal debug-signal--idle"><strong>Сначала получите сигнал компилятора.</strong><p>Запустите сборку: в отладочной задаче журнал TeX — часть условия, а не служебный шум.</p></div>;const diagnostic=firstMeaningfulDiagnostic(result.diagnostics);if(result.ok&&!diagnostic)return <div className="debug-signal debug-signal--ok"><strong>TeX собирает документ.</strong><p>Теперь проверьте, что исправлена именно причина задачи, а не только исчез фатальный сбой.</p></div>;if(!diagnostic)return null;return <div className={`debug-signal debug-signal--${diagnostic.severity}`}><span>ПЕРВЫЙ СИГНАЛ</span>{diagnostic.originalCompilerMessage&&<code>{diagnostic.originalCompilerMessage}</code>}<strong>{diagnostic.message}</strong><p>{diagnostic.explanation}</p></div>;}
+function ValidationPanel({validation}:{validation:ValidationResult}){return <div className={`validation-panel ${validation.ok?'validation-panel--ok':''}`} role="status" aria-live="polite"><h3>{validation.ok?'Решение принято':'Что нужно исправить'}</h3>{validation.items.map((item,index)=><div className="validation-row" key={index}><span>{item.ok?'✓':'×'}</span><div><strong>{item.message}</strong>{item.line&&<small>Строка {item.line}</small>}{!item.ok&&<small>{item.hint}</small>}</div></div>)}</div>;}
 function firstMeaningfulDiagnostic(diagnostics:Diagnostic[]){return diagnostics.find(item=>item.severity==='error')??diagnostics.find(item=>item.severity==='warning')??diagnostics[0];}
-
-function compilerFailure(error:unknown,message:string,suggestion:string):CompileResult{
-  const original=error instanceof Error?error.message:String(error);
-  return {ok:false,diagnostics:[{severity:'error',line:1,message,explanation:'Компилятор не вернул завершённый результат.',suggestion,source:'latex-gym',originalCompilerMessage:original}],blocks:[],elapsedMs:1,engine:'educational-preview',providerId:'compiler-manager'};
-}
-
-function engineLabel(result:CompileResult){
-  if(result.fallbackReason)return 'Учебный предпросмотр';
-  if(result.engine==='pdflatex')return 'pdfLaTeX';if(result.engine==='xelatex')return 'XeLaTeX';if(result.engine==='lualatex')return 'LuaLaTeX';return 'Учебный предпросмотр';
-}
+function compilerFailure(error:unknown,message:string,suggestion:string):CompileResult{const original=error instanceof Error?error.message:String(error);return {ok:false,diagnostics:[{severity:'error',line:1,message,explanation:'Компилятор не вернул завершённый результат.',suggestion,source:'latex-gym',originalCompilerMessage:original}],blocks:[],elapsedMs:1,engine:'educational-preview',providerId:'compiler-manager'};}
+function engineLabel(result:CompileResult){if(result.fallbackReason)return 'Учебный предпросмотр';if(result.engine==='pdflatex')return 'pdfLaTeX';if(result.engine==='xelatex')return 'XeLaTeX';if(result.engine==='lualatex')return 'LuaLaTeX';return 'Учебный предпросмотр';}

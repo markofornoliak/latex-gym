@@ -1,4 +1,4 @@
-import { exercises, lessonIndex, lessons, modules } from './courses';
+import { cloneCurriculumDraft, type CurriculumDraft } from './curriculumDraft';
 import type { CourseModule, Difficulty, Exercise, LearningBlock, Lesson, LessonPedagogy, PracticeCategory, ValidatorRule } from '../types';
 
 const DOC=(body:string,preamble='')=>`\\documentclass{article}\n${preamble}${preamble?'\n':''}\\begin{document}\n${body}\n\\end{document}`;
@@ -309,30 +309,34 @@ const allSpecs=[...foundation,...atoms.map(atom)];
 const legacyIntroduces:Record<string,string[]>={
   'document-structure':['document-class','document-environment'],'sections-paragraphs':['paragraph','section'],'text-formatting':['emphasis','list'],'math-modes':['math-mode','inline-math','display-math'],'fractions-powers':['fraction','root','superscript','subscript'],'equations-theorems':['equation','align','theorem','proof'],'basic-tables':['tabular','table-cell-separator','table-row-break'],'figures-captions':['figure','caption'],'labels-refs':['label','ref'],'bibliography-basics':['bibliography-model','citation'],'custom-commands':['custom-command'],'large-documents':['multi-file','project-architecture'],'debugging':['debugging'],'packages-preamble':['package-model','usepackage','preamble'],'document-classes-layout':['page-structure'],'typography-microtype':['spacing'],'matrices-cases':['matrix','cases'],'math-operators':['math-function','math-operator'],'theorem-numbering':['theorem'],'professional-tables':['professional-table'],'floats-placement':['float'],'biblatex-biber':['bib-file','biber'],'glossaries-index':['index'],'latexmk-workflow':['latexmk','professional-workflow']
 };
-for(const lesson of lessons){
-  if(lesson.pedagogy)continue;
-  const introduces=legacyIntroduces[lesson.id]??[];
-  lesson.pedagogy={objective:lesson.subtitle,prerequisites:[],introduces,reinforces:[],misconceptions:['Используйте конструкцию ради её смысловой роли, а не как ручной визуальный трюк.'],practiceObjective:`Применить тему «${lesson.title}» в структурно корректном исходнике.`,masteryCriteria:lesson.exercises.flatMap(exercise=>exercise.requirements).slice(0,3)};
-}
+export function applyDeepCurriculum(input:CurriculumDraft):CurriculumDraft{
+  const draft=cloneCurriculumDraft(input);
+  if(draft.modules.some(module=>module.id==='foundation'))return draft;
+  for(const lesson of draft.lessons){
+    if(lesson.pedagogy)continue;
+    const introduces=legacyIntroduces[lesson.id]??[];
+    lesson.pedagogy={objective:lesson.subtitle,prerequisites:[],introduces,reinforces:[],misconceptions:['Используйте конструкцию ради её смысловой роли, а не как ручной визуальный трюк.'],practiceObjective:`Применить тему «${lesson.title}» в структурно корректном исходнике.`,masteryCriteria:lesson.exercises.flatMap(exercise=>exercise.requirements).slice(0,3)};
+  }
 
-const existingIds=new Set(lessons.map(lesson=>lesson.id));
-let exerciseNumber=1;
-const built:Lesson[]=[];
-for(const spec of allSpecs){
-  if(existingIds.has(spec.id))continue;
-  const pedagogy:LessonPedagogy={objective:spec.objective,prerequisites:spec.prerequisites,introduces:spec.introduces,reinforces:spec.reinforces??[],misconceptions:spec.misconceptions,practiceObjective:spec.practiceObjective,masteryCriteria:spec.mastery};
-  const lessonExercises:Exercise[]=spec.practice.map(item=>({id:`deep-${String(exerciseNumber++).padStart(3,'0')}`,lessonId:spec.id,category:spec.category,difficulty:spec.difficulty,mode:item.mode,title:item.title,instructions:item.instructions,requirements:item.requirements,starterCode:item.starter,validators:item.validators,hints:item.validators.map(rule=>rule.hint).slice(0,3),solution:item.solution,concepts:[...spec.introduces,...(spec.reinforces??[])],prerequisites:spec.prerequisites}));
-  built.push({id:spec.id,moduleId:spec.moduleId,number:0,title:spec.title,subtitle:spec.subtitle,difficulty:spec.difficulty,theory:[],content:spec.content,pedagogy,examples:spec.examples.map((example,index)=>({id:`${spec.id}-example-${index+1}`,...example})),exercises:lessonExercises,relatedCommands:spec.commands,projectStage:spec.projectStage});
+  const existingIds=new Set(draft.lessons.map(lesson=>lesson.id));
+  let exerciseNumber=1;
+  const built:Lesson[]=[];
+  for(const spec of allSpecs){
+    if(existingIds.has(spec.id))continue;
+    const pedagogy:LessonPedagogy={objective:spec.objective,prerequisites:spec.prerequisites,introduces:spec.introduces,reinforces:spec.reinforces??[],misconceptions:spec.misconceptions,practiceObjective:spec.practiceObjective,masteryCriteria:spec.mastery};
+    const lessonExercises:Exercise[]=spec.practice.map(item=>({id:`deep-${String(exerciseNumber++).padStart(3,'0')}`,lessonId:spec.id,category:spec.category,difficulty:spec.difficulty,mode:item.mode,title:item.title,instructions:item.instructions,requirements:item.requirements,starterCode:item.starter,validators:item.validators,hints:item.validators.map(rule=>rule.hint).slice(0,3),solution:item.solution,concepts:[...spec.introduces,...(spec.reinforces??[])],prerequisites:spec.prerequisites}));
+    built.push({id:spec.id,moduleId:spec.moduleId,number:0,title:spec.title,subtitle:spec.subtitle,difficulty:spec.difficulty,theory:[],content:spec.content,pedagogy,examples:spec.examples.map((example,index)=>({id:`${spec.id}-example-${index+1}`,...example})),exercises:lessonExercises,relatedCommands:spec.commands,projectStage:spec.projectStage});
+  }
+  const foundationLessons=built.filter(lesson=>lesson.moduleId==='foundation');
+  const gapLessons=built.filter(lesson=>lesson.moduleId!=='foundation');
+  const foundationModule:CourseModule={id:'foundation',number:1,title:'Основа',description:'Что такое LaTeX, как он читает исходник и почему синтаксис устроен именно так.',prerequisites:'Не требуются',difficulty:'Начальный',lessons:foundationLessons};
+  const grouped=new Map<string,Lesson[]>();
+  for(const lesson of gapLessons){const group=grouped.get(lesson.moduleId)??[];group.push(lesson);grouped.set(lesson.moduleId,group);}
+  const moduleMeta=new Map(allSpecs.map(spec=>[spec.moduleId,{title:spec.moduleTitle,description:spec.moduleDescription,difficulty:spec.difficulty}]));
+  const extraModules:CourseModule[]=[...grouped].map(([id,group])=>({id,number:0,title:moduleMeta.get(id)?.title??id,description:moduleMeta.get(id)?.description??'',prerequisites:'См. зависимости уроков',difficulty:moduleMeta.get(id)?.difficulty??'Средний',lessons:group}));
+  draft.modules.unshift(foundationModule);draft.modules.push(...extraModules);
+  draft.lessons.unshift(...foundationLessons);draft.lessons.push(...gapLessons);
+  draft.exercises.unshift(...foundationLessons.flatMap(lesson=>lesson.exercises));draft.exercises.push(...gapLessons.flatMap(lesson=>lesson.exercises));
+  draft.modules.forEach((module,index)=>{module.number=index+1;});draft.lessons.forEach((lesson,index)=>{lesson.number=index+1;});
+  return draft;
 }
-const foundationLessons=built.filter(lesson=>lesson.moduleId==='foundation');
-const gapLessons=built.filter(lesson=>lesson.moduleId!=='foundation');
-const foundationModule:CourseModule={id:'foundation',number:1,title:'Основа',description:'Что такое LaTeX, как он читает исходник и почему синтаксис устроен именно так.',prerequisites:'Не требуются',difficulty:'Начальный',lessons:foundationLessons};
-const grouped=new Map<string,Lesson[]>();
-for(const lesson of gapLessons){const group=grouped.get(lesson.moduleId)??[];group.push(lesson);grouped.set(lesson.moduleId,group);}
-const moduleMeta=new Map(allSpecs.map(spec=>[spec.moduleId,{title:spec.moduleTitle,description:spec.moduleDescription,difficulty:spec.difficulty}]));
-const extraModules:CourseModule[]=[...grouped].map(([id,group])=>({id,number:0,title:moduleMeta.get(id)?.title??id,description:moduleMeta.get(id)?.description??'',prerequisites:'См. зависимости уроков',difficulty:moduleMeta.get(id)?.difficulty??'Средний',lessons:group}));
-modules.unshift(foundationModule);modules.push(...extraModules);
-lessons.unshift(...foundationLessons);lessons.push(...gapLessons);
-exercises.unshift(...foundationLessons.flatMap(lesson=>lesson.exercises));exercises.push(...gapLessons.flatMap(lesson=>lesson.exercises));
-modules.forEach((module,index)=>{module.number=index+1;});lessons.forEach((lesson,index)=>{lesson.number=index+1;});
-lessonIndex.clear();lessons.forEach((lesson,index)=>lessonIndex.set(lesson.id,index));

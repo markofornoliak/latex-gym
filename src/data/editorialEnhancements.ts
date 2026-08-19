@@ -19,7 +19,7 @@ export function applyEditorialEnhancements(input:CurriculumDraft):CurriculumDraf
     }
   }
 
-  const firstExercise=draft.exercises.find(exercise=>exercise.id==='e01');
+  const firstExercise=draft.exercises.find(exercise=>exercise.id==='document-structure:minimal-document');
   if(firstExercise){
     Object.assign(firstExercise,{
       title:'Заголовок и абзац',
@@ -41,8 +41,6 @@ export function applyEditorialEnhancements(input:CurriculumDraft):CurriculumDraf
   }
 
   const fractionReference=draft.references.find(entry=>entry.id==='frac');
-  if(fractionReference){
-    fractionReference.description='Дробь: набирает числитель над знаменателем и сохраняет математические интервалы.';
-  }
+  if(fractionReference)fractionReference.description='Дробь: набирает числитель над знаменателем и сохраняет математические интервалы.';
   return draft;
 }

@@ -2,28 +2,13 @@ import type { ConceptDefinition, CourseModule, Exercise, LearningProject, Lesson
 import { concepts as defaultConcepts } from '../data/concepts';
 import { projects as defaultProjects } from '../data/projects';
 import { buildCurriculumGraph } from './curriculumGraph';
+import { validateRule } from './validator';
 
 export type CurriculumIssue={
-  severity:'error'|'warning';
-  code:string;
-  message:string;
-  moduleId?:string;
-  lessonId?:string;
-  exerciseId?:string;
-  projectId?:string;
-  conceptId?:string;
-  referenceId?:string;
+  severity:'error'|'warning';code:string;message:string;moduleId?:string;lessonId?:string;exerciseId?:string;projectId?:string;conceptId?:string;referenceId?:string;
 };
-
-type CurriculumLintContext={
-  modules?:readonly CourseModule[];
-  concepts?:readonly ConceptDefinition[];
-  projects?:readonly LearningProject[];
-};
-
+type CurriculumLintContext={modules?:readonly CourseModule[];concepts?:readonly ConceptDefinition[];projects?:readonly LearningProject[]};
 const unique=(values:string[])=>new Set(values).size===values.length;
-const normalizeGroupWhitespace=(source:string)=>source.replace(/[ \t]+}/g,'}');
-const hasStructuralText=(source:string,value:string)=>source.includes(value)||normalizeGroupWhitespace(source).includes(normalizeGroupWhitespace(value));
 
 export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exercise[],references:readonly ReferenceEntry[],context:CurriculumLintContext={}):CurriculumIssue[]{
   const issues:CurriculumIssue[]=[];
@@ -52,9 +37,7 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
     for(const module of modules){
       if(!module.title.trim())issues.push({severity:'error',code:'empty-module-title',moduleId:module.id,message:'Module title is empty.'});
       if(module.lessons.length===0)issues.push({severity:'error',code:'empty-module',moduleId:module.id,message:'Module has no lessons.'});
-      for(const lesson of module.lessons){
-        if(lesson.moduleId!==module.id)issues.push({severity:'error',code:'lesson-module-mismatch',moduleId:module.id,lessonId:lesson.id,message:`Lesson ${lesson.id} declares module ${lesson.moduleId}, but is stored in ${module.id}.`});
-      }
+      for(const lesson of module.lessons)if(lesson.moduleId!==module.id)issues.push({severity:'error',code:'lesson-module-mismatch',moduleId:module.id,lessonId:lesson.id,message:`Lesson ${lesson.id} declares module ${lesson.moduleId}, but is stored in ${module.id}.`});
     }
   }
 
@@ -66,50 +49,35 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
 
     const nestedIds=lesson.exercises.map(exercise=>exercise.id);
     if(!unique(nestedIds))issues.push({severity:'error',code:'duplicate-lesson-exercise-id',lessonId:lesson.id,message:'Exercise IDs must be unique inside a lesson.'});
-    for(const nested of lesson.exercises){
-      if(nested.lessonId!==lesson.id)issues.push({severity:'error',code:'exercise-lesson-mismatch',lessonId:lesson.id,exerciseId:nested.id,message:`Exercise ${nested.id} declares lesson ${nested.lessonId}.`});
-    }
+    for(const nested of lesson.exercises)if(nested.lessonId!==lesson.id)issues.push({severity:'error',code:'exercise-lesson-mismatch',lessonId:lesson.id,exerciseId:nested.id,message:`Exercise ${nested.id} declares lesson ${nested.lessonId}.`});
 
     const pedagogy=lesson.pedagogy;
     if(pedagogy){
       if(!pedagogy.objective.trim())issues.push({severity:'error',code:'zero-objective',lessonId:lesson.id,message:'Lesson pedagogy has no objective.'});
       if(!pedagogy.practiceObjective.trim())issues.push({severity:'warning',code:'zero-practice-objective',lessonId:lesson.id,message:'Lesson pedagogy has no practice objective.'});
-      for(const concept of [...pedagogy.prerequisites,...pedagogy.introduces,...pedagogy.reinforces]){
-        if(!conceptIdSet.has(concept))issues.push({severity:'error',code:'unknown-concept',conceptId:concept,lessonId:lesson.id,message:`Unknown lesson concept: ${concept}`});
-      }
-      if(lesson.content){
-        for(const prerequisite of pedagogy.prerequisites){
-          if(!introduced.has(prerequisite))issues.push({severity:'error',code:'knowledge-gap',conceptId:prerequisite,lessonId:lesson.id,message:`Prerequisite ${prerequisite} has not been introduced before this lesson.`});
-        }
-      }
+      for(const concept of [...pedagogy.prerequisites,...pedagogy.introduces,...pedagogy.reinforces])if(!conceptIdSet.has(concept))issues.push({severity:'error',code:'unknown-concept',conceptId:concept,lessonId:lesson.id,message:`Unknown lesson concept: ${concept}`});
+      if(lesson.content)for(const prerequisite of pedagogy.prerequisites)if(!introduced.has(prerequisite))issues.push({severity:'error',code:'knowledge-gap',conceptId:prerequisite,lessonId:lesson.id,message:`Prerequisite ${prerequisite} has not been introduced before this lesson.`});
       pedagogy.introduces.forEach(concept=>introduced.add(concept));
-    }else if(lesson.content){
-      issues.push({severity:'warning',code:'missing-pedagogy',lessonId:lesson.id,message:'Structured lesson content has no explicit pedagogy metadata.'});
-    }
+    }else if(lesson.content)issues.push({severity:'warning',code:'missing-pedagogy',lessonId:lesson.id,message:'Structured lesson content has no explicit pedagogy metadata.'});
 
     if(lesson.content){
       const blockIds=lesson.content.map(block=>block.id);
       if(!unique(blockIds))issues.push({severity:'error',code:'duplicate-block-id',lessonId:lesson.id,message:'Learning block IDs must be unique inside a lesson.'});
-      for(const command of lesson.relatedCommands){
-        if(command&&!referenceTokens.has(command.replace(/^\\/,'')))issues.push({severity:'warning',code:'reference-gap',lessonId:lesson.id,message:`No reference entry for ${command}.`});
-      }
+      for(const command of lesson.relatedCommands)if(command&&!referenceTokens.has(command.replace(/^\\/,'')))issues.push({severity:'warning',code:'reference-gap',lessonId:lesson.id,message:`No reference entry for ${command}.`});
     }
   }
 
   for(const exercise of exercises){
     if(!lessonIdSet.has(exercise.lessonId))issues.push({severity:'error',code:'orphan-exercise',exerciseId:exercise.id,message:`Unknown lesson ${exercise.lessonId}.`});
-    for(const concept of exercise.concepts){
-      if(!conceptIdSet.has(concept))issues.push({severity:'error',code:'unknown-exercise-concept',conceptId:concept,lessonId:exercise.lessonId,exerciseId:exercise.id,message:`Unknown exercise concept: ${concept}`});
-    }
-    for(const prerequisite of exercise.prerequisites??[]){
-      if(!conceptIdSet.has(prerequisite))issues.push({severity:'error',code:'unknown-exercise-prerequisite',conceptId:prerequisite,exerciseId:exercise.id,message:`Unknown exercise prerequisite: ${prerequisite}`});
-    }
+    for(const concept of exercise.concepts)if(!conceptIdSet.has(concept))issues.push({severity:'error',code:'unknown-exercise-concept',conceptId:concept,lessonId:exercise.lessonId,exerciseId:exercise.id,message:`Unknown exercise concept: ${concept}`});
+    for(const prerequisite of exercise.prerequisites??[])if(!conceptIdSet.has(prerequisite))issues.push({severity:'error',code:'unknown-exercise-prerequisite',conceptId:prerequisite,exerciseId:exercise.id,message:`Unknown exercise prerequisite: ${prerequisite}`});
     if(!exercise.solution.trim())issues.push({severity:'error',code:'empty-solution',exerciseId:exercise.id,message:'Exercise solution is empty.'});
     if(exercise.validators.length===0)issues.push({severity:'error',code:'missing-validators',exerciseId:exercise.id,message:'Exercise has no validation rules.'});
     for(const rule of exercise.validators){
       if(!validValidatorShape(rule))issues.push({severity:'error',code:'malformed-validator',exerciseId:exercise.id,message:`Malformed validator: ${rule.type}`});
       if(rule.type==='compiles')continue;
-      if(!ruleSatisfiedBySolution(rule,exercise.solution))issues.push({severity:'error',code:'solution-fails-rule',exerciseId:exercise.id,message:`Reference solution does not satisfy: ${rule.message}`});
+      const conceptual=exercise.mode==='Объяснить'||exercise.mode==='Архитектура';
+      if(!validateRule(rule,exercise.solution,undefined,conceptual).ok)issues.push({severity:'error',code:'solution-fails-rule',exerciseId:exercise.id,message:`Reference solution does not satisfy: ${rule.message}`});
     }
   }
 
@@ -118,9 +86,7 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
     if(project.stages.length===0)issues.push({severity:'error',code:'project-without-stages',projectId:project.id,message:'Project has no stages.'});
     const stageIds=project.stages.map(stage=>stage.id);
     if(!unique(stageIds))issues.push({severity:'error',code:'duplicate-project-stage',projectId:project.id,message:'Project stage IDs must be unique inside a project.'});
-    for(const concept of project.concepts){
-      if(!conceptIdSet.has(concept))issues.push({severity:'error',code:'unknown-project-concept',conceptId:concept,projectId:project.id,message:`Project ${project.id} references unknown concept ${concept}.`});
-    }
+    for(const concept of project.concepts)if(!conceptIdSet.has(concept))issues.push({severity:'error',code:'unknown-project-concept',conceptId:concept,projectId:project.id,message:`Project ${project.id} references unknown concept ${concept}.`});
     for(const stage of project.stages){
       if(!stage.objective.trim())issues.push({severity:'error',code:'empty-project-stage-objective',projectId:project.id,message:`Project stage ${stage.id} has no objective.`});
       if(stage.requirements.length===0)issues.push({severity:'warning',code:'project-stage-without-requirements',projectId:project.id,message:`Project stage ${stage.id} has no requirements.`});
@@ -135,9 +101,7 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
   for(const lesson of lessons)for(const concept of [...(lesson.pedagogy?.introduces??[]),...(lesson.pedagogy?.reinforces??[])])connections.set(concept,(connections.get(concept)??0)+1);
   for(const exercise of exercises)for(const concept of exercise.concepts)connections.set(concept,(connections.get(concept)??0)+1);
   for(const project of projects)for(const concept of project.concepts)connections.set(concept,(connections.get(concept)??0)+1);
-  for(const concept of concepts){
-    if((connections.get(concept.id)??0)===0)issues.push({severity:'warning',code:'dead-concept',conceptId:concept.id,message:`Concept ${concept.id} is disconnected from curriculum evidence.`});
-  }
+  for(const concept of concepts)if((connections.get(concept.id)??0)===0)issues.push({severity:'warning',code:'dead-concept',conceptId:concept.id,message:`Concept ${concept.id} is disconnected from curriculum evidence.`});
 
   return dedupeIssues(issues);
 }
@@ -146,26 +110,7 @@ function validValidatorShape(rule:ValidatorRule){
   if(!rule.message.trim()||!rule.hint.trim())return false;
   if('value' in rule&&typeof rule.value==='string'&&!rule.value.length)return false;
   if(rule.type==='command'&&rule.min!==undefined&&rule.min<1)return false;
+  if(rule.type==='compiles'&&rule.authority!==undefined&&!['educational','real-tex'].includes(rule.authority))return false;
   return true;
 }
-
-function ruleSatisfiedBySolution(rule:ValidatorRule,source:string):boolean{
-  switch(rule.type){
-    case 'documentClass':return new RegExp(`\\\\documentclass(?:\\[[^\\]]*\\])?\\{${escapeRegExp(rule.value)}\\}`).test(source);
-    case 'documentClassOption':return new RegExp(`\\\\documentclass\\[[^\\]]*${escapeRegExp(rule.value)}[^\\]]*\\]`).test(source);
-    case 'environment':return new RegExp(`\\\\begin\\{${escapeRegExp(rule.value)}\\}[\\s\\S]*\\\\end\\{${escapeRegExp(rule.value)}\\}`).test(source);
-    case 'command':return (source.match(new RegExp(`\\\\${escapeRegExp(rule.value)}(?=[^A-Za-z@]|$)`,'g'))??[]).length>=(rule.min??1);
-    case 'package':return new RegExp(`\\\\usepackage(?:\\[[^\\]]*\\])?\\{[^}]*${escapeRegExp(rule.value)}[^}]*\\}`).test(source.split(/\\begin\{document\}/)[0]??source);
-    case 'containsText':return hasStructuralText(source,rule.value);
-    case 'forbiddenText':return !source.includes(rule.value);
-    case 'regex':try{return new RegExp(rule.value,rule.flags).test(source);}catch{return false;}
-    case 'paragraph':return /[\p{L}\p{N}]{2,}/u.test(source.replace(/\\[a-zA-Z]+/g,' '));
-    case 'inlineMath':return /\$[^$\n]+\$/.test(source);
-    case 'displayMath':return /\\\[[\s\S]*?\\\]|\\begin\{(?:equation|align)\}/.test(source);
-    case 'balancedEnvironments':return balanced(source);
-    case 'compiles':return true;
-  }
-}
-function escapeRegExp(value:string){return value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
-function balanced(source:string){const stack:string[]=[];for(const token of source.matchAll(/\\(begin|end)\{([^}]+)\}/g)){if(token[1]==='begin')stack.push(token[2]);else if(stack.pop()!==token[2])return false;}return stack.length===0;}
 function dedupeIssues(issues:CurriculumIssue[]){const seen=new Set<string>();return issues.filter(issue=>{const key=[issue.severity,issue.code,issue.moduleId,issue.lessonId,issue.exerciseId,issue.projectId,issue.conceptId,issue.referenceId,issue.message].join('|');if(seen.has(key))return false;seen.add(key);return true;});}

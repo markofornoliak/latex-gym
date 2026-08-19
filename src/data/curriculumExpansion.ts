@@ -1,4 +1,4 @@
-import { exercises, lessonIndex, lessons, modules } from './courses';
+import { cloneCurriculumDraft, type CurriculumDraft } from './curriculumDraft';
 import type { CourseModule, Difficulty, Exercise, Lesson, PracticeCategory, TheoryBlock } from '../types';
 
 type Step=[title:string,body:string,code?:string,note?:string];
@@ -87,19 +87,6 @@ const existingGuides:Record<string,Step[]>={
     ['Warning не равен error','Предупреждение может не блокировать PDF, но его нужно понимать. Финальная публикация не должна содержать необъяснённых предупреждений.']
   ]
 };
-
-for(const lesson of lessons){
-  const additions=existingGuides[lesson.id]??[];
-  additions.forEach(([title,body,code,note],i)=>{
-    const id=`${lesson.id}-deep-${i+1}`;
-    if(!lesson.theory.some(block=>block.id===id))lesson.theory.push({id,title,body,code,note});
-  });
-  if(lesson.examples.length<2&&lesson.exercises[0])lesson.examples.push({
-    id:`${lesson.id}-guided-example`,title:'Разбор решения',
-    description:'Сравните условие с одним корректным решением. Следите за структурой и назначением команд, а не за буквальным совпадением строк.',
-    code:lesson.exercises[0].solution
-  });
-}
 
 const topics:Topic[]=[
   {
@@ -207,33 +194,50 @@ const topics:Topic[]=[
   }
 ];
 
-const startNumber=modules.length;
-const newModules:CourseModule[]=topics.map((topic,topicIndex)=>{
-  const number=startNumber+topicIndex+1;
-  const lessonId=topic.id;
-  const lessonExercises:Exercise[]=topic.practice.map(([title,instructions,target,starter,solution,concepts],i)=>({
-    id:`x${String(number).padStart(2,'0')}-${i+1}`,
-    lessonId,category:topic.category,difficulty:topic.difficulty,mode:i===1?'Исправить ошибку':'Дополнить документ',title,instructions,
-    requirements:[`Использовать ${target}`],starterCode:starter,
-    validators:[{type:'containsText',value:target,message:'Ключевая конструкция найдена.',hint:`Добавьте или исправьте: ${target}`}],
-    hints:[`Найдите место, где должна появиться конструкция ${target}.`,'Сначала сохраните структуру исходника, затем внесите минимальное изменение.',`Ориентир: ${target}`],
-    solution,concepts
-  }));
-  const theory:TheoryBlock[]=topic.steps.map(([title,body,code,note],i)=>({id:`${lessonId}-t${i+1}`,title,body,code,note}));
-  const lesson:Lesson={
-    id:lessonId,moduleId:topic.id,number,title:topic.title,subtitle:topic.subtitle,difficulty:topic.difficulty,theory,
-    examples:topic.examples.map(([title,description,code],i)=>({id:`${lessonId}-ex${i+1}`,title,description,code})),
-    exercises:lessonExercises,relatedCommands:topic.commands
-  };
-  return {id:topic.id,number,title:topic.title,description:topic.description,prerequisites:topic.prerequisite,difficulty:topic.difficulty,lessons:[lesson]};
-});
 
-for(const module of newModules){
-  if(modules.some(existing=>existing.id===module.id))continue;
-  modules.push(module);
-  for(const lesson of module.lessons){
-    lessonIndex.set(lesson.id,lessons.length);
-    lessons.push(lesson);
-    exercises.push(...lesson.exercises);
+export function applyCurriculumExpansion(input:CurriculumDraft):CurriculumDraft{
+  const draft=cloneCurriculumDraft(input);
+  for(const lesson of draft.lessons){
+    const additions=existingGuides[lesson.id]??[];
+    additions.forEach(([title,body,code,note],i)=>{
+      const id=`${lesson.id}-deep-${i+1}`;
+      if(!lesson.theory.some(block=>block.id===id))lesson.theory.push({id,title,body,code,note});
+    });
+    if(lesson.examples.length<2&&lesson.exercises[0])lesson.examples.push({
+      id:`${lesson.id}-guided-example`,title:'Разбор решения',
+      description:'Сравните условие с одним корректным решением. Следите за структурой и назначением команд, а не за буквальным совпадением строк.',
+      code:lesson.exercises[0].solution
+    });
   }
+
+  const startNumber=draft.modules.length;
+  const newModules:CourseModule[]=topics.map((topic,topicIndex)=>{
+    const number=startNumber+topicIndex+1;
+    const lessonId=topic.id;
+    const lessonExercises:Exercise[]=topic.practice.map(([title,instructions,target,starter,solution,concepts],i)=>({
+      id:`x${String(number).padStart(2,'0')}-${i+1}`,
+      lessonId,category:topic.category,difficulty:topic.difficulty,mode:i===1?'Исправить ошибку':'Дополнить документ',title,instructions,
+      requirements:[`Использовать ${target}`],starterCode:starter,
+      validators:[{type:'containsText',value:target,message:'Ключевая конструкция найдена.',hint:`Добавьте или исправьте: ${target}`}],
+      hints:[`Найдите место, где должна появиться конструкция ${target}.`,'Сначала сохраните структуру исходника, затем внесите минимальное изменение.',`Ориентир: ${target}`],
+      solution,concepts
+    }));
+    const theory:TheoryBlock[]=topic.steps.map(([title,body,code,note],i)=>({id:`${lessonId}-t${i+1}`,title,body,code,note}));
+    const lesson:Lesson={
+      id:lessonId,moduleId:topic.id,number,title:topic.title,subtitle:topic.subtitle,difficulty:topic.difficulty,theory,
+      examples:topic.examples.map(([title,description,code],i)=>({id:`${lessonId}-ex${i+1}`,title,description,code})),
+      exercises:lessonExercises,relatedCommands:topic.commands
+    };
+    return {id:topic.id,number,title:topic.title,description:topic.description,prerequisites:topic.prerequisite,difficulty:topic.difficulty,lessons:[lesson]};
+  });
+
+  for(const module of newModules){
+    if(draft.modules.some(existing=>existing.id===module.id))continue;
+    draft.modules.push(module);
+    for(const lesson of module.lessons){
+      draft.lessons.push(lesson);
+      draft.exercises.push(...lesson.exercises);
+    }
+  }
+  return draft;
 }
