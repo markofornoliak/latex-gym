@@ -3,6 +3,8 @@ name: Validate curriculum linter implementation
 on:
   push:
     branches: [ai/curriculum-linter-validation-20260819]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
@@ -10,11 +12,13 @@ permissions:
 
 jobs:
   validate:
-    if: ${{ !contains(github.event.head_commit.message, '[curriculum-data-patched]') && !contains(github.event.head_commit.message, '[validation-report]') }}
+    if: ${{ github.event_name == 'pull_request' || (!contains(github.event.head_commit.message, '[curriculum-data-patched]') && !contains(github.event.head_commit.message, '[validation-report]')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout validation branch
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
 
       - name: Apply confirmed curriculum metadata correction
         run: |
