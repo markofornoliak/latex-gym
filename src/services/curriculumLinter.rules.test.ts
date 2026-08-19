@@ -50,16 +50,29 @@ describe('curriculum linter negative invariants',()=>{
     const missing=fixture();missing.lessons[1].projectStage='project:missing-stage';expectCode(missing,'unknown-project-stage-reference');
   });
 
-  it('detects concept dependency chronology that contradicts lesson order',()=>{
+  it('reports concept dependency chronology without rejecting valid co-teaching',()=>{
     const data=fixture();
     data.concepts.push({id:'later',title:'Later',description:'Later concept',prerequisites:[]});
     data.concepts.find(concept=>concept.id==='advanced')!.prerequisites=['later'];
-    expectCode(data,'concept-dependency-gap');
+    const issue=lint(data).find(item=>item.code==='concept-dependency-gap');
+    expect(issue?.severity).toBe('warning');
   });
 
-  it('detects lesson prerequisites and reinforcement before introduction',()=>{
+  it('rejects a genuinely impossible reciprocal learning path',()=>{
+    const data=fixture();
+    const later=lesson('lesson-later',3,['later'],['advanced']);
+    data.lessons.push(later);data.modules[0].lessons.push(later);data.exercises.push(...later.exercises);
+    data.concepts.push({id:'later',title:'Later',description:'Later concept',prerequisites:[]});
+    data.concepts.find(concept=>concept.id==='advanced')!.prerequisites=['later'];
+    const issue=lint(data).find(item=>item.code==='impossible-learning-path');
+    expect(issue?.severity).toBe('error');
+  });
+
+  it('detects explicit lesson prerequisite gaps but only warns about early reinforcement',()=>{
     const prerequisite=fixture();prerequisite.lessons[0].pedagogy!.prerequisites=['advanced'];expectCode(prerequisite,'knowledge-gap');
-    const reinforcement=fixture();reinforcement.lessons[0].pedagogy!.reinforces=['advanced'];expectCode(reinforcement,'reinforces-before-introduction');
+    const reinforcement=fixture();reinforcement.lessons[0].pedagogy!.reinforces=['advanced'];
+    const issue=lint(reinforcement).find(item=>item.code==='reinforces-before-introduction');
+    expect(issue?.severity).toBe('warning');
   });
 
   it('detects contradictory concept roles inside one lesson',()=>{
