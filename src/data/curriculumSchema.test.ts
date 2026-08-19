@@ -6,6 +6,7 @@ const cloneSource=()=>structuredClone(sourceJson) as unknown as {
   modules:Array<{
     difficulty:unknown;
     lessons:Array<{
+      number:unknown;
       content?:Array<Record<string,unknown>>;
       pedagogy?:Record<string,unknown>;
       exercises:Array<{validators:unknown}>;
@@ -20,10 +21,14 @@ describe('curriculum structural schema',()=>{
     expect(JSON.stringify(sourceJson)).toBe(before);
   });
 
-  it('reports exact paths for invalid enums',()=>{
-    const draft=cloneSource();
-    draft.modules[0].difficulty='Intermediate';
-    expect(()=>parseCurriculumSource(draft)).toThrow(/curriculum\.modules\[0\]\.difficulty/);
+  it('reports exact paths for invalid enums and scalar types',()=>{
+    const badDifficulty=cloneSource();
+    badDifficulty.modules[0].difficulty='Intermediate';
+    expect(()=>parseCurriculumSource(badDifficulty)).toThrow(/curriculum\.modules\[0\]\.difficulty/);
+
+    const badNumber=cloneSource();
+    badNumber.modules[0].lessons[0].number='1';
+    expect(()=>parseCurriculumSource(badNumber)).toThrow(/lessons\[0\]\.number: expected integer/);
   });
 
   it('rejects malformed arrays before downstream code can call map on them',()=>{
