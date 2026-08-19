@@ -3,6 +3,8 @@ name: Capture curriculum baseline
 on:
   push:
     branches: [agent/curriculum-source-of-truth]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
