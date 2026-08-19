@@ -1,0 +1,18 @@
+@layer base, fidelity, device-layouts, laptop-polish, product, smart-editor, editor-reference, projects, project-workspace, reference, progress, interaction-polish, compiler-workspace, training-dashboard, onboarding, practice-modes;
+
+@import './index.css' layer(base);
+@import './fidelity.css' layer(fidelity);
+@import './deviceLayouts.css' layer(device-layouts);
+@import './laptopPolish.css' layer(laptop-polish);
+@import './deepProduct.css' layer(product);
+@import './smartEditor.css' layer(smart-editor);
+@import './editorReference.css' layer(editor-reference);
+@import './projects.css' layer(projects);
+@import './projectWorkspace.css' layer(project-workspace);
+@import './referenceDeep.css' layer(reference);
+@import './progressDeep.css' layer(progress);
+@import './interactionPolish.css' layer(interaction-polish);
+@import './compilerWorkspace.css' layer(compiler-workspace);
+@import './trainingDashboard.css' layer(training-dashboard);
+@import './onboardingFlow.css' layer(onboarding);
+@import './modeAwarePractice.css' layer(practice-modes);
