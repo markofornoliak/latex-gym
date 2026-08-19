@@ -5,6 +5,7 @@ import { lintCurriculum } from './curriculumLinter';
 const {modules,lessons,exercises,projects,references,concepts,graph}=curriculum;
 const foundationOrder=['what-is-latex','compilation-model','tex-source','commands-foundation','arguments-foundation','environments-foundation','document-structure-foundation','preamble-body-foundation','packages-foundation','errors-foundation','first-document-foundation'];
 const debuggingIds=['debug-undefined-control','debug-missing-brace','debug-alignment-tab','debug-missing-math','debug-undefined-environment','debug-file-not-found'];
+const expectedWarningBaseline:string[]=[];
 
 describe('curriculum quality gate',()=>{
   it('meets the substantial content floor without filler modules',()=>{
@@ -32,6 +33,12 @@ describe('curriculum quality gate',()=>{
     const issues=lintCurriculum(lessons,exercises,references,{modules,concepts,projects});
     const errors=issues.filter(issue=>issue.severity==='error');
     expect(errors,errors.map(issue=>`${issue.code}: ${issue.lessonId??issue.exerciseId??issue.projectId??issue.conceptId??''} ${issue.message}`).join('\n')).toEqual([]);
+  });
+
+  it('does not accumulate unreviewed curriculum warnings',()=>{
+    const issues=lintCurriculum(lessons,exercises,references,{modules,concepts,projects});
+    const warnings=issues.filter(issue=>issue.severity==='warning').map(issue=>`${issue.code}:${issue.moduleId??issue.lessonId??issue.exerciseId??issue.projectId??issue.conceptId??issue.referenceId??''}`).sort();
+    expect(warnings,warnings.join('\n')).toEqual(expectedWarningBaseline);
   });
 
   it('is deeply frozen after the construction phase',()=>{
