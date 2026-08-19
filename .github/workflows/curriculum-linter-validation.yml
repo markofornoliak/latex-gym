@@ -45,7 +45,7 @@ jobs:
 
       - name: Refresh semantic fingerprint
         run: >-
-          node -e "const fs=require('node:fs');const snapshot=JSON.parse(fs.readFileSync('src/data/curriculumSnapshot.generated.json','utf8'));const p='src/data/curriculumBaseline.json';const baseline=JSON.parse(fs.readFileSync(p,'utf8'));baseline.semanticFingerprint=snapshot.semanticFingerprint;fs.writeFileSync(p,JSON.stringify(baseline,null,2)+'\n','utf8');console.log('[curriculum-baseline] fingerprint='+snapshot.semanticFingerprint);"
+          node -e "const fs=require('node:fs');const snapshot=JSON.parse(fs.readFileSync('src/data/curriculumSnapshot.generated.json','utf8'));const p='src/data/curriculumBaseline.json';const baseline=JSON.parse(fs.readFileSync(p,'utf8'));baseline.semanticFingerprint=snapshot.semanticFingerprint;fs.writeFileSync(p,JSON.stringify(baseline)+'\n','utf8');console.log('[curriculum-baseline] fingerprint='+snapshot.semanticFingerprint);"
 
       - name: Regenerate validated snapshot
         run: npm run curriculum:snapshot
@@ -77,5 +77,5 @@ jobs:
             echo "No generated curriculum changes to persist."
             exit 0
           fi
-          git commit -m "[curriculum-data-patched] Align compiler prerequisite metadata"
+          git commit -m "[curriculum-data-patched] Normalize validated curriculum metadata"
           git push origin HEAD:${{ github.head_ref }}
