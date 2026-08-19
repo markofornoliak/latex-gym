@@ -9,7 +9,7 @@
     "prepare": "npm run curriculum:prepare",
     "predev": "npm run curriculum:prepare",
     "dev": "vite",
-    "curriculum:check": "vitest run src/services/curriculumLinter.test.ts scripts/curriculumSnapshot.generate.test.ts",
+    "curriculum:check": "vitest run src/data/curriculumSchema.test.ts src/services/curriculumLinter.test.ts src/services/curriculumLinter.rules.test.ts scripts/curriculumSnapshot.generate.test.ts",
     "prebuild": "npm run curriculum:prepare",
     "build": "npm run curriculum:check && tsc -b && vite build",
     "preview": "vite preview",
@@ -27,7 +27,7 @@
     "@codemirror/view": "^6.39.16",
     "katex": "^0.18.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react-dom": "^19.2.3",
     "react-router-dom": "^7.18.2",
     "zustand": "^5.0.14"
   },
