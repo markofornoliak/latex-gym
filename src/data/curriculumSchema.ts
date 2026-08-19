@@ -152,8 +152,11 @@ function validateValidator(value:unknown,path:string,ctx:Context){
   oneOf(item.type,VALIDATOR_TYPES,`${path}.type`,ctx);
   if(typeof item.type!=='string'||!VALIDATOR_TYPES.includes(item.type as typeof VALIDATOR_TYPES[number]))return;
   const messages=()=>{text(item.message,`${path}.message`,ctx,{nonEmpty:true});text(item.hint,`${path}.hint`,ctx,{nonEmpty:true});};
-  if(['documentClass','documentClassOption','environment','package','containsText','forbiddenText'].includes(item.type)){
+  if(['documentClass','documentClassOption','environment','package'].includes(item.type)){
     exact(item,['type','value','message','hint'],path,ctx);text(item.value,`${path}.value`,ctx,{nonEmpty:true});messages();return;
+  }
+  if(['containsText','forbiddenText'].includes(item.type)){
+    exact(item,['type','value','message','hint'],path,ctx);text(item.value,`${path}.value`,ctx);messages();return;
   }
   if(item.type==='command'){
     exact(item,['type','value','min','message','hint'],path,ctx);text(item.value,`${path}.value`,ctx,{nonEmpty:true});optional(item.min,`${path}.min`,ctx,value=>integer(value,`${path}.min`,ctx,{min:1}));messages();return;
