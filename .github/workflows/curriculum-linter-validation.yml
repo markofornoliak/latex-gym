@@ -72,7 +72,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/data/curriculumSource.json src/data/curriculumBaseline.json src/data/curriculumSnapshot.generated.json
+          git add src/data/curriculumSource.json src/data/curriculumBaseline.json
           if git diff --cached --quiet; then
             echo "No generated curriculum changes to persist."
             exit 0
