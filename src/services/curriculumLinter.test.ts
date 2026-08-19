@@ -5,7 +5,13 @@ import { lintCurriculum } from './curriculumLinter';
 const {modules,lessons,exercises,projects,references,concepts,graph}=curriculum;
 const foundationOrder=['what-is-latex','compilation-model','tex-source','commands-foundation','arguments-foundation','environments-foundation','document-structure-foundation','preamble-body-foundation','packages-foundation','errors-foundation','first-document-foundation'];
 const debuggingIds=['debug-undefined-control','debug-missing-brace','debug-alignment-tab','debug-missing-math','debug-undefined-environment','debug-file-not-found'];
-const expectedWarningCounts:Record<string,number>={};
+const expectedWarningCounts:Record<string,number>={
+  'reinforces-before-introduction':31,
+  'concept-dependency-gap':6,
+  'reference-gap':68,
+  'reference-token-collision':10,
+  'unobserved-concept':4,
+};
 
 describe('curriculum quality gate',()=>{
   it('meets the substantial content floor without filler modules',()=>{
