@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { documentRepository } from '../services/documentRepository';
 
-type Options={
-  key:string;
-  initialValue:string;
-  normalizeLoaded?:(saved:string|undefined)=>string;
-  debounceMs?:number;
-};
+type Options={key:string;initialValue:string;normalizeLoaded?:(saved:string|undefined)=>string;debounceMs?:number};
 
 export function useDocumentDraft({key,initialValue,normalizeLoaded,debounceMs=280}:Options){
   const normalizeRef=useRef(normalizeLoaded);normalizeRef.current=normalizeLoaded;
@@ -14,15 +9,17 @@ export function useDocumentDraft({key,initialValue,normalizeLoaded,debounceMs=28
   const [saved,setSaved]=useState(true);
   const [loaded,setLoaded]=useState(false);
   const generation=useRef(0);
+  const editedBeforeHydration=useRef(false);
 
   useEffect(()=>{
     const current=++generation.current;
+    editedBeforeHydration.current=false;
     setLoaded(false);setSaved(true);setValueState(initialValue);
     void documentRepository.get(key).then(stored=>{
       if(current!==generation.current)return;
-      setValueState(normalizeRef.current?normalizeRef.current(stored):(stored??initialValue));
-      setLoaded(true);setSaved(true);
-    }).catch(()=>{if(current===generation.current){setLoaded(true);setSaved(true);}});
+      if(!editedBeforeHydration.current)setValueState(normalizeRef.current?normalizeRef.current(stored):(stored??initialValue));
+      setLoaded(true);setSaved(!editedBeforeHydration.current);
+    }).catch(()=>{if(current===generation.current){setLoaded(true);setSaved(!editedBeforeHydration.current);}});
   },[key,initialValue]);
 
   useEffect(()=>{
@@ -32,8 +29,8 @@ export function useDocumentDraft({key,initialValue,normalizeLoaded,debounceMs=28
     return()=>window.clearTimeout(timer);
   },[key,value,loaded,debounceMs]);
 
-  const setValue=useCallback((next:string)=>setValueState(next),[]);
+  const setValue=useCallback((next:string)=>{if(!loaded)editedBeforeHydration.current=true;setValueState(next);},[loaded]);
   const saveNow=useCallback(async()=>{await documentRepository.set(key,value);setSaved(true);},[key,value]);
-  const reset=useCallback((next=initialValue)=>{setValueState(next);},[initialValue]);
+  const reset=useCallback((next=initialValue)=>setValueState(next),[initialValue]);
   return {value,setValue,saved,loaded,saveNow,reset};
 }
