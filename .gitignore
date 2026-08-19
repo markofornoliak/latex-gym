@@ -8,3 +8,4 @@ vite.config.js
 vite.config.d.ts
 src/data/curriculumExpansion.generated.ts
 src/data/deepCurriculum.generated.ts
+src/data/curriculumSnapshot.generated.json
