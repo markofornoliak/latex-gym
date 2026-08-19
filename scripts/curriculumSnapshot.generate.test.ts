@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import process from 'node:process';
+import baselineJson from '../src/data/curriculumBaseline.json';
 import { buildCurriculum } from '../src/data/curriculumBuild';
 
+const baseline=baselineJson as {semanticFingerprint:string;moduleIds:string[];lessonIds:string[];exerciseIds:string[]};
 const built=buildCurriculum();
 const semanticFingerprint=fingerprint({modules:built.modules,lessons:built.lessons,exercises:built.exercises,references:built.references,concepts:built.concepts,projects:built.projects});
 const snapshot={snapshotVersion:1,semanticFingerprint,...built};
@@ -16,11 +18,12 @@ if(process.env.LATEX_GYM_WRITE_CURRICULUM_SNAPSHOT==='1'){
 }
 
 describe('build-time curriculum snapshot',()=>{
-  it('constructs a valid semantic snapshot with stable seed exercise ids',()=>{
-    expect(built.lessons.length).toBeGreaterThan(0);
-    expect(built.exercises.length).toBeGreaterThan(0);
+  it('constructs the exact compatibility-locked semantic curriculum from the canonical source',()=>{
+    expect(built.modules.map(item=>item.id)).toEqual(baseline.moduleIds);
+    expect(built.lessons.map(item=>item.id)).toEqual(baseline.lessonIds);
+    expect(built.exercises.map(item=>item.id)).toEqual(baseline.exerciseIds);
     expect(built.exercises.some(exercise=>/^e\d+$/.test(exercise.id))).toBe(false);
-    expect(semanticFingerprint).toMatch(/^[0-9a-f]{8}$/);
+    expect(semanticFingerprint).toBe(baseline.semanticFingerprint);
   });
 });
 

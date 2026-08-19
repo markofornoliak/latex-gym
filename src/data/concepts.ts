@@ -1,102 +1,16 @@
-import type { ConceptDefinition } from '../types';
+import { curriculumSource } from './curriculumSource';
 
-const definitions:ConceptDefinition[] = [
-  {id:'latex-model',title:'Модель LaTeX',description:'Исходный текст описывает структуру документа, а система набора формирует результат.',prerequisites:[]},
-  {id:'source-file',title:'Исходный .tex-файл',description:'Обычный текстовый файл с текстом и управляющими конструкциями LaTeX.',prerequisites:['latex-model']},
-  {id:'compiler',title:'Компиляция',description:'Преобразование исходного файла в итоговый документ с диагностикой ошибок.',prerequisites:['source-file']},
-  {id:'command',title:'Команда',description:'Управляющая конструкция, начинающаяся с обратного слеша.',prerequisites:['source-file']},
-  {id:'required-argument',title:'Обязательный аргумент',description:'Значение команды в фигурных скобках.',prerequisites:['command']},
-  {id:'optional-argument',title:'Необязательный аргумент',description:'Параметр команды в квадратных скобках.',prerequisites:['required-argument']},
-  {id:'grouping',title:'Группировка',description:'Фигурные скобки объединяют несколько токенов и ограничивают область действия.',prerequisites:['required-argument']},
-  {id:'comment',title:'Комментарий',description:'Процент исключает остаток строки из набора.',prerequisites:['source-file']},
-  {id:'special-symbols',title:'Специальные символы',description:'Символы с синтаксической ролью требуют осмысленного использования или экранирования.',prerequisites:['command']},
-  {id:'environment',title:'Окружение',description:'Структурная область, ограниченная begin/end с одинаковым именем.',prerequisites:['command','required-argument']},
-  {id:'document-environment',title:'Окружение document',description:'Главная область публикуемого содержимого.',prerequisites:['environment']},
-  {id:'preamble',title:'Преамбула',description:'Конфигурационная часть до begin{document}.',prerequisites:['document-environment']},
-  {id:'document-body',title:'Тело документа',description:'Содержимое внутри окружения document.',prerequisites:['document-environment']},
-  {id:'document-class',title:'Класс документа',description:'Базовые правила структуры и набора: article, report, book, beamer.',prerequisites:['command','required-argument']},
-  {id:'document-metadata',title:'Метаданные документа',description:'Название, автор и аннотация описываются структурно и отделены от визуального оформления.',prerequisites:['document-class','preamble']},
-  {id:'package-model',title:'Модель пакетов',description:'Пакеты расширяют базовые возможности LaTeX и подключаются в преамбуле.',prerequisites:['preamble','command']},
-  {id:'usepackage',title:'Подключение пакета',description:'Команда usepackage подключает расширение и его команды.',prerequisites:['package-model','optional-argument']},
-  {id:'compile-error',title:'Ошибка компиляции',description:'Диагностика связывает симптом с местом и типом нарушения исходника.',prerequisites:['compiler','command','environment']},
-  {id:'undefined-control-sequence',title:'Undefined control sequence',description:'Компилятор встретил неизвестную команду.',prerequisites:['compile-error']},
-  {id:'brace-balance',title:'Баланс скобок',description:'Аргументы и группы должны иметь согласованные открывающие и закрывающие скобки.',prerequisites:['grouping','compile-error']},
-  {id:'environment-balance',title:'Баланс окружений',description:'Каждому begin соответствует end того же окружения.',prerequisites:['environment','compile-error']},
-  {id:'paragraph',title:'Абзац',description:'Пустая строка отделяет смысловые абзацы; перевод строки исходника сам по себе этого не делает.',prerequisites:['document-body']},
-  {id:'section',title:'Секционирование',description:'section/subsection описывают логическую иерархию документа.',prerequisites:['command','document-body']},
-  {id:'emphasis',title:'Смысловое выделение',description:'emph и семантическая структура предпочтительнее ручного имитирования оформления.',prerequisites:['command','required-argument']},
-  {id:'list',title:'Списки',description:'itemize/enumerate организуют последовательности элементов.',prerequisites:['environment','document-body']},
-  {id:'quote',title:'Цитатные блоки',description:'quote/quotation задают структурно отличимый фрагмент текста.',prerequisites:['environment']},
-  {id:'escaping',title:'Экранирование',description:'Специальные символы %, &, #, _, $ и другие выводятся осознанно.',prerequisites:['special-symbols']},
-  {id:'spacing',title:'Пробелы и переносы',description:'Исходные пробелы не являются ручной системой вёрстки.',prerequisites:['paragraph','escaping']},
-  {id:'typography',title:'Профессиональная типографика',description:'Интервалы, неразрывные связи и микротипографика улучшают набор без ручных визуальных костылей.',prerequisites:['spacing','emphasis','package-model']},
-  {id:'font-management',title:'Шрифтовая система',description:'Шрифты выбираются на уровне движка и документа; fontspec связывает Unicode-шрифты с XeLaTeX/LuaLaTeX.',prerequisites:['typography','compiler','package-model']},
-  {id:'color-model',title:'Цвет в документе',description:'Цвет задаётся через семантические команды и палитры xcolor, а не хаотичными локальными настройками.',prerequisites:['package-model','command']},
-  {id:'page-structure',title:'Структура страницы',description:'Класс и пакеты управляют полями, размером бумаги и композиционной областью.',prerequisites:['document-class','package-model']},
-  {id:'math-mode',title:'Математический режим',description:'Отдельный режим набора со специальной семантикой символов и интервалов.',prerequisites:['special-symbols','document-body']},
-  {id:'inline-math',title:'Встроенная математика',description:'Короткая формула остаётся частью строки текста.',prerequisites:['math-mode']},
-  {id:'display-math',title:'Выключная математика',description:'Самостоятельная формула получает отдельный вертикальный блок.',prerequisites:['math-mode']},
-  {id:'math-symbols',title:'Математические символы',description:'Команды задают отношения, греческие буквы и специальные знаки.',prerequisites:['math-mode','command']},
-  {id:'superscript',title:'Верхний индекс',description:'Символ ^ создаёт верхний индекс; составное значение группируется.',prerequisites:['math-mode','grouping']},
-  {id:'subscript',title:'Нижний индекс',description:'Символ _ создаёт нижний индекс; составное значение группируется.',prerequisites:['math-mode','grouping']},
-  {id:'fraction',title:'Дробь',description:'frac принимает два обязательных аргумента.',prerequisites:['math-mode','required-argument']},
-  {id:'root',title:'Корень',description:'sqrt использует обязательный аргумент и необязательную степень.',prerequisites:['math-mode','optional-argument']},
-  {id:'math-function',title:'Функции',description:'sin, log и другие операторы имеют специальную математическую типографику.',prerequisites:['math-symbols']},
-  {id:'math-operator',title:'Операторы',description:'Операторы и пределы набираются семантически, а не буквами обычного текста.',prerequisites:['math-function']},
-  {id:'equation',title:'Нумеруемое уравнение',description:'equation создаёт самостоятельную формулу с управляемой нумерацией.',prerequisites:['display-math','environment','package-model']},
-  {id:'line-break-math',title:'Строки формулы',description:'В многострочных математических окружениях \\ завершает строку.',prerequisites:['equation','special-symbols']},
-  {id:'alignment-point',title:'Точка выравнивания',description:'& отмечает логическую позицию выравнивания в align.',prerequisites:['line-break-math','special-symbols']},
-  {id:'align',title:'Окружение align',description:'amsmath выравнивает несколько связанных строк формулы.',prerequisites:['alignment-point','usepackage']},
-  {id:'matrix',title:'Матрица',description:'Матричные окружения используют табличную модель строк и столбцов внутри math mode.',prerequisites:['alignment-point','math-mode']},
-  {id:'cases',title:'Кусочная функция',description:'cases связывает выражения с условиями и автоматически задаёт ограничитель.',prerequisites:['align']},
-  {id:'delimiter',title:'Математические ограничители',description:'Скобки и left/right масштабируются по содержимому, когда это действительно нужно.',prerequisites:['math-mode','grouping']},
-  {id:'tabular',title:'Табличная модель',description:'tabular задаёт столбцы, ячейки и строки структурно.',prerequisites:['environment','special-symbols']},
-  {id:'table-cell-separator',title:'Разделитель ячеек',description:'& разделяет соседние ячейки одной строки.',prerequisites:['tabular']},
-  {id:'table-row-break',title:'Конец строки таблицы',description:'\\ завершает строку tabular.',prerequisites:['tabular']},
-  {id:'professional-table',title:'Профессиональная таблица',description:'booktabs и правильные интервалы предпочтительнее сетки из вертикальных линий.',prerequisites:['table-cell-separator','table-row-break','package-model']},
-  {id:'figure',title:'Рисунок',description:'figure — плавающий структурный объект, а includegraphics вставляет графический файл.',prerequisites:['environment','package-model']},
-  {id:'caption',title:'Подпись',description:'caption описывает объект и участвует в нумерации.',prerequisites:['figure']},
-  {id:'float',title:'Плавающий объект',description:'LaTeX выбирает физическое положение figure/table в пределах заданных правил.',prerequisites:['figure','tabular']},
-  {id:'float-placement',title:'Управление размещением float',description:'Параметры размещения и барьеры ограничивают работу float-механизма, не превращая документ в ручную вёрстку.',prerequisites:['float','package-model']},
-  {id:'label',title:'Метка',description:'label связывает устойчивый ключ с нумеруемым объектом.',prerequisites:['section','equation']},
-  {id:'ref',title:'Перекрёстная ссылка',description:'ref получает номер по ключу вместо жёстко записанного числа.',prerequisites:['label','compiler']},
-  {id:'hyperlink',title:'Гиперссылки и PDF-навигация',description:'hyperref связывает ссылки, метаданные PDF и навигацию с семантической структурой документа.',prerequisites:['ref','package-model']},
-  {id:'theorem',title:'Теоремное окружение',description:'amsthm задаёт единый тип и нумерацию утверждений.',prerequisites:['environment','usepackage']},
-  {id:'definition',title:'Определение',description:'Определения получают собственную смысловую роль и стиль.',prerequisites:['theorem']},
-  {id:'proof',title:'Доказательство',description:'proof задаёт структурную область доказательства и его завершение.',prerequisites:['theorem']},
-  {id:'bibliography-model',title:'Библиографическая модель',description:'Источники имеют стабильные ключи, а стиль определяет визуальное цитирование.',prerequisites:['ref','package-model']},
-  {id:'bib-file',title:'.bib-файл',description:'Библиографические записи хранятся отдельно от текста документа.',prerequisites:['bibliography-model','source-file']},
-  {id:'citation',title:'Цитирование',description:'cite связывает место в тексте с библиографическим ключом.',prerequisites:['bibliography-model']},
-  {id:'bibtex',title:'BibTeX',description:'Классический библиографический процессор читает .aux и .bib, формирует библиографию и требует повторного запуска LaTeX.',prerequisites:['compiler','bib-file','citation']},
-  {id:'biblatex',title:'BibLaTeX',description:'Пакетный слой библиографии управляет источниками, цитированием и выбором backend независимо от конкретного процессора.',prerequisites:['bibliography-model','bib-file','citation','package-model']},
-  {id:'biber',title:'Biber',description:'Современный библиографический процессор для BibLaTeX выполняется отдельным этапом сборки и не равен самому пакету biblatex.',prerequisites:['compiler','biblatex']},
-  {id:'glossary',title:'Глоссарии и сокращения',description:'Термины и акронимы объявляются один раз и затем используются по устойчивым ключам с отдельным этапом генерации.',prerequisites:['package-model','ref','compiler']},
-  {id:'footnote',title:'Сноска',description:'footnote создаёт структурную сноску и управляет её нумерацией.',prerequisites:['command','required-argument']},
-  {id:'index',title:'Предметный указатель',description:'Индекс собирается из отмеченных терминов дополнительным этапом.',prerequisites:['compiler','package-model']},
-  {id:'appendix',title:'Приложения',description:'appendix переключает последующие структурные единицы в режим приложений.',prerequisites:['section']},
-  {id:'custom-command',title:'Пользовательская команда',description:'newcommand создаёт семантический API документа.',prerequisites:['command','grouping','preamble']},
-  {id:'custom-environment',title:'Пользовательское окружение',description:'newenvironment задаёт повторяемую структурную область.',prerequisites:['custom-command','environment']},
-  {id:'counter',title:'Счётчики',description:'Счётчики управляют нумерацией структурных объектов.',prerequisites:['section','theorem']},
-  {id:'length',title:'Длины',description:'Размеры и интервалы выражаются типографическими длинами, а не случайными пикселями.',prerequisites:['page-structure']},
-  {id:'headers-footers',title:'Колонтитулы',description:'Колонтитулы строятся поверх структурной модели страницы.',prerequisites:['page-structure','package-model']},
-  {id:'multi-file',title:'Многофайловый документ',description:'input/include разделяют большой проект без потери общей структуры.',prerequisites:['source-file','section']},
-  {id:'tikz',title:'TikZ как программная графика',description:'TikZ описывает научную графику командами и координатами внутри воспроизводимого исходного проекта.',prerequisites:['package-model','environment','length']},
-  {id:'beamer',title:'Архитектура Beamer',description:'Beamer представляет презентацию как структурированный документ из секций, frames, overlays и навигации.',prerequisites:['document-class','environment','section']},
-  {id:'project-architecture',title:'Архитектура проекта',description:'Главный файл, преамбула, главы, рисунки и библиография имеют предсказуемые роли.',prerequisites:['multi-file','custom-command','bibliography-model']},
-  {id:'accessibility',title:'Доступность документа',description:'Смысловая структура, подписи, порядок чтения и корректные метаданные делают итоговый документ пригоднее для разных способов восприятия.',prerequisites:['latex-model','document-metadata','project-architecture']},
-  {id:'debugging',title:'Системная отладка',description:'Ошибка локализуется по диагностике, минимальному примеру и структурным инвариантам.',prerequisites:['compile-error','environment-balance','brace-balance']},
-  {id:'latexmk',title:'Автоматическая сборка',description:'latexmk повторяет необходимые проходы и зависимости до стабильного результата.',prerequisites:['compiler','debugging']},
-  {id:'professional-workflow',title:'Профессиональный workflow',description:'Воспроизводимая сборка, структура файлов, библиография и проверка ошибок работают как единая система.',prerequisites:['project-architecture','latexmk']}
-];
+const definitions=curriculumSource.concepts;
 
-export const concepts = definitions;
-export const conceptById = new Map(definitions.map(definition=>[definition.id,definition]));
-export const hasConcept = (id:string) => conceptById.has(id);
+/** Compatibility adapter. Educational concept definitions are authored in curriculumSource.json. */
+export const concepts=definitions;
+export const conceptById=new Map(definitions.map(definition=>[definition.id,definition]));
+export const hasConcept=(id:string)=>conceptById.has(id);
 
-export function conceptAncestors(id:string, seen=new Set<string>()):string[] {
-  if(seen.has(id)) return [];
+export function conceptAncestors(id:string,seen=new Set<string>()):string[]{
+  if(seen.has(id))return [];
   const definition=conceptById.get(id);
-  if(!definition) return [];
-  const next=new Set(seen); next.add(id);
+  if(!definition)return [];
+  const next=new Set(seen);next.add(id);
   return definition.prerequisites.flatMap(prerequisite=>[prerequisite,...conceptAncestors(prerequisite,next)]);
 }

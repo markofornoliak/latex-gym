@@ -1,21 +1,43 @@
 import { describe, expect, it } from 'vitest';
-import { getExercise } from '../data/courses';
 import type { Exercise } from '../types';
 import { validateExercise, validatorInternals } from './validator';
 
 const compiled={ok:true,diagnostics:[],blocks:[],elapsedMs:1,engine:'educational-preview' as const};
 
+const documentStructureExercise:Exercise={
+  id:'validator-document-structure',lessonId:'validator-fixture',category:'Основы',difficulty:'Начальный',mode:'Собрать документ',
+  title:'Document structure fixture',instructions:'Build a valid article.',requirements:['article','document','paragraph'],starterCode:'',
+  validators:[
+    {type:'documentClass',value:'article',message:'Класс article.',hint:'Используйте documentclass.'},
+    {type:'environment',value:'document',message:'Есть document.',hint:'Добавьте окружение document.'},
+    {type:'paragraph',message:'Есть абзац.',hint:'Добавьте обычный текст.'},
+    {type:'compiles',message:'Документ согласован.',hint:'Исправьте синтаксис.'}
+  ],
+  hints:[],solution:'\\documentclass{article}\n\\begin{document}\nТекст.\n\\end{document}',concepts:['document-class','document-environment','paragraph']
+};
+
+const sectionExercise:Exercise={
+  ...documentStructureExercise,
+  id:'validator-required-section',
+  requirements:['article','document','section','paragraph'],
+  validators:[
+    ...documentStructureExercise.validators.slice(0,2),
+    {type:'command',value:'section',message:'Есть section.',hint:'Добавьте section.'},
+    ...documentStructureExercise.validators.slice(2)
+  ],
+  solution:'\\documentclass{article}\n\\begin{document}\n\\section{Заголовок}\nТекст.\n\\end{document}',
+  concepts:['document-class','document-environment','section','paragraph']
+};
+
 describe('semantic validation',()=>{
   it('accepts a logically equivalent document structure solution',()=>{
-    const exercise=getExercise('e01')!;
     const source='\\documentclass{article}\n\\begin{document}\nДругой допустимый абзац.\n\\end{document}';
-    expect(validateExercise(exercise,source,compiled).ok).toBe(true);
+    expect(validateExercise(documentStructureExercise,source,compiled).ok).toBe(true);
   });
 
   it('rejects an exercise without required section',()=>{
-    const exercise=getExercise('e03')!;
     const source='\\documentclass{article}\n\\begin{document}\nТекст.\n\\end{document}';
-    expect(validateExercise(exercise,source,compiled).ok).toBe(false);
+    expect(validateExercise(sectionExercise,source,compiled).ok).toBe(false);
   });
 
   it('accepts package loading only from the preamble',()=>{

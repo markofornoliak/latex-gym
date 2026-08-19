@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import baselineJson from './curriculumBaseline.json';
 import { curriculum } from './curriculumRuntime';
+
+const baseline=baselineJson as {semanticFingerprint:string};
 
 export function curriculumSemanticFingerprint(){
   const payload=JSON.stringify({modules:curriculum.modules,lessons:curriculum.lessons,exercises:curriculum.exercises,references:curriculum.references,concepts:curriculum.concepts,projects:curriculum.projects});
@@ -7,5 +10,9 @@ export function curriculumSemanticFingerprint(){
 }
 
 describe('final curriculum semantic fingerprint',()=>{
-  it('matches the build-time materialized snapshot',()=>{expect(curriculumSemanticFingerprint()).toBe(curriculum.build.semanticFingerprint);});
+  it('matches both the generated snapshot and the pre-migration semantic baseline',()=>{
+    const fingerprint=curriculumSemanticFingerprint();
+    expect(fingerprint).toBe(curriculum.build.semanticFingerprint);
+    expect(fingerprint).toBe(baseline.semanticFingerprint);
+  });
 });
