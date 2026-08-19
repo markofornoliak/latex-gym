@@ -4,11 +4,12 @@ import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import baselineJson from '../src/data/curriculumBaseline.json';
 import { buildCurriculum } from '../src/data/curriculumBuild';
+import { parseCurriculumSnapshot } from '../src/data/curriculumSchema';
 
 const baseline=baselineJson as {semanticFingerprint:string;moduleIds:string[];lessonIds:string[];exerciseIds:string[]};
 const built=buildCurriculum();
 const semanticFingerprint=fingerprint({modules:built.modules,lessons:built.lessons,exercises:built.exercises,references:built.references,concepts:built.concepts,projects:built.projects});
-const snapshot={snapshotVersion:1,semanticFingerprint,...built};
+const snapshot=parseCurriculumSnapshot({snapshotVersion:1,semanticFingerprint,...built});
 
 if(process.env.LATEX_GYM_WRITE_CURRICULUM_SNAPSHOT==='1'){
   const target=resolve(process.cwd(),'src/data/curriculumSnapshot.generated.json');
@@ -18,6 +19,10 @@ if(process.env.LATEX_GYM_WRITE_CURRICULUM_SNAPSHOT==='1'){
 }
 
 describe('build-time curriculum snapshot',()=>{
+  it('constructs a structurally valid snapshot from the canonical source',()=>{
+    expect(parseCurriculumSnapshot(snapshot)).toBe(snapshot);
+  });
+
   it('constructs the exact compatibility-locked semantic curriculum from the canonical source',()=>{
     expect(built.modules.map(item=>item.id)).toEqual(baseline.moduleIds);
     expect(built.lessons.map(item=>item.id)).toEqual(baseline.lessonIds);
