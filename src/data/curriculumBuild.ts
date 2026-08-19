@@ -14,13 +14,13 @@ import { lintCurriculum, type CurriculumIssue } from '../services/curriculumLint
 
 /** Build-only curriculum construction. Runtime code must import curriculumRuntime. */
 export function buildCurriculum(){
-  const editorial=applyEditorialEnhancements({modules:seedModules,lessons:seedLessons,exercises:seedExercises,references:seedReferences});
+  const identifiedSeed=applyStableExerciseIds({modules:seedModules,lessons:seedLessons,exercises:seedExercises,references:seedReferences});
+  const editorial=applyEditorialEnhancements(identifiedSeed);
   const expanded=applyCurriculumExpansion(editorial);
   const deepened=applyDeepCurriculum(expanded);
   const withDebugging=applyDebuggingTrack(deepened);
   const explained=applyExplanationElaboration(withDebugging);
-  const identified=applyStableExerciseIds(explained);
-  const {draft,report:normalization}=normalizeCurriculumDraft(identified,concepts);
+  const {draft,report:normalization}=normalizeCurriculumDraft(explained,concepts);
   const {modules,lessons,exercises,references}=draft;
 
   if(normalization.unresolved.length){
@@ -35,26 +35,7 @@ export function buildCurriculum(){
   const {graph,issues:graphIssues}=buildCurriculumGraph({concepts,lessons,exercises,references,projects});
   if(graphIssues.some(issue=>issue.code==='concept-cycle'))throw new Error(`Curriculum graph contains a dependency cycle:\n${graphIssues.map(issue=>issue.message).join('\n')}`);
 
-  return {
-    modules,
-    lessons,
-    exercises,
-    concepts,
-    references,
-    projects,
-    graph,
-    normalization,
-    issues,
-    build:{
-      moduleCount:modules.length,
-      lessonCount:lessons.length,
-      exerciseCount:exercises.length,
-      conceptCount:concepts.length,
-      referenceCount:references.length,
-      projectCount:projects.length,
-      normalizedConceptTags:normalization.changes.length
-    }
-  };
+  return {modules,lessons,exercises,concepts,references,projects,graph,normalization,issues,build:{moduleCount:modules.length,lessonCount:lessons.length,exerciseCount:exercises.length,conceptCount:concepts.length,referenceCount:references.length,projectCount:projects.length,normalizedConceptTags:normalization.changes.length}};
 }
 
 function formatCurriculumErrors(list:CurriculumIssue[]){
