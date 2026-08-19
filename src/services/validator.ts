@@ -2,6 +2,7 @@ import type { CompileResult, Exercise, ValidatorRule } from '../types';
 import { satisfiesCompilerAuthority } from './compilerAuthority';
 import {
   commandCount,
+  documentClass,
   environmentsBalanced,
   firstLineContaining,
   hasDisplayMath,
@@ -10,14 +11,12 @@ import {
   hasInlineMath,
   hasPackage,
   hasParagraph,
-  hasStructuralText,
-  latexAnalysisInternals
+  hasStructuralText
 } from './latexSourceAnalysis';
 
 export type ValidationItem = { ok:boolean; message:string; hint:string; line?:number };
 export type ValidationResult = { ok:boolean; items:ValidationItem[] };
 
-const {escapeRegExp}=latexAnalysisInternals;
 const normalizeConceptText=(value:string)=>value.toLocaleLowerCase('ru-RU').replace(/[—–]/g,'-').replace(/[^\p{L}\p{N}.@_+\\-]+/gu,' ').replace(/\s+/g,' ').trim();
 
 function hasConceptualText(source:string,value:string){
@@ -43,7 +42,7 @@ export function validateExercise(exercise:Exercise,source:string,compileResult?:
 export function validateRule(rule:ValidatorRule,source:string,compileResult?:CompileResult,conceptualAnswer=false):ValidationItem{
   let ok=false;let line:number|undefined;
   switch(rule.type){
-    case 'documentClass':ok=new RegExp(`\\\\documentclass(?:\\[[^\\]]*\\])?\\{${escapeRegExp(rule.value)}\\}`).test(source);break;
+    case 'documentClass':ok=documentClass(source)===rule.value;break;
     case 'documentClassOption':ok=hasDocumentClassOption(source,rule.value);break;
     case 'environment':ok=hasEnvironment(source,rule.value);break;
     case 'command':ok=commandCount(source,rule.value)>=(rule.min??1);break;
