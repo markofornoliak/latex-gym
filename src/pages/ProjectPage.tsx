@@ -26,7 +26,7 @@ import {
   type ProjectAssessment,
   type ProjectWorkspace
 } from '../services/projectWorkspace';
-import { useAppStore } from '../store/useAppStore';
+import { initializeDocumentPersistence, useAppStore } from '../store/useAppStore';
 import type { CompilationState, CompileResult } from '../types';
 
 const CodeEditor=lazy(()=>import('../components/CodeEditor').then(module=>({default:module.CodeEditor})));
@@ -37,7 +37,6 @@ export function ProjectPage(){
   const navigate=useNavigate();
   const project=getRuntimeProject(projectId);
   const settings=useAppStore(store=>store.settings);
-  const drafts=useAppStore(store=>store.drafts);
   const setDraft=useAppStore(store=>store.setDraft);
   const completeStage=useAppStore(store=>store.completeProjectStage);
   const completedProjectStages=useAppStore(store=>store.completedProjectStages);
@@ -45,6 +44,7 @@ export function ProjectPage(){
   const index=useMemo(()=>project?Math.max(0,stageId?project.stages.findIndex(stage=>stage.id===stageId):0):0,[project,stageId]);
   const stage=project?.stages[index];
   const [workspace,setWorkspace]=useState<ProjectWorkspace|null>(null);
+  const [documentsReady,setDocumentsReady]=useState(false);
   const [activeFile,setActiveFile]=useState('main.tex');
   const [result,setResult]=useState<CompileResult|null>(null);
   const [assessment,setAssessment]=useState<ProjectAssessment|null>(null);
@@ -55,22 +55,30 @@ export function ProjectPage(){
 
   useEffect(()=>{
     if(!project||!stage)return;
-    const next=createProjectWorkspace(project,index,drafts);
-    setWorkspace(next);
-    setActiveFile(current=>current in next.files?current:next.mainFile);
-    setResult(null);setAssessment(null);setState('ready');setSaved(true);setFileError('');
+    let active=true;
+    setDocumentsReady(false);
+    setWorkspace(null);
+    void initializeDocumentPersistence().then(()=>{
+      if(!active)return;
+      const next=createProjectWorkspace(project,index,useAppStore.getState().drafts);
+      setWorkspace(next);
+      setActiveFile(current=>current in next.files?current:next.mainFile);
+      setResult(null);setAssessment(null);setState('ready');setSaved(true);setFileError('');setDocumentsReady(true);
+    });
+    return()=>{active=false;};
   },[project?.id,stage?.id,index]);
 
   const activeSource=workspace?.files[activeFile]??'';
   useEffect(()=>{
-    if(!project||!workspace||!(activeFile in workspace.files))return;
+    if(!documentsReady||!project||!workspace||!(activeFile in workspace.files))return;
     setSaved(false);
     const source=workspace.files[activeFile];
     const timeout=window.setTimeout(()=>{setDraft(projectFileDraftKey(project.id,activeFile),source);setSaved(true);},260);
     return()=>window.clearTimeout(timeout);
-  },[project?.id,activeFile,activeSource,setDraft]);
+  },[documentsReady,project?.id,activeFile,activeSource,setDraft]);
 
-  if(!project||!stage||!workspace)return <div className="page empty-state"><h1>Проект не найден</h1><Link to="/projects">Вернуться к проектам</Link></div>;
+  if(!project||!stage)return <div className="page empty-state"><h1>Проект не найден</h1><Link to="/projects">Вернуться к проектам</Link></div>;
+  if(!documentsReady||!workspace)return <div className="page empty-state"><h1>{stage.title}</h1><p>Загрузка локальных файлов проекта…</p></div>;
   const busy=isCompilationBusy(state);
   const currentDone=projectProgress.includes(stage.id);
   const next=project.stages[index+1];
@@ -105,7 +113,7 @@ export function ProjectPage(){
     if(file.size>PROJECT_ASSET_MAX_BYTES){setFileError('Файл слишком большой. Для local-first проекта ограничение — 1 МБ на один PDF/рисунок.');return;}
     const previous=workspace.files[path];
     const previousBytes=previous?encodedProjectAssetSize(previous):0;
-    if(workspaceAssetBytes(workspace)-previousBytes+file.size>PROJECT_ASSET_TOTAL_BYTES){setFileError('Суммарный объём бинарных файлов проекта превышает безопасный localStorage-бюджет 1,5 МБ. Уменьшите изображения или замените существующий asset.');return;}
+    if(workspaceAssetBytes(workspace)-previousBytes+file.size>PROJECT_ASSET_TOTAL_BYTES){setFileError('Суммарный объём бинарных файлов проекта превышает безопасный локальный бюджет 1,5 МБ. Уменьшите изображения или замените существующий файл.');return;}
     try{
       const encoded=encodeProjectAsset(new Uint8Array(await file.arrayBuffer()));
       setWorkspace(current=>current?{...current,files:{...current.files,[path]:encoded}}:current);
