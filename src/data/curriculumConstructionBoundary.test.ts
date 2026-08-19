@@ -6,12 +6,16 @@ const jsonImport=/from\s+['"]\.\/curriculumSource\.json['"]/;
 const allowedSourceReaders=new Set(['./curriculumBuild.ts','./courses.ts','./concepts.ts','./projects.ts','./reference.ts']);
 
 describe('curriculum construction boundary',()=>{
-  it('keeps the canonical JSON behind one typed loader',()=>{
+  it('keeps the canonical JSON behind one validated loader',()=>{
     const violations=Object.entries(sources)
       .filter(([path])=>!path.endsWith('.test.ts'))
       .filter(([path,source])=>path!=='./curriculumSource.ts'&&jsonImport.test(source))
       .map(([path])=>path);
     expect(violations,`Direct curriculumSource.json imports:\n${violations.join('\n')}`).toEqual([]);
+
+    const loader=sources['./curriculumSource.ts']??'';
+    expect(loader).toContain('parseCurriculumSource(sourceJson)');
+    expect(loader).not.toContain('as unknown as CanonicalCurriculumSource');
   });
 
   it('limits canonical source imports to build-time compatibility adapters',()=>{
@@ -34,6 +38,7 @@ describe('curriculum construction boundary',()=>{
     expect(runtime).not.toContain('./courses');
     expect(runtime).not.toContain('curriculumLinter');
     expect(runtime).not.toContain('curriculumGraph');
+    expect(runtime).not.toContain('curriculumSchema');
     expect(runtime).toContain('curriculumSnapshot.generated.json');
   });
 });
