@@ -1,3 +1,4 @@
+import { canonicalExerciseId } from './exerciseIdentity';
 import { materializeCurriculumSource } from './curriculumSource';
 
 const materialized=materializeCurriculumSource();
@@ -10,6 +11,6 @@ export const modules=materialized.modules;
 export const lessons=materialized.lessons;
 export const exercises=materialized.exercises;
 export const getLesson=(id?:string)=>lessons.find(lesson=>lesson.id===id);
-export const getExercise=(id?:string)=>exercises.find(exercise=>exercise.id===id);
+export const getExercise=(id?:string)=>id?exercises.find(exercise=>exercise.id===canonicalExerciseId(id)):undefined;
 export const getModule=(id?:string)=>modules.find(module=>module.id===id);
 export const lessonIndex=new Map(lessons.map((lesson,index)=>[lesson.id,index]));
