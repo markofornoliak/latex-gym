@@ -2,22 +2,14 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import { App } from './app/App';
-import './styles/index.css';
-import './styles/fidelity.css';
-import './styles/deviceLayouts.css';
-import './styles/laptopPolish.css';
-import './styles/deepProduct.css';
-import './styles/smartEditor.css';
-import './styles/editorReference.css';
-import './styles/projects.css';
-import './styles/projectWorkspace.css';
-import './styles/referenceDeep.css';
-import './styles/progressDeep.css';
-import './styles/interactionPolish.css';
-import './styles/compilerWorkspace.css';
-import './styles/trainingDashboard.css';
-import './styles/onboardingFlow.css';
-import './styles/modeAwarePractice.css';
+import { initializeDocumentPersistence } from './store/useAppStore';
+import './styles/app.css';
 
 registerSW({ immediate: true });
-createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
+
+async function bootstrap(){
+  await initializeDocumentPersistence();
+  createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
+}
+
+void bootstrap();
