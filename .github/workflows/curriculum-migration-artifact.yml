@@ -3,17 +3,35 @@ on:
   pull_request:
     branches: [main]
 permissions:
-  contents: read
+  contents: write
 jobs:
   export:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'agent/architecture-hardening'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Promote exact generated transforms
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp src/data/curriculumExpansion.generated.ts src/data/curriculumExpansion.ts
+          cp src/data/deepCurriculum.generated.ts src/data/deepCurriculum.ts
+          git add src/data/curriculumExpansion.ts src/data/deepCurriculum.ts
+          if git diff --cached --quiet; then
+            echo 'Canonical transforms already match generated sources.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Materialize canonical curriculum transforms'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
       - name: Upload generated curriculum migration files
         uses: actions/upload-artifact@v6
         with:
