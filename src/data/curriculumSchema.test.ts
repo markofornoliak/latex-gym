@@ -47,6 +47,17 @@ describe('curriculum structural schema',()=>{
     expect(()=>parseCurriculumSource(badBlock)).toThrow(/content\[0\]\.type/);
   });
 
+  it('allows whitespace-sensitive text validators without normalizing their value',()=>{
+    const draft=cloneSource();
+    draft.modules[0].lessons[0].exercises[0].validators=[
+      {type:'containsText',value:' ',message:'Space is required.',hint:'Keep the significant space.'},
+      {type:'forbiddenText',value:'  ',message:'Double space is forbidden.',hint:'Remove the significant double space.'},
+    ];
+    const before=JSON.stringify(draft);
+    expect(parseCurriculumSource(draft)).toBe(draft);
+    expect(JSON.stringify(draft)).toBe(before);
+  });
+
   it('rejects invalid regular expressions at authoring time',()=>{
     const draft=cloneSource();
     const regexRule=draft.modules.flatMap(module=>module.lessons).flatMap(lesson=>lesson.exercises).flatMap(exercise=>Array.isArray(exercise.validators)?exercise.validators:[]).find(rule=>typeof rule==='object'&&rule!==null&&(rule as Record<string,unknown>).type==='regex') as Record<string,unknown>|undefined;
