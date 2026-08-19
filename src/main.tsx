@@ -7,9 +7,5 @@ import './styles/app.css';
 
 registerSW({ immediate: true });
 
-async function bootstrap(){
-  await initializeDocumentPersistence();
-  createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
-}
-
-void bootstrap();
+createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
+void initializeDocumentPersistence();
