@@ -1,7 +1,7 @@
 import { exercises as seedExercises, lessons as seedLessons, modules as seedModules } from './courses';
 import { concepts } from './concepts';
-import { applyCurriculumExpansion } from './curriculumExpansion.generated';
-import { applyDeepCurriculum } from './deepCurriculum.generated';
+import { applyCurriculumExpansion } from './curriculumExpansion';
+import { applyDeepCurriculum } from './deepCurriculum';
 import { applyDebuggingTrack } from './debuggingTrackTransform';
 import { applyEditorialEnhancements } from './editorialEnhancements';
 import { applyStableExerciseIds } from './exerciseIdentity';
