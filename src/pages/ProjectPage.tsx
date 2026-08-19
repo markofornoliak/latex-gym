@@ -43,7 +43,7 @@ export function ProjectPage(){
   const projectProgress=completedProjectStages[projectId??'']??EMPTY_PROJECT_PROGRESS;
   const index=useMemo(()=>project?Math.max(0,stageId?project.stages.findIndex(stage=>stage.id===stageId):0):0,[project,stageId]);
   const stage=project?.stages[index];
-  const [workspace,setWorkspace]=useState<ProjectWorkspace|null>(null);
+  const [workspace,setWorkspace]=useState<ProjectWorkspace|null>(()=>project?createProjectWorkspace(project,index,useAppStore.getState().drafts):null);
   const [documentsReady,setDocumentsReady]=useState(false);
   const [activeFile,setActiveFile]=useState('main.tex');
   const [result,setResult]=useState<CompileResult|null>(null);
@@ -57,13 +57,16 @@ export function ProjectPage(){
     if(!project||!stage)return;
     let active=true;
     setDocumentsReady(false);
-    setWorkspace(null);
+    const immediate=createProjectWorkspace(project,index,useAppStore.getState().drafts);
+    setWorkspace(immediate);
+    setActiveFile(current=>current in immediate.files?current:immediate.mainFile);
+    setResult(null);setAssessment(null);setState('ready');setSaved(true);setFileError('');
     void initializeDocumentPersistence().then(()=>{
       if(!active)return;
-      const next=createProjectWorkspace(project,index,useAppStore.getState().drafts);
-      setWorkspace(next);
-      setActiveFile(current=>current in next.files?current:next.mainFile);
-      setResult(null);setAssessment(null);setState('ready');setSaved(true);setFileError('');setDocumentsReady(true);
+      const hydrated=createProjectWorkspace(project,index,useAppStore.getState().drafts);
+      setWorkspace(hydrated);
+      setActiveFile(current=>current in hydrated.files?current:hydrated.mainFile);
+      setDocumentsReady(true);
     });
     return()=>{active=false;};
   },[project?.id,stage?.id,index]);
@@ -77,8 +80,7 @@ export function ProjectPage(){
     return()=>window.clearTimeout(timeout);
   },[documentsReady,project?.id,activeFile,activeSource,setDraft]);
 
-  if(!project||!stage)return <div className="page empty-state"><h1>Проект не найден</h1><Link to="/projects">Вернуться к проектам</Link></div>;
-  if(!documentsReady||!workspace)return <div className="page empty-state"><h1>{stage.title}</h1><p>Загрузка локальных файлов проекта…</p></div>;
+  if(!project||!stage||!workspace)return <div className="page empty-state"><h1>Проект не найден</h1><Link to="/projects">Вернуться к проектам</Link></div>;
   const busy=isCompilationBusy(state);
   const currentDone=projectProgress.includes(stage.id);
   const next=project.stages[index+1];
@@ -87,25 +89,30 @@ export function ProjectPage(){
   const activeIsAsset=isEncodedProjectAsset(activeSource);
 
   const saveWorkspace=()=>{
+    if(!documentsReady)return;
     for(const [path,content] of Object.entries(workspace.files))setDraft(projectFileDraftKey(project.id,path),content);
     setSaved(true);
   };
   const selectFile=(path:string)=>{
+    if(!documentsReady)return;
     setDraft(projectFileDraftKey(project.id,activeFile),workspace.files[activeFile]??'');
     setActiveFile(path);setFileError('');
   };
   const invalidateBuild=()=>{if(result)setResult(null);if(assessment)setAssessment(null);if(state!=='ready')setState('ready');};
   const updateSource=(value:string)=>{
+    if(!documentsReady)return;
     setWorkspace(current=>current?{...current,files:{...current.files,[activeFile]:value}}:current);
     invalidateBuild();
   };
   const addFile=()=>{
+    if(!documentsReady)return;
     const normalized=normalizeProjectFilePath(newFileName);
     const added=addWorkspaceFile(workspace,newFileName);
     if(added.error||!normalized){setFileError(added.error??'Проверьте путь файла.');return;}
     setWorkspace(added.workspace);setDraft(projectFileDraftKey(project.id,normalized),added.workspace.files[normalized]);setActiveFile(normalized);setNewFileName('');setFileError('');invalidateBuild();
   };
   const uploadAsset=async(event:ChangeEvent<HTMLInputElement>)=>{
+    if(!documentsReady)return;
     const file=event.target.files?.[0];event.target.value='';
     if(!file)return;
     const path=normalizeProjectFilePath(file.name);
@@ -121,6 +128,7 @@ export function ProjectPage(){
     }catch{setFileError('Не удалось прочитать файл. Исходники проекта не изменены.');}
   };
   const runCompile=async()=>{
+    if(!documentsReady)return null;
     saveWorkspace();setState('queued');setAssessment(null);
     try{
       const compiled=await compiler.compile(toBinaryAwareCompilerProject(workspace),{onPhase:setState});
@@ -143,12 +151,13 @@ export function ProjectPage(){
     }
   };
   const primaryAction=()=>{
+    if(!documentsReady)return;
     saveWorkspace();
     if(currentDone){if(next)navigate(`/project/${project.id}/${next.id}`);return;}
     void checkStage();
   };
 
-  return <div className="project-workspace" data-project-files={filePaths.length}>
+  return <div className="project-workspace" data-project-files={filePaths.length} aria-busy={!documentsReady} inert={!documentsReady}>
     <aside className="project-stage-nav"><Link className="project-back" to="/projects" onClick={saveWorkspace}><BackIcon/> Проекты</Link><span className="eyebrow">{project.title}</span><nav aria-label="Этапы проекта">{project.stages.map((item,itemIndex)=><Link key={item.id} to={`/project/${project.id}/${item.id}`} onClick={saveWorkspace} className={`${item.id===stage.id?'active':''} ${projectProgress.includes(item.id)?'done':''}`}><span>{String(itemIndex+1).padStart(2,'0')}</span><strong>{item.title.replace(/^\d+\.\s*/, '')}</strong>{projectProgress.includes(item.id)&&<i>✓</i>}</Link>)}</nav></aside>
     <main className="project-main">
       <header className="project-header"><span className="eyebrow">ПРОЕКТ · ЭТАП {index+1} ИЗ {project.stages.length}</span><h1>{stage.title}</h1><p>{stage.objective}</p></header>
@@ -162,10 +171,10 @@ export function ProjectPage(){
         </div>
 
         <div className="project-active-file"><span>{activeFile}</span>{activeFile!==workspace.mainFile&&result?.diagnostics.length&&!activeIsAsset?<small>Диагностика TeX относится к общей сборке проекта; точные диапазоны subfile пока не симулируются.</small>:null}</div>
-        <div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${state}`}>{compilationStateLabel(state)}</span><span>{result?engineLabel(result):saved?'Все изменения сохранены локально':'Сохранение…'}</span></div>
+        <div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${state}`}>{compilationStateLabel(state)}</span><span>{!documentsReady?'Загрузка локальных файлов…':result?engineLabel(result):saved?'Все изменения сохранены локально':'Сохранение…'}</span></div>
         {activeIsAsset?<div className="project-asset-inspector" role="region" aria-label={`Файл ${activeFile}`}><span>{fileKind(activeFile)}</span><h2>{activeFile}</h2><p>{formatBytes(encodedProjectAssetSize(activeSource))} · хранится локально и передаётся TeX как бинарный файл при сборке.</p><label className="secondary-button">Заменить файл<input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" onChange={event=>{void uploadAsset(event);}}/></label></div>:<Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={activeSource} onChange={updateSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onCompile={()=>{void runCompile();}} onSave={saveWorkspace} diagnostics={activeFile===workspace.mainFile?(result?.diagnostics??[]):[]}/></Suspense>}
         {assessment&&<section className={`project-assessment ${assessment.ok?'project-assessment--ok':''}`} aria-live="polite"><header><div><span className="eyebrow">ПРОВЕРКА ЭТАПА</span><h2>{assessment.ok?'Этап подтверждён':'Проект ещё не готов'}</h2></div><small>{assessment.realCompile?'Проверено реальным TeX':'Проверка без подтверждённого real-PDF'}</small></header><div>{assessment.items.map(item=><div className="project-assessment-row" key={item.id}><span aria-hidden="true">{item.ok?'✓':'×'}</span><p><strong>{item.label}</strong>{item.detail&&<small>{item.detail}</small>}</p></div>)}</div></section>}
-        <div className="project-editor-actions"><button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy}><PlayIcon/>{busy?compilationStateLabel(state):'Скомпилировать проект'}</button><button className="primary-button" onClick={primaryAction} disabled={busy||currentDone&&!next}>{currentDone?(next?'Продолжить':'Проект завершён'):'Проверить этап'}{currentDone&&next&&<ChevronIcon/>}</button></div>
+        <div className="project-editor-actions"><button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy||!documentsReady}><PlayIcon/>{!documentsReady?'Загрузка проекта…':busy?compilationStateLabel(state):'Скомпилировать проект'}</button><button className="primary-button" onClick={primaryAction} disabled={!documentsReady||busy||currentDone&&!next}>{currentDone?(next?'Продолжить':'Проект завершён'):'Проверить этап'}{currentDone&&next&&<ChevronIcon/>}</button></div>
       </section>
     </main>
     <aside className="project-preview"><span className="eyebrow">РЕЗУЛЬТАТ</span><div className="project-paper"><LatexPreview result={result}/></div><p>{result?.pdf?`Реальный PDF собран из ${filePaths.length} ${pluralFiles(filePaths.length)}.`:result?.fallbackReason?multiFile?'Учебный fallback не считается подтверждением многофайлового проекта.':'Реальный TeX недоступен: показан явно обозначенный учебный fallback.':'Скомпилируйте весь проект, чтобы проверить root document, зависимости и выходной PDF.'}</p></aside>
