@@ -14,85 +14,99 @@ const DB_NAME='latex-gym-documents';
 const DB_VERSION=1;
 const STORE='documents';
 const FALLBACK_PREFIX='latex-gym-document:';
+const OPEN_TIMEOUT_MS=800;
 
 class BrowserDocumentRepository implements DocumentRepository{
-  private database:Promise<IDBDatabase>|null=null;
+  private database:Promise<IDBDatabase|null>|null=null;
 
   async get(key:string){
     const canonical=migrateDocumentKey(key);
-    if(!supportsIndexedDb())return fallbackGet(canonical);
-    const db=await this.open();
-    return new Promise<string|undefined>((resolve,reject)=>{
-      const request=db.transaction(STORE,'readonly').objectStore(STORE).get(canonical);
-      request.onsuccess=()=>resolve((request.result as DocumentRecord|undefined)?.content);
-      request.onerror=()=>reject(request.error??new Error('IndexedDB read failed'));
-    });
+    const db=await this.openSafe();
+    if(!db)return fallbackGet(canonical);
+    try{
+      return await new Promise<string|undefined>((resolve,reject)=>{
+        const request=db.transaction(STORE,'readonly').objectStore(STORE).get(canonical);
+        request.onsuccess=()=>resolve((request.result as DocumentRecord|undefined)?.content);
+        request.onerror=()=>reject(request.error??new Error('IndexedDB read failed'));
+      });
+    }catch{return fallbackGet(canonical);}
   }
 
   async set(key:string,content:string){
     const canonical=migrateDocumentKey(key);
-    if(!supportsIndexedDb()){fallbackSet(canonical,content);return;}
-    const db=await this.open();
-    await transactionDone(db,'readwrite',store=>store.put({key:canonical,content,updatedAt:new Date().toISOString()} satisfies DocumentRecord));
+    const db=await this.openSafe();
+    if(!db){fallbackSet(canonical,content);return;}
+    try{await transactionDone(db,'readwrite',store=>store.put({key:canonical,content,updatedAt:new Date().toISOString()} satisfies DocumentRecord));}
+    catch{fallbackSet(canonical,content);}
   }
 
   async remove(key:string){
     const canonical=migrateDocumentKey(key);
-    if(!supportsIndexedDb()){fallbackRemove(canonical);return;}
-    const db=await this.open();
-    await transactionDone(db,'readwrite',store=>store.delete(canonical));
+    const db=await this.openSafe();
+    if(!db){fallbackRemove(canonical);return;}
+    try{await transactionDone(db,'readwrite',store=>store.delete(canonical));}
+    catch{fallbackRemove(canonical);}
   }
 
   async list(prefix=''){
     const canonicalPrefix=migrateDocumentKey(prefix);
-    if(!supportsIndexedDb())return fallbackList(canonicalPrefix);
-    const db=await this.open();
-    return new Promise<Record<string,string>>((resolve,reject)=>{
-      const output:Record<string,string>={};
-      const request=db.transaction(STORE,'readonly').objectStore(STORE).openCursor();
-      request.onsuccess=()=>{
-        const cursor=request.result;
-        if(!cursor){resolve(output);return;}
-        const record=cursor.value as DocumentRecord;
-        if(record.key.startsWith(canonicalPrefix))output[record.key]=record.content;
-        cursor.continue();
-      };
-      request.onerror=()=>reject(request.error??new Error('IndexedDB cursor failed'));
-    });
+    const db=await this.openSafe();
+    if(!db)return fallbackList(canonicalPrefix);
+    try{
+      const indexed=await new Promise<Record<string,string>>((resolve,reject)=>{
+        const output:Record<string,string>={};
+        const request=db.transaction(STORE,'readonly').objectStore(STORE).openCursor();
+        request.onsuccess=()=>{
+          const cursor=request.result;
+          if(!cursor){resolve(output);return;}
+          const record=cursor.value as DocumentRecord;
+          if(record.key.startsWith(canonicalPrefix))output[record.key]=record.content;
+          cursor.continue();
+        };
+        request.onerror=()=>reject(request.error??new Error('IndexedDB cursor failed'));
+      });
+      return {...fallbackList(canonicalPrefix),...indexed};
+    }catch{return fallbackList(canonicalPrefix);}
   }
 
   async setMany(documents:Record<string,string>){
     const entries=Object.entries(documents).filter(([,content])=>typeof content==='string');
     if(!entries.length)return;
-    if(!supportsIndexedDb()){for(const [key,content] of entries)fallbackSet(migrateDocumentKey(key),content);return;}
-    const db=await this.open();
-    await new Promise<void>((resolve,reject)=>{
-      const transaction=db.transaction(STORE,'readwrite');
-      const store=transaction.objectStore(STORE);
-      for(const [key,content] of entries)store.put({key:migrateDocumentKey(key),content,updatedAt:new Date().toISOString()} satisfies DocumentRecord);
-      transaction.oncomplete=()=>resolve();
-      transaction.onerror=()=>reject(transaction.error??new Error('IndexedDB write failed'));
-      transaction.onabort=()=>reject(transaction.error??new Error('IndexedDB write aborted'));
-    });
+    const db=await this.openSafe();
+    if(!db){for(const [key,content] of entries)fallbackSet(migrateDocumentKey(key),content);return;}
+    try{
+      await new Promise<void>((resolve,reject)=>{
+        const transaction=db.transaction(STORE,'readwrite');
+        const store=transaction.objectStore(STORE);
+        for(const [key,content] of entries)store.put({key:migrateDocumentKey(key),content,updatedAt:new Date().toISOString()} satisfies DocumentRecord);
+        transaction.oncomplete=()=>resolve();
+        transaction.onerror=()=>reject(transaction.error??new Error('IndexedDB write failed'));
+        transaction.onabort=()=>reject(transaction.error??new Error('IndexedDB write aborted'));
+      });
+    }catch{for(const [key,content] of entries)fallbackSet(migrateDocumentKey(key),content);}
   }
 
   async clear(){
-    if(!supportsIndexedDb()){fallbackClear();return;}
-    const db=await this.open();
-    await transactionDone(db,'readwrite',store=>store.clear());
+    const db=await this.openSafe();
+    if(db){try{await transactionDone(db,'readwrite',store=>store.clear());}catch{/* fallback is cleared below */}}
+    fallbackClear();
   }
 
-  private open(){
+  private openSafe(){
+    if(!supportsIndexedDb())return Promise.resolve<IDBDatabase|null>(null);
     if(this.database)return this.database;
-    this.database=new Promise<IDBDatabase>((resolve,reject)=>{
-      const request=indexedDB.open(DB_NAME,DB_VERSION);
-      request.onupgradeneeded=()=>{
-        const db=request.result;
-        if(!db.objectStoreNames.contains(STORE))db.createObjectStore(STORE,{keyPath:'key'});
-      };
-      request.onsuccess=()=>resolve(request.result);
-      request.onerror=()=>reject(request.error??new Error('IndexedDB open failed'));
-    }).catch(error=>{this.database=null;throw error;});
+    this.database=new Promise<IDBDatabase|null>((resolve)=>{
+      let settled=false;
+      const finish=(value:IDBDatabase|null)=>{if(settled)return;settled=true;globalThis.clearTimeout(timer);resolve(value);};
+      const timer=globalThis.setTimeout(()=>finish(null),OPEN_TIMEOUT_MS);
+      try{
+        const request=indexedDB.open(DB_NAME,DB_VERSION);
+        request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains(STORE))db.createObjectStore(STORE,{keyPath:'key'});};
+        request.onsuccess=()=>finish(request.result);
+        request.onerror=()=>finish(null);
+        request.onblocked=()=>finish(null);
+      }catch{finish(null);}
+    }).then(db=>{if(!db)this.database=null;return db;});
     return this.database;
   }
 }
