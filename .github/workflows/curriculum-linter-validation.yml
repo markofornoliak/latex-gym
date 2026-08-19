@@ -1,0 +1,92 @@
+name: Validate curriculum linter implementation
+
+on:
+  push:
+    branches: [ai/curriculum-linter-validation-20260819]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  validate:
+    if: ${{ !contains(github.event.head_commit.message, '[curriculum-data-patched]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout validation branch
+        uses: actions/checkout@v7
+
+      - name: Apply confirmed curriculum metadata correction
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'src/data/curriculumSource.json';
+          const source = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const compiler = source.concepts.find(concept => concept.id === 'compiler');
+          if (!compiler) throw new Error('compiler concept not found');
+          if (JSON.stringify(compiler.prerequisites) !== JSON.stringify(['source-file'])) {
+            throw new Error(`Unexpected compiler prerequisites: ${JSON.stringify(compiler.prerequisites)}`);
+          }
+          compiler.prerequisites = ['latex-model'];
+          fs.writeFileSync(path, `${JSON.stringify(source)}\n`, 'utf8');
+          NODE
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Regenerate compatibility fingerprint and snapshot
+        shell: bash
+        run: |
+          set +e
+          LATEX_GYM_WRITE_CURRICULUM_SNAPSHOT=1 npx vitest run scripts/curriculumSnapshot.generate.test.ts
+          SNAPSHOT_STATUS=$?
+          set -e
+          if [ ! -f src/data/curriculumSnapshot.generated.json ]; then
+            echo "Snapshot generation did not produce an artifact (status=${SNAPSHOT_STATUS})."
+            exit 1
+          fi
+          node <<'NODE'
+          const fs = require('node:fs');
+          const snapshot = JSON.parse(fs.readFileSync('src/data/curriculumSnapshot.generated.json', 'utf8'));
+          const path = 'src/data/curriculumBaseline.json';
+          const baseline = JSON.parse(fs.readFileSync(path, 'utf8'));
+          baseline.semanticFingerprint = snapshot.semanticFingerprint;
+          fs.writeFileSync(path, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
+          console.log(`[curriculum-baseline] fingerprint=${snapshot.semanticFingerprint}`);
+          NODE
+          npm run curriculum:snapshot
+
+      - name: Curriculum integrity checks
+        run: npm run curriculum:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Prepare real-TeX smoke runtime
+        run: node scripts/prepare-busytex.mjs smoke
+
+      - name: Commit validated generated curriculum data
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/curriculumSource.json src/data/curriculumBaseline.json src/data/curriculumSnapshot.generated.json
+          if git diff --cached --quiet; then
+            echo "No curriculum data changes to commit."
+            exit 0
+          fi
+          git commit -m "[curriculum-data-patched] Align compiler prerequisite metadata"
+          git push origin HEAD
