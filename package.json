@@ -4,9 +4,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "curriculum:legacy-generate": "node scripts/generate-curriculum-transforms.mjs",
     "curriculum:snapshot": "node scripts/generate-curriculum-snapshot.mjs",
-    "curriculum:prepare": "npm run curriculum:legacy-generate && npm run curriculum:snapshot",
+    "curriculum:prepare": "npm run curriculum:snapshot",
     "prepare": "npm run curriculum:prepare",
     "predev": "npm run curriculum:prepare",
     "dev": "vite",
