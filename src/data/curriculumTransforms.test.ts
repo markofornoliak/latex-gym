@@ -21,7 +21,7 @@ function fixture():CurriculumDraft{
 }
 
 function editorialFixture():CurriculumDraft{
-  const exercise:Exercise={id:'e01',lessonId:'document-structure',category:'Основы',difficulty:'Начальный',mode:'Написать код',title:'До редакции',instructions:'До редакции',requirements:[],starterCode:'old',validators:[],hints:[],solution:'old',concepts:[]};
+  const exercise:Exercise={id:'document-structure:minimal-document',lessonId:'document-structure',category:'Основы',difficulty:'Начальный',mode:'Написать код',title:'Минимальный документ',instructions:'До редакции',requirements:[],starterCode:'old',validators:[],hints:[],solution:'old',concepts:[]};
   const lesson:Lesson={id:'document-structure',moduleId:'basics',number:1,title:'Структура',subtitle:'До редакции',difficulty:'Начальный',theory:[{id:'t1',title:'A',body:'A'},{id:'t2',title:'B',body:'B'}],examples:[],exercises:[exercise],relatedCommands:[]};
   const module:CourseModule={id:'basics',number:1,title:'Основы',description:'Fixture',prerequisites:'Нет',difficulty:'Начальный',lessons:[lesson]};
   const reference:ReferenceEntry={id:'frac',command:'\\frac',category:'Математика',aliases:[],title:'Дробь',description:'До редакции',syntax:'\\frac{a}{b}',example:'$\\frac{a}{b}$',related:[]};
