@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   validate:
-    if: ${{ !contains(github.event.head_commit.message, '[curriculum-data-patched]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[curriculum-data-patched]') && !contains(github.event.head_commit.message, '[validation-report]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout validation branch
@@ -40,53 +40,69 @@ jobs:
       - name: Install dependencies without lifecycle scripts
         run: npm ci --ignore-scripts
 
-      - name: Regenerate compatibility fingerprint and snapshot
+      - name: Run full validation and publish branch-local report
         shell: bash
         run: |
+          set -uo pipefail
+          REPORT=.curriculum-linter-validation.txt
+          : > "$REPORT"
+          FAILED=0
+          run_check() {
+            local label="$1"
+            shift
+            echo "===== ${label} =====" | tee -a "$REPORT"
+            "$@" >> "$REPORT" 2>&1
+            local status=$?
+            echo "status=${status}" | tee -a "$REPORT"
+            if [ "$status" -ne 0 ]; then FAILED=1; fi
+          }
+
+          echo "base_commit=${GITHUB_SHA}" >> "$REPORT"
+          echo "node=$(node --version)" >> "$REPORT"
+          echo "npm=$(npm --version)" >> "$REPORT"
+
           set +e
-          LATEX_GYM_WRITE_CURRICULUM_SNAPSHOT=1 npx vitest run scripts/curriculumSnapshot.generate.test.ts
+          LATEX_GYM_WRITE_CURRICULUM_SNAPSHOT=1 npx vitest run scripts/curriculumSnapshot.generate.test.ts >> "$REPORT" 2>&1
           SNAPSHOT_STATUS=$?
           set -e
+          echo "initial_snapshot_status=${SNAPSHOT_STATUS}" >> "$REPORT"
           if [ ! -f src/data/curriculumSnapshot.generated.json ]; then
-            echo "Snapshot generation did not produce an artifact (status=${SNAPSHOT_STATUS})."
-            exit 1
+            echo "snapshot artifact missing" >> "$REPORT"
+            FAILED=1
+          else
+            node <<'NODE' >> "$REPORT" 2>&1
+            const fs = require('node:fs');
+            const snapshot = JSON.parse(fs.readFileSync('src/data/curriculumSnapshot.generated.json', 'utf8'));
+            const path = 'src/data/curriculumBaseline.json';
+            const baseline = JSON.parse(fs.readFileSync(path, 'utf8'));
+            baseline.semanticFingerprint = snapshot.semanticFingerprint;
+            fs.writeFileSync(path, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
+            console.log(`[curriculum-baseline] fingerprint=${snapshot.semanticFingerprint}`);
+            NODE
           fi
-          node <<'NODE'
-          const fs = require('node:fs');
-          const snapshot = JSON.parse(fs.readFileSync('src/data/curriculumSnapshot.generated.json', 'utf8'));
-          const path = 'src/data/curriculumBaseline.json';
-          const baseline = JSON.parse(fs.readFileSync(path, 'utf8'));
-          baseline.semanticFingerprint = snapshot.semanticFingerprint;
-          fs.writeFileSync(path, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
-          console.log(`[curriculum-baseline] fingerprint=${snapshot.semanticFingerprint}`);
-          NODE
-          npm run curriculum:snapshot
 
-      - name: Curriculum integrity checks
-        run: npm run curriculum:check
+          set +e
+          run_check "curriculum snapshot" npm run curriculum:snapshot
+          run_check "curriculum integrity" npm run curriculum:check
+          run_check "typecheck" npm run typecheck
+          run_check "test" npm test
+          run_check "production build" npm run build
+          run_check "prepare real-TeX smoke runtime" node scripts/prepare-busytex.mjs smoke
+          set -e
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Test
-        run: npm test
-
-      - name: Production build
-        run: npm run build
-
-      - name: Prepare real-TeX smoke runtime
-        run: node scripts/prepare-busytex.mjs smoke
-
-      - name: Commit validated generated curriculum data
-        shell: bash
-        run: |
-          set -euo pipefail
+          echo "overall_status=${FAILED}" >> "$REPORT"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/data/curriculumSource.json src/data/curriculumBaseline.json src/data/curriculumSnapshot.generated.json
-          if git diff --cached --quiet; then
-            echo "No curriculum data changes to commit."
+
+          if [ "$FAILED" -eq 0 ]; then
+            git add src/data/curriculumSource.json src/data/curriculumBaseline.json src/data/curriculumSnapshot.generated.json "$REPORT"
+            git commit -m "[curriculum-data-patched] Align compiler prerequisite metadata"
+            git push origin HEAD
             exit 0
           fi
-          git commit -m "[curriculum-data-patched] Align compiler prerequisite metadata"
+
+          git checkout -- src/data/curriculumSource.json src/data/curriculumBaseline.json src/data/curriculumSnapshot.generated.json
+          git add "$REPORT"
+          git commit -m "[validation-report] Capture curriculum validation failure"
           git push origin HEAD
+          exit 1
