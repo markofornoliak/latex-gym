@@ -24,6 +24,10 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
   const referenceIdSet=new Set(referenceIds);
   const projectIds=projects.map(project=>project.id);
   const projectsById=new Map(projects.map(project=>[project.id,project]));
+  const firstIntroduction=new Map<string,{index:number;lesson:Lesson}>();
+  lessons.forEach((lesson,index)=>{
+    for(const concept of lesson.pedagogy?.introduces??[])if(!firstIntroduction.has(concept))firstIntroduction.set(concept,{index,lesson});
+  });
 
   if(modules.length&&!unique(modules.map(module=>module.id)))issues.push({severity:'error',code:'duplicate-module-id',message:'Module IDs must be unique.'});
   if(!unique(lessonIds))issues.push({severity:'error',code:'duplicate-lesson-id',message:'Lesson IDs must be unique.'});
@@ -65,7 +69,8 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
   }
 
   const introduced=new Set<string>();
-  for(const lesson of lessons){
+  for(let lessonIndex=0;lessonIndex<lessons.length;lessonIndex+=1){
+    const lesson=lessons[lessonIndex];
     if(modules.length&&!moduleIdSet.has(lesson.moduleId))issues.push({severity:'error',code:'unknown-module',moduleId:lesson.moduleId,lessonId:lesson.id,message:`Lesson ${lesson.id} references unknown module ${lesson.moduleId}.`});
     if(!lesson.title.trim())issues.push({severity:'error',code:'empty-title',lessonId:lesson.id,message:'Lesson title is empty.'});
     if(lesson.exercises.length===0)issues.push({severity:'warning',code:'no-practice',lessonId:lesson.id,message:'Lesson has no practice.'});
@@ -91,14 +96,21 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
         if(introduces.has(concept)){
           issues.push({severity:'warning',code:'introduces-and-reinforces',conceptId:concept,lessonId:lesson.id,message:`Lesson ${lesson.id} both introduces and reinforces ${concept}.`});
         }else if(conceptIdSet.has(concept)&&!introduced.has(concept)){
-          issues.push({severity:'error',code:'reinforces-before-introduction',conceptId:concept,lessonId:lesson.id,message:`Lesson ${lesson.id} reinforces ${concept} before it has been introduced.`});
+          issues.push({severity:'warning',code:'reinforces-before-introduction',conceptId:concept,lessonId:lesson.id,message:`Lesson ${lesson.id} reinforces ${concept} before its formal introduction.`});
         }
       }
       for(const conceptId of pedagogy.introduces){
         const definition=conceptsById.get(conceptId);
         if(!definition)continue;
         for(const prerequisite of definition.prerequisites){
-          if(conceptIdSet.has(prerequisite)&&!introduced.has(prerequisite))issues.push({severity:'error',code:'concept-dependency-gap',conceptId:conceptId,lessonId:lesson.id,message:`Lesson ${lesson.id} introduces ${conceptId} before required concept ${prerequisite} has been introduced.`});
+          if(!conceptIdSet.has(prerequisite)||introduced.has(prerequisite)||introduces.has(prerequisite))continue;
+          const later=firstIntroduction.get(prerequisite);
+          const contradictory=later&&later.index>lessonIndex&&later.lesson.pedagogy?.prerequisites.includes(conceptId);
+          if(contradictory){
+            issues.push({severity:'error',code:'impossible-learning-path',conceptId:conceptId,lessonId:lesson.id,message:`Concept ${conceptId} requires ${prerequisite}, but ${prerequisite} is first introduced later in ${later.lesson.id}, which itself requires ${conceptId}.`});
+          }else{
+            issues.push({severity:'warning',code:'concept-dependency-gap',conceptId:conceptId,lessonId:lesson.id,message:`Lesson ${lesson.id} introduces ${conceptId} before concept dependency ${prerequisite} has been formally introduced.`});
+          }
         }
       }
       pedagogy.introduces.forEach(concept=>introduced.add(concept));
