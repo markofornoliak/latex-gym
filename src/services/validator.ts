@@ -59,4 +59,4 @@ export function validateRule(rule:ValidatorRule,source:string,compileResult?:Com
   return {ok,message:rule.message,hint:rule.hint,line};
 }
 
-export const validatorInternals={commandCount,hasEnvironment,hasPackage,hasDocumentClassOption,hasStructuralText,hasConceptualText,environmentsBalanced};
+export const validatorInternals={countCommand:commandCount,commandCount,hasEnvironment,hasPackage,hasDocumentClassOption,hasStructuralText,hasConceptualText,environmentsBalanced};
