@@ -1,16 +1,8 @@
 import snapshotJson from './curriculumSnapshot.generated.json';
 import type { ConceptDefinition, CourseModule, Exercise, LearningProject, Lesson, ReferenceEntry } from '../types';
-import type { CurriculumGraph } from '../services/curriculumGraph';
-import type { CurriculumIssue } from '../services/curriculumLinter';
-import type { CurriculumNormalizationReport } from './curriculumNormalize';
+import type { CurriculumSnapshot } from '../types/curriculumSnapshot';
 
-type Snapshot={
-  snapshotVersion:number;semanticFingerprint:string;modules:CourseModule[];lessons:Lesson[];exercises:Exercise[];concepts:ConceptDefinition[];references:ReferenceEntry[];projects:LearningProject[];
-  graph:CurriculumGraph;normalization:CurriculumNormalizationReport;issues:CurriculumIssue[];
-  build:{moduleCount:number;lessonCount:number;exerciseCount:number;conceptCount:number;referenceCount:number;projectCount:number;normalizedConceptTags:number};
-};
-
-const raw=snapshotJson as unknown as Snapshot;
+const raw=snapshotJson as unknown as CurriculumSnapshot;
 if(raw.snapshotVersion!==1)throw new Error(`Unsupported curriculum snapshot version: ${raw.snapshotVersion}`);
 
 const exercises=raw.exercises.map(exercise=>({...exercise}));
