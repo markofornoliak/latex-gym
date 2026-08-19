@@ -45,6 +45,27 @@ describe('curriculum quality gate',()=>{
   });
 });
 
+describe('curriculum semantic integrity rules',()=>{
+  it('detects project prerequisites and lesson project-stage references that do not resolve',()=>{
+    const brokenProjects=projects.map((project,index)=>index===0?{...project,prerequisites:[...project.prerequisites,'missing-concept']}:project);
+    const brokenLessons=lessons.map((lesson,index)=>index===0?{...lesson,projectStage:'academic-paper:missing-stage'}:lesson);
+    const issues=lintCurriculum(brokenLessons,exercises,references,{modules,concepts,projects:brokenProjects});
+    expect(issues.some(issue=>issue.code==='unknown-project-prerequisite'&&issue.conceptId==='missing-concept')).toBe(true);
+    expect(issues.some(issue=>issue.code==='unknown-project-stage'&&issue.lessonId===brokenLessons[0].id)).toBe(true);
+  });
+
+  it('detects duplicate theory and example identities inside a lesson',()=>{
+    const index=lessons.findIndex(lesson=>lesson.theory.length>0&&lesson.examples.length>0);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const lesson=lessons[index];
+    const broken={...lesson,theory:[...lesson.theory,{...lesson.theory[0]}],examples:[...lesson.examples,{...lesson.examples[0]}]};
+    const brokenLessons=lessons.map((item,itemIndex)=>itemIndex===index?broken:item);
+    const issues=lintCurriculum(brokenLessons,exercises,references,{modules,concepts,projects});
+    expect(issues.some(issue=>issue.code==='duplicate-theory-block-id'&&issue.lessonId===lesson.id)).toBe(true);
+    expect(issues.some(issue=>issue.code==='duplicate-example-id'&&issue.lessonId===lesson.id)).toBe(true);
+  });
+});
+
 describe('concept dependency graph',()=>{
   it('contains every concept exactly once and has a complete topological order',()=>{
     expect(graph.conceptIds).toHaveLength(concepts.length);
