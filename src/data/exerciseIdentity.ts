@@ -1,6 +1,4 @@
-import { cloneCurriculumDraft, type CurriculumDraft } from './curriculumDraft';
-
-const seedIdentities = [
+const seedIdentities=[
   ['e01','document-structure','Минимальный документ','document-structure:minimal-document'],
   ['e02','document-structure','Исправьте каркас','document-structure:fix-scaffold'],
   ['e03','document-structure','Заголовок и абзац','document-structure:heading-paragraph'],
@@ -48,40 +46,20 @@ const seedIdentities = [
   ['e45','debugging','Пакет amsmath','debugging:amsmath-package']
 ] as const;
 
-type SeedIdentity = typeof seedIdentities[number];
-const byLegacyId = new Map<string,string>(seedIdentities.map(([legacyId,,,stableId])=>[legacyId,stableId]));
-const bySeedIdentity = new Map<string,string>(seedIdentities.map(([,lessonId,title,stableId])=>[seedKey(lessonId,title),stableId]));
+type SeedIdentity=typeof seedIdentities[number];
+const byLegacyId=new Map<string,string>(seedIdentities.map(([legacyId,,,stableId])=>[legacyId,stableId]));
+const bySeedIdentity=new Map<string,string>(seedIdentities.map(([,lessonId,title,stableId])=>[seedKey(lessonId,title),stableId]));
 
-export const legacyExerciseIdAliases:Readonly<Record<string,string>> = Object.freeze(Object.fromEntries(byLegacyId));
+/** Historical positional IDs are accepted forever as persistence aliases. */
+export const legacyExerciseIdAliases:Readonly<Record<string,string>>=Object.freeze(Object.fromEntries(byLegacyId));
 
 export function canonicalExerciseId(id:string){return legacyExerciseIdAliases[id]??id;}
 
+/** Retained for compatibility tests and migration tooling; runtime IDs are authored explicitly. */
 export function stableSeedExerciseId(lessonId:string,title:string){
   const stable=bySeedIdentity.get(seedKey(lessonId,title));
   if(!stable)throw new Error(`Seed exercise identity is not registered: ${lessonId} / ${title}`);
   return stable;
-}
-
-/**
- * Converts only the original positional eXX seed IDs. Exercises added by later
- * transforms already use authored semantic IDs and pass through unchanged.
- * Matching is based on the lesson/title registry, so reordering seed arrays cannot
- * change persisted runtime identity. Renaming a seed requires an explicit registry
- * edit and therefore cannot silently invalidate user progress.
- */
-export function applyStableExerciseIds(input:CurriculumDraft):CurriculumDraft{
-  const draft=cloneCurriculumDraft(input);
-  const seen=new Set<object>();
-  const stabilize=(exercise:CurriculumDraft['exercises'][number])=>{
-    if(seen.has(exercise))return;
-    seen.add(exercise);
-    if(!/^e\d+$/.test(exercise.id))return;
-    exercise.id=stableSeedExerciseId(exercise.lessonId,exercise.title);
-  };
-  draft.exercises.forEach(stabilize);
-  draft.lessons.forEach(lesson=>lesson.exercises.forEach(stabilize));
-  draft.modules.forEach(module=>module.lessons.forEach(lesson=>lesson.exercises.forEach(stabilize)));
-  return draft;
 }
 
 export function migrateExerciseIdList(values:readonly string[]|undefined){
