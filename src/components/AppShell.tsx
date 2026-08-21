@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { curriculum } from '../data/curriculumRuntime';
 import { useAppStore } from '../store/useAppStore';
 import { BookIcon, PenIcon, ProjectIcon, ReferenceIcon, SearchIcon, SettingsIcon } from './Icons';
 import { Wordmark } from './Wordmark';
@@ -19,8 +18,9 @@ export function AppShell({children,plain=false}:{children:ReactNode;plain?:boole
   const streak=useAppStore(state=>state.streak);
   const settings=useAppStore(state=>state.settings);
   const [palette,setPalette]=useState(false);
+  const [lessonCount,setLessonCount]=useState<number|null>(null);
   const previousPath=useRef(location.pathname);
-  const percent=Math.round((completed.length/Math.max(1,curriculum.lessons.length))*100);
+  const percent=lessonCount?Math.round((completed.length/Math.max(1,lessonCount))*100):0;
   const immersive=!plain&&(location.pathname.startsWith('/lesson/')||/^\/practice\/[^/]+/.test(location.pathname));
   const showMobileNav=!plain&&!immersive&&!location.pathname.startsWith('/practice/');
   const scale=settings.textSize==='small'?.94:settings.textSize==='large'?1.08:1;
@@ -34,6 +34,12 @@ export function AppShell({children,plain=false}:{children:ReactNode;plain?:boole
   },[]);
   useEffect(()=>{setPalette(false);},[location.pathname]);
   useEffect(()=>{
+    if(plain){setLessonCount(null);return;}
+    let active=true;
+    void import('../data/curriculumRuntime').then(module=>{if(active)setLessonCount(module.curriculum.lessons.length);}).catch(()=>{if(active)setLessonCount(null);});
+    return()=>{active=false;};
+  },[plain]);
+  useEffect(()=>{
     if(previousPath.current===location.pathname)return;
     previousPath.current=location.pathname;
     requestAnimationFrame(()=>document.getElementById('main-content')?.focus({preventScroll:true}));
@@ -46,10 +52,10 @@ export function AppShell({children,plain=false}:{children:ReactNode;plain?:boole
       <div className="topbar-actions">
         <button className="search-trigger" onClick={()=>setPalette(true)} aria-label="Поиск по LaTeX Gym"><SearchIcon/><span>⌘K</span></button>
         <details className="progress-menu">
-          <summary aria-label={`Прогресс курса ${percent}%`}><ProgressRing percent={percent}/></summary>
+          <summary aria-label={lessonCount===null?'Прогресс курса загружается':`Прогресс курса ${percent}%`}><ProgressRing percent={percent} loading={lessonCount===null}/></summary>
           <div className="progress-popover">
             <h3>Прогресс обучения</h3>
-            <p>Пройдено уроков: <strong>{completed.length} / {curriculum.lessons.length}</strong></p>
+            <p>Пройдено уроков: <strong>{completed.length} / {lessonCount??'…'}</strong></p>
             <p>Текущая серия: <strong>{streak.count} дн.</strong></p>
             <Link to="/progress">Подробный прогресс</Link>
           </div>
@@ -63,6 +69,6 @@ export function AppShell({children,plain=false}:{children:ReactNode;plain?:boole
   </div>;
 }
 
-export function ProgressRing({percent}:{percent:number}){
-  return <span className="progress-ring" style={{'--progress':`${Math.max(0,Math.min(100,percent))*3.6}deg`} as CSSProperties}><span>{percent}</span></span>;
+export function ProgressRing({percent,loading=false}:{percent:number;loading?:boolean}){
+  return <span className="progress-ring" style={{'--progress':`${Math.max(0,Math.min(100,percent))*3.6}deg`} as CSSProperties}><span>{loading?'…':percent}</span></span>;
 }
