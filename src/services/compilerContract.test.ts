@@ -1,17 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { detectUnsupportedBibliography, REAL_TEX_CAPABILITIES } from './compiler';
+import { detectUnsupportedBibliography, REAL_TEX_CAPABILITIES, WasmTexCompilerProvider } from './compiler';
 import { compilationStateLabel, isCompilationBusy } from './compilerState';
 
 describe('compiler contract',()=>{
   it('advertises only capabilities the current browser provider actually supports',()=>{
     expect(REAL_TEX_CAPABILITIES.realPdf).toBe(true);
-    expect(REAL_TEX_CAPABILITIES.engines).toEqual(['pdflatex','xelatex','lualatex']);
+    expect(REAL_TEX_CAPABILITIES.engines).toEqual(['pdflatex','xelatex']);
     expect(REAL_TEX_CAPABILITIES.multiFile).toBe(true);
     expect(REAL_TEX_CAPABILITIES.bibtex).toBe(true);
     expect(REAL_TEX_CAPABILITIES.biber).toBe(false);
     expect(REAL_TEX_CAPABILITIES.shellEscape).toBe(false);
     expect(REAL_TEX_CAPABILITIES.synctex).toBe(false);
     expect(REAL_TEX_CAPABILITIES.offline).toBe(false);
+  });
+
+  it('rejects LuaLaTeX deterministically before BusyTeX runtime initialization',async()=>{
+    const provider=new WasmTexCompilerProvider();
+    const phases:string[]=[];
+    const result=await provider.compile({mainFile:'main.tex',files:[{path:'main.tex',content:'\\documentclass{article}\n\\begin{document}Text\\end{document}'}]},{engine:'lualatex',onPhase:phase=>phases.push(phase)});
+    expect(result.ok).toBe(false);
+    expect(result.providerId).toBe('busytex-wasm');
+    expect(result.engine).toBe('lualatex');
+    expect(result.diagnostics[0]).toMatchObject({severity:'error',relatedConcept:'lualatex'});
+    expect(result.rawLog).toMatch(/LuaLaTeX is disabled/);
+    expect(phases).toEqual(['error']);
   });
 
   it('keeps intermediate compilation phases busy and names them honestly',()=>{
