@@ -9,7 +9,7 @@
     "prepare": "npm run curriculum:prepare",
     "predev": "npm run curriculum:prepare",
     "dev": "vite",
-    "curriculum:check": "vitest run src/data/curriculumSchema.test.ts src/services/curriculumLinter.test.ts src/services/curriculumLinter.rules.test.ts scripts/curriculumSnapshot.generate.test.ts",
+    "curriculum:check": "vitest run src/data/curriculumSchema.test.ts src/data/curriculumSemantics.test.ts src/services/curriculumLinter.test.ts src/services/curriculumLinter.rules.test.ts src/services/curriculumGraphIntegrity.test.ts src/services/adaptiveEligibility.test.ts src/services/masteryEvidence.test.ts src/services/spacedRepetition.test.ts scripts/curriculumSnapshot.generate.test.ts",
     "prebuild": "npm run curriculum:prepare",
     "build": "npm run curriculum:check && tsc -b && vite build",
     "preview": "vite preview",
