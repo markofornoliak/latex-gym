@@ -23,7 +23,9 @@ export type ValidationResult = { ok:boolean; items:ValidationItem[] };
 type RegexValidatorRule=Extract<ValidatorRule,{type:'regex'}>;
 
 const normalizeConceptText=(value:string)=>value.toLocaleLowerCase('ru-RU').replace(/[—–]/g,'-').replace(/[^\p{L}\p{N}.@_+\\-]+/gu,' ').replace(/\s+/g,' ').trim();
-const conceptualNegation=/\b(?:не|нет|нельзя|неверно|ошибочно|not|never|without|incorrect|false)\b/iu;
+// JavaScript \b is ASCII-oriented and misses Cyrillic boundaries. Concept text is
+// normalized to space-delimited tokens, so token boundaries must be checked explicitly.
+const conceptualNegation=/(?:^|\s)(?:не|нет|нельзя|неверно|ошибочно|not|never|without|incorrect|false)(?=\s|$)/iu;
 
 function hasConceptualText(source:string,value:string){
   const required=value.split(/\s*→\s*/).map(normalizeConceptText).filter(Boolean);
