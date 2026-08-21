@@ -57,8 +57,20 @@ describe('semantic validation',()=>{
     expect(validatorInternals.countCommand('\\sectional{Wrong}','section')).toBe(0);
   });
 
+  it('does not count commands that exist only inside comments or unused definitions',()=>{
+    expect(validatorInternals.countCommand('% \\section{Hidden}\nText','section')).toBe(0);
+    expect(validatorInternals.countCommand('\\newcommand{\\hidden}{\\section{Hidden}}\nText','section')).toBe(0);
+    expect(validatorInternals.countCommand('\\newcommand{\\hidden}{Text}\n\\section{Visible}','section')).toBe(1);
+  });
+
   it('treats trailing whitespace inside a group as structurally equivalent for containsText checks',()=>{
     expect(validatorInternals.hasStructuralText('$x=1, \\text{если } y=0$','\\text{если}')).toBe(true);
+  });
+
+  it('ignores commented or definition-only text for structural requirements',()=>{
+    expect(validatorInternals.hasActiveStructuralText('% \\section{Results}\nText','\\section{Results}')).toBe(false);
+    expect(validatorInternals.hasActiveStructuralText('\\newcommand{\\hidden}{\\section{Results}}\nText','\\section{Results}')).toBe(false);
+    expect(validatorInternals.hasActiveStructuralText('\\section{Results}\nText','\\section{Results}')).toBe(true);
   });
 
   it('accepts equivalent prose for an ordered conceptual pipeline',()=>{
@@ -70,6 +82,13 @@ describe('semantic validation',()=>{
   it('does not loosen structural containsText checks when a compile result is present',()=>{
     const exercise:Exercise={id:'code-order',lessonId:'foundation',category:'Основы',difficulty:'Начальный',mode:'Архитектура',title:'Pipeline source',instructions:'Write exact structure.',requirements:['ordered marker'],starterCode:'\\documentclass{article}',validators:[{type:'containsText',value:'PREAMBLE → BODY',message:'Граница есть.',hint:'Добавьте маркер.'}],hints:[],solution:'PREAMBLE → BODY',concepts:['preamble']};
     expect(validateExercise(exercise,'PREAMBLE text BODY',compiled).ok).toBe(false);
+  });
+
+  it('does not allow comments to satisfy containsText or fail forbiddenText',()=>{
+    const requires:Exercise={id:'comment-required',lessonId:'synthetic',category:'Отладка',difficulty:'Начальный',mode:'Исправить ошибку',title:'Required',instructions:'Use section.',requirements:['section'],starterCode:'',validators:[{type:'containsText',value:'\\section{Results}',message:'Есть section.',hint:'Добавьте section.'}],hints:[],solution:'\\section{Results}',concepts:['section']};
+    const forbids:Exercise={...requires,id:'comment-forbidden',validators:[{type:'forbiddenText',value:'\\mysterycommand',message:'Команда удалена.',hint:'Удалите команду.'}],solution:'Text'};
+    expect(validateExercise(requires,'% \\section{Results}\nText',compiled).ok).toBe(false);
+    expect(validateExercise(forbids,'% old: \\mysterycommand{Text}\nText',compiled).ok).toBe(true);
   });
 
   it('reports the approximate line for a failed forbidden-text rule',()=>{
