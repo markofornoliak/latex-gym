@@ -44,4 +44,4 @@ describe('daily training',()=>{
 });
 
 function makeExercise(id:string,concept:string):Exercise{return {id,lessonId:'lesson',category:'Основы',difficulty:'Начальный',mode:'Написать код',title:id,instructions:id,requirements:[id],starterCode:'',validators:[],hints:[],solution:'ok',concepts:[concept]};}
-function state(score:number,attempts:number,successes:number,mistakeCount:number,lastPracticed:string,nextReview:string):ConceptMastery{return {score,attempts,successes,mistakeCount,lastPracticed,stability:4,nextReview,independentSuccesses:successes,hintedSuccesses:0,transferSuccesses:0,projectSuccesses:0,solutionReveals:0,lastEvidence:null};}
+function state(score:number,attempts:number,successes:number,mistakeCount:number,lastPracticed:string,nextReview:string):ConceptMastery{return {score,attempts,successes,mistakeCount,lastPracticed,stability:4,nextReview,independentSuccesses:successes,hintedSuccesses:0,transferSuccesses:0,projectSuccesses:0,solutionReveals:0,delayedRecallSuccesses:Math.max(0,successes-1),lastIndependentSuccess:lastPracticed,lastSuccessfulDelayDays:successes>1?2:null,lastEvidence:null};}

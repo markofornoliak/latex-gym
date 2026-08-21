@@ -2,6 +2,7 @@ import type { CompilerAuthority } from './compiler';
 
 export type Difficulty = 'Начальный' | 'Базовый' | 'Средний' | 'Продвинутый' | 'Экспертный';
 export type PracticeCategory = 'Основы' | 'Текст' | 'Математика' | 'Таблицы' | 'Графика' | 'TikZ' | 'Библиография' | 'Большие документы' | 'Отладка' | 'Academic challenges';
+export type ExerciseExecution = 'concept'|'fragment'|'document'|'reconstruction';
 
 export type TheoryBlock = {id:string;title:string;body:string;code?:string;note?:string};
 export type LearningBlock =
@@ -34,6 +35,8 @@ export type ValidatorRule =
 export type Exercise = {
   id:string;lessonId:string;category:PracticeCategory;difficulty:Difficulty;
   mode:'Написать код'|'Исправить ошибку'|'Предсказать результат'|'Дополнить документ'|'Рефакторинг'|'Найти ошибку'|'Воссоздать результат'|'Текст → LaTeX'|'Улучшить код'|'Собрать документ'|'Объяснить'|'Архитектура';
+  /** Optional author override. Existing curriculum can be classified from validators without migration. */
+  execution?:ExerciseExecution;
   title:string;instructions:string;requirements:string[];starterCode:string;validators:ValidatorRule[];hints:string[];solution:string;concepts:string[];prerequisites?:string[];
 };
 export type LessonPedagogy={objective:string;prerequisites:string[];introduces:string[];reinforces:string[];misconceptions:string[];practiceObjective:string;masteryCriteria:string[]};

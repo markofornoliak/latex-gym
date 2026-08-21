@@ -1,10 +1,12 @@
-import type { CompileResult, Exercise, ValidatorRule } from '../types';
-import { satisfiesCompilerAuthority } from './compilerAuthority';
+import type { CompileResult, Exercise, ExerciseExecution, ValidatorRule } from '../types';
+import { compileResultAuthority, satisfiesCompilerAuthority } from './compilerAuthority';
+import { exerciseExecution } from './exerciseInteraction';
 import {
   commandCount,
   documentClass,
   environmentsBalanced,
-  firstLineContaining,
+  firstActiveLineContaining,
+  hasActiveStructuralText,
   hasDisplayMath,
   hasDocumentClassOption,
   hasEnvironment,
@@ -34,29 +36,39 @@ function hasConceptualText(source:string,value:string){
 }
 
 export function validateExercise(exercise:Exercise,source:string,compileResult?:CompileResult):ValidationResult{
-  const conceptualAnswer=!compileResult&&(exercise.mode==='Объяснить'||exercise.mode==='Архитектура');
-  const items=exercise.validators.map(rule=>validateRule(rule,source,compileResult,conceptualAnswer));
+  const execution=exerciseExecution(exercise);
+  const conceptualAnswer=!compileResult&&execution==='concept';
+  const items=exercise.validators.map(rule=>validateRule(rule,source,compileResult,conceptualAnswer,execution));
   return {ok:items.every(item=>item.ok),items};
 }
 
-export function validateRule(rule:ValidatorRule,source:string,compileResult?:CompileResult,conceptualAnswer=false):ValidationItem{
-  let ok=false;let line:number|undefined;
+export function validateRule(rule:ValidatorRule,source:string,compileResult?:CompileResult,conceptualAnswer=false,execution?:ExerciseExecution):ValidationItem{
+  let ok=false;let line:number|undefined;let message=rule.message;let hint=rule.hint;
   switch(rule.type){
     case 'documentClass':ok=documentClass(source)===rule.value;break;
     case 'documentClassOption':ok=hasDocumentClassOption(source,rule.value);break;
     case 'environment':ok=hasEnvironment(source,rule.value);break;
     case 'command':ok=commandCount(source,rule.value)>=(rule.min??1);break;
     case 'package':ok=hasPackage(source,rule.value);break;
-    case 'containsText':ok=conceptualAnswer?hasConceptualText(source,rule.value):hasStructuralText(source,rule.value);line=ok?undefined:firstLineContaining(source,rule.value);break;
-    case 'forbiddenText':ok=!source.includes(rule.value);line=ok?undefined:firstLineContaining(source,rule.value);break;
+    case 'containsText':ok=conceptualAnswer?hasConceptualText(source,rule.value):hasActiveStructuralText(source,rule.value);line=ok?undefined:firstActiveLineContaining(source,rule.value);break;
+    case 'forbiddenText':ok=!hasActiveStructuralText(source,rule.value);line=ok?undefined:firstActiveLineContaining(source,rule.value);break;
     case 'regex':try{ok=new RegExp(rule.value,rule.flags).test(source);}catch{ok=false;}break;
     case 'paragraph':ok=hasParagraph(source);break;
     case 'inlineMath':ok=hasInlineMath(source);break;
     case 'displayMath':ok=hasDisplayMath(source);break;
     case 'balancedEnvironments':ok=environmentsBalanced(source);break;
-    case 'compiles':ok=satisfiesCompilerAuthority(compileResult,rule.authority??'educational');line=compileResult?.diagnostics.find(item=>item.severity==='error')?.line;break;
+    case 'compiles':{
+      const required=rule.authority??(execution==='document'||execution==='reconstruction'?'real-tex':'educational');
+      ok=satisfiesCompilerAuthority(compileResult,required);
+      line=compileResult?.diagnostics.find(item=>item.severity==='error')?.line;
+      if(!ok&&required==='real-tex'&&compileResultAuthority(compileResult)==='educational'){
+        message=`${rule.message} — требуется реальная TeX-сборка`;
+        hint='Учебный предпросмотр не является доказательством компиляции документа. Повторите проверку, когда BusyTeX доступен и вернул настоящий PDF.';
+      }
+      break;
+    }
   }
-  return {ok,message:rule.message,hint:rule.hint,line};
+  return {ok,message,hint,line};
 }
 
-export const validatorInternals={countCommand:commandCount,commandCount,hasEnvironment,hasPackage,hasDocumentClassOption,hasStructuralText,hasConceptualText,environmentsBalanced};
+export const validatorInternals={countCommand:commandCount,commandCount,hasEnvironment,hasPackage,hasDocumentClassOption,hasStructuralText,hasActiveStructuralText,hasConceptualText,environmentsBalanced};

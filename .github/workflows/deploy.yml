@@ -45,57 +45,13 @@ jobs:
       - name: Prepare BusyTeX smoke runtime
         run: node scripts/prepare-busytex.mjs smoke
 
-      - name: Production visual, route and real-TeX QA
+      - name: Production compiler, behavior, route and visual QA
         shell: bash
         run: |
           set -euo pipefail
 
-          cat > dist/compiler-smoke.html <<'HTML'
-          <!doctype html>
-          <meta charset="utf-8">
-          <title>LaTeX Gym real TeX smoke</title>
-          <body data-state="starting">REAL_TEX_SMOKE_STARTING<script>
-          const source = '\\documentclass{article}\n\\begin{document}\n\\input{sections/body}\n\\end{document}';
-          const worker = new Worker('./busytex.worker.js');
-          let compileStarted = false;
-          const fail = message => {
-            document.body.dataset.state = 'failed';
-            document.body.textContent = `REAL_TEX_SMOKE_FAIL ${message}`;
-            worker.terminate();
-          };
-          worker.onerror = event => fail(event.message || 'worker error');
-          worker.onmessage = event => {
-            const message = event.data || {};
-            if (message.type === 'runtime-error') return fail(message.message || 'runtime error');
-            if (message.type === 'initialized' && !compileStarted) {
-              compileStarted = true;
-              document.body.dataset.state = 'compiling';
-              document.body.textContent = 'REAL_TEX_SMOKE_COMPILING';
-              worker.postMessage({
-                type: 'compile',
-                requestId: 1,
-                files: [
-                  { path: 'main.tex', contents: source },
-                  { path: 'sections/body.tex', contents: 'LaTeX Gym real multi-file TeX smoke.' }
-                ],
-                mainFile: 'main.tex',
-                bibtex: false,
-                driver: 'pdftex_bibtex8'
-              });
-              return;
-            }
-            if (message.type === 'compile-result' && message.requestId === 1) {
-              const pdf = message.result && message.result.pdf;
-              const signature = pdf && pdf.length >= 4 ? String.fromCharCode(pdf[0], pdf[1], pdf[2], pdf[3]) : '';
-              if (signature !== '%PDF') return fail(`invalid PDF signature: ${signature || 'empty'}`);
-              document.body.dataset.state = 'passed';
-              document.body.textContent = `REAL_TEX_SMOKE_PASS ${pdf.length}`;
-              worker.terminate();
-            }
-          };
-          worker.postMessage({ type: 'initialize' });
-          </script></body>
-          HTML
+          cp scripts/qa/real-tex-matrix.html dist/compiler-smoke.html
+          cp scripts/qa/behavior-smoke.html dist/behavior-smoke.html
 
           npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/latex-gym-preview.log 2>&1 &
           PREVIEW_PID=$!
@@ -116,19 +72,31 @@ jobs:
 
           CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
           if [ -z "$CHROME" ]; then
-            echo 'A Chromium-compatible browser is required for visual QA.'
+            echo 'A Chromium-compatible browser is required for production QA.'
             exit 1
           fi
 
-          echo 'QA real TeX: compile a multi-file article and require real PDF bytes'
-          timeout 150s "$CHROME" --headless --no-sandbox --disable-gpu \
-            --virtual-time-budget=120000 --dump-dom \
+          echo 'QA real TeX matrix: pdfLaTeX, XeLaTeX, LuaLaTeX and BibTeX'
+          timeout 300s "$CHROME" --headless --no-sandbox --disable-gpu \
+            --virtual-time-budget=240000 --dump-dom \
             'http://127.0.0.1:4173/latex-gym/compiler-smoke.html' \
             > /tmp/real-tex-smoke.html 2> /tmp/real-tex-smoke.browser.log || true
-          if ! grep -Fq 'REAL_TEX_SMOKE_PASS' /tmp/real-tex-smoke.html; then
-            echo 'Real multi-file TeX smoke test did not produce a PDF.'
+          if ! grep -Fq 'REAL_TEX_MATRIX_PASS' /tmp/real-tex-smoke.html; then
+            echo 'Real TeX engine matrix did not complete successfully.'
             cat /tmp/real-tex-smoke.html || true
             cat /tmp/real-tex-smoke.browser.log || true
+            exit 1
+          fi
+
+          echo 'QA behavior: bookmark mutation, command-palette focus and SPA route focus'
+          timeout 60s "$CHROME" --headless --no-sandbox --disable-gpu \
+            --virtual-time-budget=20000 --dump-dom \
+            'http://127.0.0.1:4173/latex-gym/behavior-smoke.html' \
+            > /tmp/behavior-smoke.html 2> /tmp/behavior-smoke.browser.log || true
+          if ! grep -Fq 'BEHAVIOR_SMOKE_PASS' /tmp/behavior-smoke.html; then
+            echo 'Behavioral smoke test failed.'
+            cat /tmp/behavior-smoke.html || true
+            cat /tmp/behavior-smoke.browser.log || true
             exit 1
           fi
 
@@ -167,7 +135,7 @@ jobs:
               --screenshot="qa-screenshots/${name}.png" "$url" 2>> "$browser_log"
           }
 
-          # Intentional device matrix: phone, tablet, laptop, desktop and TV/4K.
+          # Intentional device matrix: small phone, phone, tablet, laptop, desktop and TV/4K.
           capture phone-320-foundation /lesson/what-is-latex 320 568 'Что такое LaTeX'
           capture phone-360-practice /practice/deep-001 360 800 'ЗАДАНИЕ 1 ИЗ 3'
           capture phone-390-command /lesson/commands-foundation 390 844 'Команды'

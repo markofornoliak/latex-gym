@@ -4,6 +4,7 @@ export type Diagnostic = {
   message: string;
   explanation: string;
   suggestion?: string;
+  file?: string;
   column?: number;
   from?: number;
   to?: number;
@@ -11,6 +12,7 @@ export type Diagnostic = {
   relatedConcept?: string;
   possibleFix?: string;
   originalCompilerMessage?: string;
+  cascade?: 'root' | 'secondary';
 };
 
 export type PreviewBlock =
@@ -61,5 +63,6 @@ export type CompileOptions = {
   engine?: Exclude<CompilerEngine,'educational-preview'>;
   bibliography?: 'auto'|'none'|'bibtex';
   rerun?: boolean;
+  signal?: AbortSignal;
   onPhase?: (phase:CompilerPhase)=>void;
 };

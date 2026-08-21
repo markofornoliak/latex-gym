@@ -1,6 +1,5 @@
-import '../data/curriculumRuntime';
-import { lazy, Suspense, type ReactNode } from 'react';
-import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
+import { HashRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AppShell } from '../components/AppShell';
 import { RouteErrorBoundary } from '../components/RouteErrorBoundary';
 import { useAppStore } from '../store/useAppStore';
@@ -26,9 +25,19 @@ function RouteFallback(){return <div className="route-loading" role="status" ari
 function Wrapped({children}:{children:ReactNode}){return <AppShell>{children}</AppShell>;}
 function RootRoute(){const onboarded=useAppStore(state=>state.onboarded);return onboarded?<Navigate to="/home" replace/>:<AppShell plain><OnboardingPage/></AppShell>;}
 function PracticeExerciseRoute(){const {exerciseId}=useParams();return <PracticeExercisePage key={exerciseId}/>;}
+function RouteFocusManager(){
+  const location=useLocation();
+  const previousPath=useRef(location.pathname);
+  useEffect(()=>{
+    if(previousPath.current===location.pathname)return;
+    previousPath.current=location.pathname;
+    requestAnimationFrame(()=>document.getElementById('main-content')?.focus({preventScroll:true}));
+  },[location.pathname]);
+  return null;
+}
 
 export function App(){
-  return <RouteErrorBoundary><HashRouter><Suspense fallback={<RouteFallback/>}><Routes>
+  return <RouteErrorBoundary><HashRouter><RouteFocusManager/><Suspense fallback={<RouteFallback/>}><Routes>
     <Route path="/" element={<RootRoute/>}/>
     <Route path="/home" element={<Wrapped><HomePage/></Wrapped>}/>
     <Route path="/courses" element={<Wrapped><CoursesPage/></Wrapped>}/>

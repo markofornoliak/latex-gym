@@ -1,44 +1,113 @@
 # LaTeX gym
 
-LaTeX gym is a static, local-first educational web application for learning LaTeX through a repeated cycle of theory, examples, writing, compilation, debugging, validation, and revision. The interface follows an academic editorial design rather than a dashboard aesthetic and is designed mobile-first while expanding into a three-pane workspace on desktop.
+LaTeX gym is a static, local-first educational web application for learning LaTeX through theory, examples, writing, compilation, debugging, semantic validation, spaced retrieval and applied projects. The interface keeps an academic editorial style and is designed mobile-first while expanding into larger lesson, practice and project workspaces on desktop.
+
+## Current scope
+
+- 38 course modules.
+- 68 lessons.
+- 204 exercises.
+- 5 cumulative learning projects.
+- A searchable LaTeX reference linked to the curriculum concept graph.
+
+Curriculum IDs are treated as persistent data identifiers because progress, bookmarks, drafts and mastery evidence depend on them.
 
 ## Features
 
-- 15 course modules with structured lesson data and 45 initial exercises.
-- Theory, annotated examples, practical tasks, progressive hints, and non-exclusive reference solutions.
-- CodeMirror 6 LaTeX editor with line numbers, brace matching, auto-closing, indentation, completions, undo/redo, formatting, reset, and fullscreen mode.
-- A Web Worker-based educational compiler that checks common structural errors without blocking the UI.
-- KaTeX rendering for supported mathematical fragments and structured local document previews.
-- Semantic exercise validation: solutions are checked by document structure and required concepts, not by exact source-string equality.
-- Educational diagnostics for mismatched environments, unbalanced braces, common command typos, missing packages, duplicate labels, and math-mode errors.
-- Searchable Russian/LaTeX command reference with `Ctrl/Cmd + K` search.
-- Playground with local drafts, templates, compilation, and `.tex` download.
-- Bookmarks for lessons, exercises and reference entries, plus learning history, progress, attempts, hints, deterministic spaced repetition, daily training, and streaks.
-- Versioned local persistence through Zustand/localStorage, with JSON export/import.
-- Responsive mobile navigation and desktop lesson/practice workspaces; practical panes are resizable on desktop.
-- PWA caching for the application shell, lesson data, and essential assets.
-- GitHub Pages-safe routing with `HashRouter` and Vite `base: '/latex-gym/'`.
+- Structured theory, annotated examples, practical tasks, progressive hints and non-exclusive reference solutions.
+- CodeMirror 6 LaTeX editor with line numbers, brace matching, auto-closing, indentation, completions, undo/redo, reset, save and keyboard shortcuts.
+- Real browser-side TeX compilation through the BusyTeX WASM runtime when available.
+- pdfLaTeX, XeLaTeX and LuaLaTeX engine selection in the compiler contract.
+- Multi-file project compilation and BibTeX workflows.
+- Explicit Biber capability rejection: the current browser provider does not pretend Biber succeeded.
+- A Web Worker educational preview used only as an explicitly labelled fallback when real TeX is unavailable.
+- KaTeX rendering for supported mathematical preview fragments.
+- Semantic exercise validation based on authored requirements rather than exact equality with one reference source.
+- Separate execution semantics for conceptual answers, TeX fragments, full documents and reconstruction tasks.
+- Document-level `compiles` evidence requires a real TeX PDF by default; the educational fallback does not award real-compilation mastery.
+- Diagnostics that preserve the original TeX log while adding educational explanation, likely root/cascade context and conservative multi-file attribution.
+- Adversarial validator protection against requirements satisfied only in comments or unused macro definitions.
+- Searchable command palette with `Ctrl/Cmd + K`, keyboard navigation, modal focus containment and focus restoration.
+- Playground, local drafts, templates and `.tex` download.
+- Bookmarks, learning history, attempts, hints, projects, deterministic daily training and streaks.
+- Concept mastery that distinguishes independent, hinted, revealed, transfer and project evidence.
+- Delayed-recall evidence so repeated successes in one short session do not by themselves imply durable retention.
+- Versioned local persistence with JSON export/import, bounded import payloads and migration of historical exercise/document identifiers.
+- Responsive layouts tested from 320 px phones through 4K viewports.
+- GitHub Pages-safe `HashRouter` routing under `/latex-gym/`.
 
-## Screenshots and visual QA
+## Compiler architecture
 
-The primary visual benchmark is the four-screen mobile flow: onboarding, home, lesson and practice. The production deployment workflow captures the real built application in headless Chrome on every release so visual checks are performed against production assets rather than a separate mockup.
+`LatexCompiler` is the stable provider interface. The primary provider is `WasmTexCompilerProvider`, backed by a dedicated BusyTeX Worker. Compiler requests are cancellable; timeout or cancellation tears down the affected Worker so a timed-out TeX process cannot continue mutating later requests.
 
-The `latex-gym-visual-qa` Actions artifact contains:
+The provider supports:
 
-- `onboarding-390.png`;
-- `home-320.png` and `home-390.png`;
-- `lesson-390.png`;
-- `home-768.png`;
-- `lesson-1440.png`;
-- `practice-390.png` and `practice-1920.png`.
+- pdfLaTeX;
+- XeLaTeX;
+- LuaLaTeX;
+- multi-file projects;
+- BibTeX;
+- repeated TeX passes when the BusyTeX pipeline requires them.
 
-The QA step also opens each corresponding hash route, checks for expected page content and fails if the application renders the not-found fallback. This keeps the reference mobile proportions under test while also checking tablet and desktop breakpoints at 320, 390, 768, 1440 and 1920 pixels.
+Biber, shell escape and SyncTeX are not claimed by the current provider. Unsupported capability is reported explicitly rather than converted into a fake success.
+
+If the real runtime cannot be used, `EducationalPreviewCompiler` provides a fast structural preview in a separate Worker. Its result carries a fallback reason and lower compiler authority. A full-document assessment that requires real TeX therefore remains unconfirmed until a real PDF has been produced.
+
+The BusyTeX runtime assets are fetched during production preparation from the reviewed upstream distribution and are accepted only when their SHA-256 hashes match the repository manifest. The full TeX runtime is not advertised as universally offline: browser caching can help later after an asset is used, but first availability depends on the runtime assets being reachable. PWA installation precaches only the application shell; heavy hashed curriculum, editor, KaTeX and font assets are cached on demand.
+
+## Exercise execution and validation
+
+Each exercise is resolved into one of four execution classes:
+
+- `concept` — a concise answer surface, no fake compilation;
+- `fragment` — CodeMirror plus structural/semantic validators, without forcing an incomplete TeX fragment into a standalone document;
+- `document` — a full TeX compilation workflow;
+- `reconstruction` — compiled target and learner document with semantic comparison criteria.
+
+Validators include document class, document options, environments, commands, packages, required/forbidden structural text, regex constraints, paragraphs, inline/display math, balanced environments and compilation authority.
+
+The validator layer strips comments and ignores bodies of unused command definitions for active structural evidence. This prevents obvious false-positive solutions such as satisfying `\\section` solely inside a comment.
+
+## Learning evidence
+
+Mastery is not identical to completion count. The local model records score, attempts, mistakes, independence, hints, solution reveals, transfer/project evidence, real-compilation evidence, stability and review timing.
+
+A successful independent retrieval after a meaningful delay is recorded separately from immediate repetition. Same-session repetition may improve familiarity but receives strongly limited stability growth until delayed recall exists. Existing persisted mastery is migrated conservatively; schema upgrades do not intentionally reset old progress.
+
+## Persistence and import safety
+
+Application state is versioned. User documents are persisted separately from the Zustand progress payload and are migrated from earlier draft keys when necessary.
+
+JSON import performs structural sanitization and also enforces operational bounds on overall payload size, collection sizes, document count, per-document size, aggregate document size and unsafe record keys. An oversized or malformed import fails before it is written into local document storage.
+
+## Accessibility
+
+The application includes a skip link and a focusable `<main>` landmark. SPA route transitions move focus to main content so keyboard and screen-reader users receive a meaningful navigation target. The command palette uses dialog semantics, a combobox/listbox relationship, keyboard navigation, Escape close, focus containment and opener-focus restoration.
+
+## Quality gates
+
+Pull requests to `main` and production pushes run the same core build gate:
+
+1. install dependencies;
+2. regenerate/validate the curriculum snapshot;
+3. TypeScript typecheck;
+4. full Vitest suite;
+5. curriculum integrity checks;
+6. production Vite build and bundle budgets for bootstrap, deferred curriculum data, executable lazy chunks and CSS;
+7. verified BusyTeX smoke-runtime preparation;
+8. browser TeX matrix: pdfLaTeX, XeLaTeX, LuaLaTeX and BibTeX, each required to emit real PDF bytes;
+9. behavioral browser smoke: bookmark mutation, command-palette focus behavior and SPA route focus;
+10. deep-route and responsive visual QA at 320, 360, 390, 430, 768, 1024, 1280, 1440, 1920, 2560 and 3840 pixel widths.
+
+The `latex-gym-visual-qa` Actions artifact contains screenshots from the current device/route matrix. The workflow also fails on not-found route fallbacks and detected browser JavaScript errors.
+
+GitHub Pages deployment is performed only for non-pull-request runs after the build gate succeeds.
 
 ## Technology
 
-React, TypeScript, Vite, React Router, Zustand, CodeMirror 6, KaTeX, Vite PWA, Vitest, Web Workers.
+React, TypeScript, Vite, React Router, Zustand, CodeMirror 6, KaTeX, Vite PWA, Vitest, Web Workers and BusyTeX/WASM.
 
-No backend, database, authentication server, paid API, or external AI API is required.
+No backend, database, authentication server, paid API or external AI API is required for the learning application.
 
 ## Local development
 
@@ -56,6 +125,12 @@ npm run typecheck
 npm test
 ```
 
+Curriculum-only gate:
+
+```bash
+npm run curriculum:check
+```
+
 Production build:
 
 ```bash
@@ -63,29 +138,17 @@ npm run build
 npm run preview
 ```
 
+The real BusyTeX runtime is prepared separately by the production workflow. `scripts/prepare-busytex.mjs` supports `smoke` and `full` preparation modes and verifies every downloaded runtime asset against the reviewed SHA-256 manifest.
+
 ## GitHub Pages deployment
 
-The repository is configured for the project URL:
+The repository targets:
 
 `https://markofornoliak.github.io/latex-gym/`
 
-`vite.config.ts` uses `/latex-gym/` as the production base and the application uses hash routing, so route refreshes and direct entry remain compatible with a Pages project subpath.
+`vite.config.ts` uses `/latex-gym/` as the production base and the application uses hash routing, so deep links remain compatible with the Pages project subpath.
 
-The workflow in `.github/workflows/deploy.yml` runs on pushes to `main`:
-
-1. checkout;
-2. setup Node;
-3. `npm ci`;
-4. typecheck;
-5. unit tests;
-6. production build;
-7. production route and responsive screenshot QA in headless Chrome;
-8. upload the visual-QA artifact;
-9. configure Pages;
-10. upload `dist` as the Pages artifact;
-11. deploy to GitHub Pages.
-
-In the repository settings, Pages must use **GitHub Actions** as its source.
+In repository settings, Pages must use **GitHub Actions** as its source.
 
 ## Project architecture
 
@@ -93,60 +156,23 @@ In the repository settings, Pages must use **GitHub Actions** as its source.
 src/
   app/             routing and application composition
   components/      reusable UI, editor, preview and shell
-  data/            curriculum, editorial content and reference data
+  data/            canonical curriculum, concepts, projects and reference data
+  hooks/           document and compilation session lifecycle
   pages/           route-level screens
-  services/        compiler, validation, spaced repetition
-  store/           versioned local learning state
+  services/        compiler, diagnostics, validation, graph and spaced repetition
+  store/           versioned local learning state and persistence schema
   styles/          design system and responsive layout
-  types/           shared domain types
+  types/           shared domain contracts
+scripts/
+  qa/              production browser smoke harnesses
 ```
 
-Course content is independent of page components. `src/data/courses.ts` exports modules, lessons, and exercises as structured data, allowing hundreds of lessons to be added without rewriting the frontend. Small benchmark-specific editorial refinements are also kept in the data layer rather than presentation components.
+Course content remains independent of page components. Runtime indexes, course navigation, progress, daily training and project links derive from the canonical curriculum data instead of being duplicated in the UI.
 
-## Adding a lesson
+## Adding or changing curriculum content
 
-Add a lesson seed in `src/data/courses.ts` with:
+Preserve existing IDs unless a deliberate migration is supplied. A lesson or exercise change must keep the curriculum quality gate green.
 
-- module metadata;
-- lesson id/title/difficulty;
-- theory blocks;
-- a complete example;
-- related commands;
-- exercises.
+Exercises define instructions, requirements, starter source, validators, hints, a reference solution, concepts and a practice mode. `execution` may be authored explicitly when inference from validators is not sufficient. A `compiles` validator may also specify compiler authority explicitly; otherwise full document/reconstruction work defaults to real-TeX authority.
 
-The routes, course table of contents, progress calculation, daily training and lesson navigation derive from the data automatically.
-
-## Adding an exercise
-
-Each exercise defines instructions, requirements, starter source, validators, hints, a reference solution, concepts and a practice mode.
-
-Validators are semantic rules such as:
-
-- `documentClass`;
-- `environment`;
-- `command` with an optional minimum count;
-- `containsText`;
-- `paragraph`;
-- `inlineMath`;
-- `displayMath`;
-- `compiles`.
-
-This means a learner can submit a logically equivalent solution instead of reproducing the reference source exactly.
-
-## Compiler architecture
-
-`LatexCompiler` is the stable provider interface.
-
-The default `EducationalCompiler` runs in a Web Worker and intentionally supports a documented educational subset. It parses supported document structures into a local preview and returns structured diagnostics. KaTeX handles supported mathematical fragments.
-
-`WasmTexCompilerProvider` is isolated behind the same interface for a future full TeX/WASM bundle. The current build does **not** claim that unsupported packages or arbitrary TeX were compiled successfully. This separation keeps the initial GitHub Pages bundle lightweight and prevents a fake “compiler” experience.
-
-A full WASM engine can later replace the provider without changing the editor, practice flow, validators, error UI, or preview contract.
-
-## Browser notes
-
-The application relies on modern browser support for ES2022, Web Workers, `localStorage`, and the File/Blob APIs. Clipboard operations require the browser to grant clipboard permission. PWA installation and offline behavior vary slightly between browser vendors. The educational preview cannot reproduce arbitrary LaTeX packages, external file contents, or a complete TeX distribution; such constructs are reported or represented explicitly rather than silently faked.
-
-## Future development
-
-The architecture leaves clean extension points for a full WASM TeX distribution, richer source-to-output mapping, additional reference entries, hundreds of lessons, and an optional `TutorProvider` backed by deterministic rules or a future external tutor service.
+The curriculum linter checks structural integrity, references, pedagogy dependencies, validator shape, reference-solution compatibility, project references and concept-graph consistency. Known warnings are held to an explicit regression baseline so new warning classes or counts cannot accumulate silently.

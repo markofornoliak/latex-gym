@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { curriculum } from '../data/curriculumRuntime';
+import { CURRICULUM_LESSON_COUNT } from '../data/curriculumMeta';
 import { useAppStore } from '../store/useAppStore';
 import { BookIcon, PenIcon, ProjectIcon, ReferenceIcon, SearchIcon, SettingsIcon } from './Icons';
 import { Wordmark } from './Wordmark';
@@ -19,7 +19,7 @@ export function AppShell({children,plain=false}:{children:ReactNode;plain?:boole
   const streak=useAppStore(state=>state.streak);
   const settings=useAppStore(state=>state.settings);
   const [palette,setPalette]=useState(false);
-  const percent=Math.round((completed.length/Math.max(1,curriculum.lessons.length))*100);
+  const percent=Math.round((completed.length/Math.max(1,CURRICULUM_LESSON_COUNT))*100);
   const immersive=!plain&&(location.pathname.startsWith('/lesson/')||/^\/practice\/[^/]+/.test(location.pathname));
   const showMobileNav=!plain&&!immersive&&!location.pathname.startsWith('/practice/');
   const scale=settings.textSize==='small'?.94:settings.textSize==='large'?1.08:1;
@@ -43,7 +43,7 @@ export function AppShell({children,plain=false}:{children:ReactNode;plain?:boole
           <summary aria-label={`Прогресс курса ${percent}%`}><ProgressRing percent={percent}/></summary>
           <div className="progress-popover">
             <h3>Прогресс обучения</h3>
-            <p>Пройдено уроков: <strong>{completed.length} / {curriculum.lessons.length}</strong></p>
+            <p>Пройдено уроков: <strong>{completed.length} / {CURRICULUM_LESSON_COUNT}</strong></p>
             <p>Текущая серия: <strong>{streak.count} дн.</strong></p>
             <Link to="/progress">Подробный прогресс</Link>
           </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { curriculum } from '../data/curriculumRuntime';
 import { searchRuntimeReference } from '../data/runtimeCatalog';
@@ -12,19 +12,32 @@ export default function CommandPalette({onClose}:{onClose:()=>void}){
   const [query,setQuery]=useState('');
   const [active,setActive]=useState(0);
   const inputRef=useRef<HTMLInputElement>(null);
+  const dialogRef=useRef<HTMLElement>(null);
   const results=useMemo(()=>collectResults(query),[query]);
-  useEffect(()=>{inputRef.current?.focus();},[]);
+  useEffect(()=>{
+    const previous=document.activeElement instanceof HTMLElement?document.activeElement:null;
+    inputRef.current?.focus();
+    return()=>{if(previous?.isConnected)previous.focus();};
+  },[]);
   useEffect(()=>{setActive(0);},[query]);
   const choose=(item:PaletteResult)=>{onClose();navigate(item.to);};
+  const onDialogKeyDown=(event:ReactKeyboardEvent<HTMLElement>)=>{
+    if(event.key==='Escape'){event.preventDefault();event.stopPropagation();onClose();return;}
+    if(event.key!=='Tab')return;
+    const focusable=[...(dialogRef.current?.querySelectorAll<HTMLElement>('input,button,[href],[tabindex]:not([tabindex="-1"])')??[])].filter(element=>!element.hasAttribute('disabled')&&element.getAttribute('aria-hidden')!=='true');
+    if(!focusable.length){event.preventDefault();return;}
+    const first=focusable[0],last=focusable.at(-1)!;
+    if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+  };
   return <div className="palette-backdrop" role="presentation" onMouseDown={onClose}>
-    <section className="command-palette command-palette--deep" role="dialog" aria-modal="true" aria-label="Поиск по LaTeX gym" onMouseDown={event=>event.stopPropagation()}>
-      <div className="palette-search"><SearchIcon/><input ref={inputRef} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Урок, команда, задача или «дробь»…" autoComplete="off" aria-activedescendant={results[active]?`palette-${results[active].id}`:undefined} onKeyDown={event=>{
-        if(event.key==='Escape'){event.preventDefault();onClose();}
+    <section ref={dialogRef} className="command-palette command-palette--deep" role="dialog" aria-modal="true" aria-label="Поиск по LaTeX gym" onMouseDown={event=>event.stopPropagation()} onKeyDown={onDialogKeyDown}>
+      <div className="palette-search"><SearchIcon/><input ref={inputRef} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Урок, команда, задача или «дробь»…" autoComplete="off" role="combobox" aria-expanded="true" aria-autocomplete="list" aria-controls="palette-results" aria-activedescendant={results[active]?`palette-${results[active].id}`:undefined} onKeyDown={event=>{
         if(event.key==='ArrowDown'){event.preventDefault();setActive(value=>Math.min(results.length-1,value+1));}
         if(event.key==='ArrowUp'){event.preventDefault();setActive(value=>Math.max(0,value-1));}
         if(event.key==='Enter'&&results[active]){event.preventDefault();choose(results[active]);}
       }}/></div>
-      <div className="palette-results" role="listbox" aria-label="Результаты поиска">{results.map((item,index)=><button id={`palette-${item.id}`} role="option" aria-selected={index===active} className={index===active?'active':''} key={`${item.kind}:${item.id}`} onMouseEnter={()=>setActive(index)} onClick={()=>choose(item)}><span className="palette-kind">{item.kind}</span><span className="palette-result-copy"><strong>{item.title}</strong><small>{item.meta}</small></span>{item.code&&<code>{item.code}</code>}</button>)}</div>
+      <div id="palette-results" className="palette-results" role="listbox" aria-label="Результаты поиска">{results.map((item,index)=><button id={`palette-${item.id}`} role="option" aria-selected={index===active} className={index===active?'active':''} key={`${item.kind}:${item.id}`} onMouseEnter={()=>setActive(index)} onClick={()=>choose(item)}><span className="palette-kind">{item.kind}</span><span className="palette-result-copy"><strong>{item.title}</strong><small>{item.meta}</small></span>{item.code&&<code>{item.code}</code>}</button>)}</div>
       {!results.length&&<p className="palette-empty">Совпадений нет. Попробуйте термин, синтаксис команды или название темы.</p>}
       <div className="palette-foot"><span>↑ ↓ выбор</span><span>Enter открыть</span><span>Esc закрыть</span></div>
     </section>

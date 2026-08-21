@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>LaTeX Gym behavioral smoke</title>
+<body data-state="starting">BEHAVIOR_SMOKE_STARTING
+<iframe id="app" title="LaTeX Gym QA"></iframe>
+<script>
+const frame=document.getElementById('app');
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const waitFor=async(check,label,timeout=12000)=>{
+  const started=Date.now();
+  while(Date.now()-started<timeout){const value=check();if(value)return value;await sleep(60);}
+  throw new Error(`timeout: ${label}`);
+};
+const fail=message=>{document.body.dataset.state='failed';document.body.textContent=`BEHAVIOR_SMOKE_FAIL ${message}`;};
+(async()=>{
+  try{
+    const loaded=new Promise((resolve,reject)=>{frame.addEventListener('load',resolve,{once:true});setTimeout(()=>reject(new Error('iframe load timeout')),12000);});
+    frame.src='./#/practice/e01';
+    await loaded;
+    const win=frame.contentWindow;
+    const doc=frame.contentDocument;
+    if(!win||!doc)throw new Error('same-origin app frame unavailable');
+    const keyEvent=(type,init)=>new win.KeyboardEvent(type,{bubbles:true,cancelable:true,...init});
+    const bookmark=await waitFor(()=>doc.querySelector('button.practice-bookmark'),'bookmark button');
+    const originalLabel=bookmark.getAttribute('aria-label');
+    bookmark.click();
+    await waitFor(()=>bookmark.getAttribute('aria-label')!==originalLabel,'bookmark toggle');
+    bookmark.click();
+    await waitFor(()=>bookmark.getAttribute('aria-label')===originalLabel,'bookmark restore');
+
+    bookmark.focus();
+    win.dispatchEvent(keyEvent('keydown',{key:'k',ctrlKey:true}));
+    const dialog=await waitFor(()=>doc.querySelector('.command-palette[role="dialog"]'),'command palette');
+    const input=await waitFor(()=>dialog.querySelector('input[role="combobox"]'),'palette input');
+    if(doc.activeElement!==input)throw new Error('palette input did not receive focus');
+    input.dispatchEvent(keyEvent('keydown',{key:'Tab',shiftKey:true}));
+    if(doc.activeElement===input)throw new Error('focus trap did not wrap Shift+Tab');
+    doc.activeElement?.dispatchEvent(keyEvent('keydown',{key:'Escape'}));
+    await waitFor(()=>!doc.querySelector('.command-palette'),'palette close');
+    if(doc.activeElement!==bookmark)throw new Error('palette did not restore opener focus');
+
+    win.location.hash='#/lesson/what-is-latex';
+    await waitFor(()=>[...doc.querySelectorAll('h1')].some(node=>node.textContent?.includes('Что такое LaTeX')),'lesson navigation');
+    await waitFor(()=>doc.activeElement?.id==='main-content','route focus');
+
+    document.body.dataset.state='passed';
+    document.body.textContent='BEHAVIOR_SMOKE_PASS bookmark,palette-focus,route-focus';
+  }catch(error){fail(error instanceof Error?error.message:String(error));}
+})();
+</script>
+</body>
