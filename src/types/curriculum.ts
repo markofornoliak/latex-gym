@@ -34,7 +34,12 @@ export type ValidatorRule =
 export type Exercise = {
   id:string;lessonId:string;category:PracticeCategory;difficulty:Difficulty;
   mode:'Написать код'|'Исправить ошибку'|'Предсказать результат'|'Дополнить документ'|'Рефакторинг'|'Найти ошибку'|'Воссоздать результат'|'Текст → LaTeX'|'Улучшить код'|'Собрать документ'|'Объяснить'|'Архитектура';
-  title:string;instructions:string;requirements:string[];starterCode:string;validators:ValidatorRule[];hints:string[];solution:string;concepts:string[];prerequisites?:string[];
+  title:string;instructions:string;requirements:string[];starterCode:string;validators:ValidatorRule[];hints:string[];solution:string;
+  /** Concepts meaningfully used by the task. */
+  concepts:string[];
+  /** Narrower concepts for which task success/failure is valid mastery evidence. Defaults to concepts. */
+  evidenceConcepts?:string[];
+  prerequisites?:string[];
 };
 export type LessonPedagogy={objective:string;prerequisites:string[];introduces:string[];reinforces:string[];misconceptions:string[];practiceObjective:string;masteryCriteria:string[]};
 export type Lesson={id:string;moduleId:string;number:number;title:string;subtitle:string;difficulty:Difficulty;theory:TheoryBlock[];content?:LearningBlock[];pedagogy?:LessonPedagogy;examples:ExampleBlock[];exercises:Exercise[];relatedCommands:string[];projectStage?:string};
