@@ -1,8 +1,8 @@
-import { curriculumSource } from './curriculumSource';
+import { materializeCurriculumSource } from './curriculumSource';
 
-const definitions=curriculumSource.concepts;
+const definitions=materializeCurriculumSource().concepts;
 
-/** Compatibility adapter. Educational concept definitions are authored in curriculumSource.json. */
+/** Compatibility adapter. Educational concept definitions are materialized from curriculumSource.json. */
 export const concepts=definitions;
 export const conceptById=new Map(definitions.map(definition=>[definition.id,definition]));
 export const hasConcept=(id:string)=>conceptById.has(id);
