@@ -1,5 +1,6 @@
 import sourceJson from './curriculumSource.json';
 import { canonicalConceptId } from './conceptAliases';
+import { applyCurriculumSemantics } from './curriculumSemantics';
 import { assertCanonicalCurriculumSchema } from './curriculumSchema';
 import type { CanonicalCurriculumSource } from './curriculumSchema';
 import type { Exercise, Lesson } from '../types';
@@ -16,7 +17,9 @@ export type MaterializedCurriculum=CanonicalCurriculumSource&{
  *
  * Lessons live only under modules and exercises live only under lessons. Flat lesson
  * and exercise catalogs are derived when the build runs, so an educational fact is
- * never maintained in two authoring structures.
+ * never maintained in two authoring structures. A deliberately tiny semantic
+ * correction layer is applied after cloning to keep hard knowledge prerequisites
+ * distinct from historical course ordering without duplicating content.
  */
 const rawCurriculumSource:unknown=sourceJson;
 assertCanonicalCurriculumSchema(rawCurriculumSource);
@@ -26,7 +29,7 @@ export function materializeCurriculumSource():MaterializedCurriculum{
   const source=structuredClone(curriculumSource);
   const lessons=source.modules.flatMap(module=>module.lessons);
   const exercises=lessons.flatMap(lesson=>lesson.exercises);
-  return {...source,lessons,exercises};
+  return applyCurriculumSemantics({...source,lessons,exercises});
 }
 
 /**
@@ -55,6 +58,11 @@ export function assertCanonicalCurriculumSource(source:MaterializedCurriculum){
   }
   for(const exercise of source.exercises){
     check(`exercise:${exercise.id}:concepts`,exercise.concepts);
+    const evidence=(exercise as Exercise&{evidenceConcepts?:unknown}).evidenceConcepts;
+    if(evidence!==undefined&&(!Array.isArray(evidence)||evidence.some(id=>typeof id!=='string'))){
+      throw new Error(`Exercise ${exercise.id} has malformed evidenceConcepts; expected string[].`);
+    }
+    check(`exercise:${exercise.id}:evidenceConcepts`,(evidence as string[]|undefined)??[]);
     check(`exercise:${exercise.id}:prerequisites`,exercise.prerequisites??[]);
   }
   for(const project of source.projects){
