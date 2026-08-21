@@ -25,7 +25,7 @@ export type ValidatorRule =
   | { type: 'package'; value: string; message: string; hint: string }
   | { type: 'containsText'; value: string; message: string; hint: string }
   | { type: 'forbiddenText'; value: string; message: string; hint: string }
-  | { type: 'regex'; value: string; flags?: string; message: string; hint: string }
+  | { type: 'regex'; value: string; flags?: string; scope?:'active'|'raw'; message: string; hint: string }
   | { type: 'paragraph'; message: string; hint: string }
   | { type: 'inlineMath'; message: string; hint: string }
   | { type: 'displayMath'; message: string; hint: string }
