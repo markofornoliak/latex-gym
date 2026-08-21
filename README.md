@@ -4,7 +4,7 @@ LaTeX gym is a static, local-first educational web application for learning LaTe
 
 ## Current scope
 
-- 15 course modules.
+- 38 course modules.
 - 68 lessons.
 - 204 exercises.
 - 5 cumulative learning projects.
@@ -53,7 +53,7 @@ Biber, shell escape and SyncTeX are not claimed by the current provider. Unsuppo
 
 If the real runtime cannot be used, `EducationalPreviewCompiler` provides a fast structural preview in a separate Worker. Its result carries a fallback reason and lower compiler authority. A full-document assessment that requires real TeX therefore remains unconfirmed until a real PDF has been produced.
 
-The BusyTeX runtime assets are fetched during production preparation from the reviewed upstream distribution and are accepted only when their SHA-256 hashes match the repository manifest. The full TeX runtime is not advertised as universally offline: browser caching can help after a successful load, but first availability depends on the runtime assets being reachable.
+The BusyTeX runtime assets are fetched during production preparation from the reviewed upstream distribution and are accepted only when their SHA-256 hashes match the repository manifest. The full TeX runtime is not advertised as universally offline: browser caching can help later after an asset is used, but first availability depends on the runtime assets being reachable. PWA installation precaches only the application shell; heavy hashed curriculum, editor, KaTeX and font assets are cached on demand.
 
 ## Exercise execution and validation
 
@@ -93,7 +93,7 @@ Pull requests to `main` and production pushes run the same core build gate:
 3. TypeScript typecheck;
 4. full Vitest suite;
 5. curriculum integrity checks;
-6. production Vite build and bundle budgets;
+6. production Vite build and bundle budgets for bootstrap, deferred curriculum data, executable lazy chunks and CSS;
 7. verified BusyTeX smoke-runtime preparation;
 8. browser TeX matrix: pdfLaTeX, XeLaTeX, LuaLaTeX and BibTeX, each required to emit real PDF bytes;
 9. behavioral browser smoke: bookmark mutation, command-palette focus behavior and SPA route focus;
