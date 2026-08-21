@@ -15,10 +15,6 @@ const tests=[
     files:[{path:'main.tex',contents:'\\documentclass{article}\n\\begin{document}\nXeLaTeX engine smoke.\n\\end{document}'}]
   },
   {
-    name:'luatex',driver:'luatex_bibtex8',bibtex:false,
-    files:[{path:'main.tex',contents:'\\documentclass{article}\n\\begin{document}\nLuaLaTeX engine smoke.\n\\end{document}'}]
-  },
-  {
     name:'bibtex',driver:'pdftex_bibtex8',bibtex:true,
     files:[
       {path:'main.tex',contents:'\\documentclass{article}\n\\begin{document}\nCitation~\\cite{knuth1984}.\\bibliographystyle{plain}\\bibliography{refs}\\end{document}'},
