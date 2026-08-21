@@ -17,6 +17,7 @@ export function validateDependencyStructure(input:Input):DependencyValidationIss
   addDuplicatePrerequisites(input,issues);
   addExerciseChronologyIssues(input,conceptIds,issues);
   addConstraintCycleIssues(input,conceptIds,issues);
+  addUnreachableConceptIssues(input.concepts,conceptIds,issues);
   addDisconnectedRegionIssues(input.concepts,conceptIds,issues);
   return issues;
 }
@@ -81,6 +82,31 @@ function isAlreadyReportedSameLessonContradiction(component:string[],lessons:rea
   const lesson=lessons.find(item=>item.id===lessonNode.slice(2));
   const conceptId=conceptNode.slice(2);
   return Boolean(lesson?.pedagogy?.prerequisites.includes(conceptId)&&lesson.pedagogy.introduces.includes(conceptId));
+}
+
+function addUnreachableConceptIssues(concepts:readonly ConceptDefinition[],conceptIds:Set<string>,issues:DependencyValidationIssue[]){
+  if(!conceptIds.has('latex-model'))return;
+  const dependents=new Map<string,Set<string>>();
+  for(const concept of concepts)dependents.set(concept.id,new Set());
+  for(const concept of concepts){
+    for(const prerequisite of concept.prerequisites){
+      if(conceptIds.has(prerequisite))dependents.get(prerequisite)!.add(concept.id);
+    }
+  }
+  const reachable=new Set<string>(['latex-model']);
+  const stack=['latex-model'];
+  while(stack.length){
+    const id=stack.pop()!;
+    for(const dependent of dependents.get(id)??[]){
+      if(reachable.has(dependent))continue;
+      reachable.add(dependent);
+      stack.push(dependent);
+    }
+  }
+  for(const concept of concepts){
+    if(reachable.has(concept.id))continue;
+    issues.push({severity:'warning',code:'unreachable-concept',conceptId:concept.id,message:'Concept '+concept.id+' cannot be reached from curriculum foundation latex-model through prerequisite direction.'});
+  }
 }
 
 function addDisconnectedRegionIssues(concepts:readonly ConceptDefinition[],conceptIds:Set<string>,issues:DependencyValidationIssue[]){
