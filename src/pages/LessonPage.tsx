@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { AccessibleTabs } from '../components/AccessibleTabs';
 import { BackIcon, BookmarkIcon, ChevronIcon } from '../components/Icons';
 import { CodeBlock } from '../components/CodeBlock';
 import { LatexPreview } from '../components/LatexPreview';
@@ -11,6 +12,11 @@ import type { CompileResult, TheoryBlock as TheoryBlockType } from '../types';
 
 type Tab='theory'|'example'|'practice';
 const {lessons}=curriculum;
+const lessonTabs=[
+  {id:'theory' as const,label:'1 Теория',tabId:'lesson-tab-theory',panelId:'lesson-panel'},
+  {id:'example' as const,label:'2 Пример',tabId:'lesson-tab-example',panelId:'lesson-panel'},
+  {id:'practice' as const,label:'3 Практика',tabId:'lesson-tab-practice',panelId:'lesson-panel'}
+];
 
 export function LessonPage(){
   const {lessonId}=useParams();
@@ -60,6 +66,7 @@ export function LessonPage(){
     if(next)navigate(`/lesson/${next.id}`);
     else navigate('/progress');
   };
+  const changeTab=(nextTab:Tab)=>{setTab(nextTab);setSlide(0);};
 
   return <div className="lesson-page" data-theory-steps={theoryCount} data-example-count={lesson.examples.length}>
     <aside className="lesson-sidebar" aria-label="Содержание курса">
@@ -80,13 +87,9 @@ export function LessonPage(){
         <div className="hero-rule"><span/></div>
       </header>
 
-      <div className="lesson-tabs" role="tablist" aria-label="Режим урока">
-        <button role="tab" aria-selected={tab==='theory'} className={tab==='theory'?'active':''} onClick={()=>{setTab('theory');setSlide(0);}}>1 Теория</button>
-        <button role="tab" aria-selected={tab==='example'} className={tab==='example'?'active':''} onClick={()=>{setTab('example');setSlide(0);}}>2 Пример</button>
-        <button role="tab" aria-selected={tab==='practice'} className={tab==='practice'?'active':''} onClick={()=>{setTab('practice');setSlide(0);}}>3 Практика</button>
-      </div>
+      <AccessibleTabs className="lesson-tabs" label="Режим урока" options={lessonTabs} active={tab} onChange={changeTab}/>
 
-      <section className="lesson-content" aria-live="polite">
+      <section id="lesson-panel" role="tabpanel" aria-labelledby={`lesson-tab-${tab}`} className="lesson-content" aria-live="polite">
         {tab==='theory'&&activeLearningBlock&&<LearningBlockView block={activeLearningBlock}/>} 
         {tab==='theory'&&!activeLearningBlock&&activeTheory&&<TheoryBlock block={activeTheory}/>} 
         {tab==='example'&&activeExample&&<div className="example-mode"><div><span className="eyebrow">ПРИМЕР {safeSlide+1} ИЗ {lesson.examples.length}</span><h2>{activeExample.title}</h2><p>{activeExample.description}</p><CodeBlock code={activeExample.code}/></div><div className="example-output"><div className="mode-label">РЕЗУЛЬТАТ</div><LatexPreview result={exampleResult}/></div></div>}
