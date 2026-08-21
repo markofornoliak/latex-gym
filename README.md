@@ -26,14 +26,17 @@ Curriculum IDs are treated as persistent data identifiers because progress, book
 - Separate execution semantics for conceptual answers, TeX fragments, full documents and reconstruction tasks.
 - Document-level `compiles` evidence requires a real TeX PDF by default; the educational fallback does not award real-compilation mastery.
 - Diagnostics that preserve the original TeX log while adding educational explanation, likely root/cascade context and conservative multi-file attribution.
+- Source navigation from diagnostics only when the current file/line mapping is reliable; missing position data is communicated explicitly rather than failing silently.
 - Adversarial validator protection against requirements satisfied only in comments or unused macro definitions.
 - Searchable command palette with `Ctrl/Cmd + K`, keyboard navigation, modal focus containment and focus restoration.
+- Accessible keyboard tab behavior across lesson, practice and playground workspaces.
 - Playground, local drafts, templates and `.tex` download.
 - Bookmarks, learning history, attempts, hints, projects, deterministic daily training and streaks.
 - Concept mastery that distinguishes independent, hinted, revealed, transfer and project evidence.
 - Delayed-recall evidence so repeated successes in one short session do not by themselves imply durable retention.
 - Versioned local persistence with JSON export/import, bounded import payloads and migration of historical exercise/document identifiers.
 - Responsive layouts tested from 320 px phones through 4K viewports.
+- PWA install/update/offline lifecycle communication without claiming that the first full TeX runtime load is universally offline.
 - GitHub Pages-safe `HashRouter` routing under `/latex-gym/`.
 
 ## Compiler architecture
@@ -82,7 +85,9 @@ JSON import performs structural sanitization and also enforces operational bound
 
 ## Accessibility
 
-The application includes a skip link and a focusable `<main>` landmark. SPA route transitions move focus to main content so keyboard and screen-reader users receive a meaningful navigation target. The command palette uses dialog semantics, a combobox/listbox relationship, keyboard navigation, Escape close, focus containment and opener-focus restoration.
+The application includes a skip link and a single focusable `<main>` landmark owned by the application shell. SPA route transitions move focus to main content; onboarding stage transitions move focus to the newly rendered heading. Modal dialogs contain keyboard focus, close with Escape and restore their opener. Tab interfaces use roving focus and arrow-key navigation, CodeMirror exposes a visible focus state, and progress visuals expose numeric progress semantics.
+
+The detailed learner-facing keyboard, focus, diagnostics, PWA and responsive contracts are documented in [`docs/frontend-interaction-contract.md`](docs/frontend-interaction-contract.md).
 
 ## Quality gates
 
@@ -96,10 +101,11 @@ Pull requests to `main` and production pushes run the same core build gate:
 6. production Vite build and bundle budgets for bootstrap, deferred curriculum data, executable lazy chunks and CSS;
 7. verified BusyTeX smoke-runtime preparation;
 8. browser TeX matrix: pdfLaTeX, XeLaTeX, LuaLaTeX and BibTeX, each required to emit real PDF bytes;
-9. behavioral browser smoke: bookmark mutation, command-palette focus behavior and SPA route focus;
-10. deep-route and responsive visual QA at 320, 360, 390, 430, 768, 1024, 1280, 1440, 1920, 2560 and 3840 pixel widths.
+9. behavioral browser smoke: bookmark mutation, modal focus containment/restoration, diagnostic-to-editor navigation, tab keyboard behavior, SPA/onboarding focus, progress semantics and PWA capability communication;
+10. deep-route responsive capture at 320, 360, 390, 430, 768, 1024, 1280, 1440, 1920, 2560 and 3840 pixel widths;
+11. pixel-based comparison of those captures against the reviewed `qa/visual-baseline` images, with a small channel threshold and changed-pixel budget to tolerate antialiasing without accepting meaningful layout/style drift.
 
-The `latex-gym-visual-qa` Actions artifact contains screenshots from the current device/route matrix. The workflow also fails on not-found route fallbacks and detected browser JavaScript errors.
+The `latex-gym-visual-qa` Actions artifact contains screenshots from the current device/route matrix. The workflow also fails on not-found route fallbacks, detected browser JavaScript errors and visual regression beyond the approved pixel budget.
 
 GitHub Pages deployment is performed only for non-pull-request runs after the build gate succeeds.
 
@@ -164,7 +170,9 @@ src/
   styles/          design system and responsive layout
   types/           shared domain contracts
 scripts/
-  qa/              production browser smoke harnesses
+  qa/              production browser smoke and visual regression harnesses
+qa/
+  visual-baseline/ reviewed responsive screenshot baselines
 ```
 
 Course content remains independent of page components. Runtime indexes, course navigation, progress, daily training and project links derive from the canonical curriculum data instead of being duplicated in the UI.
