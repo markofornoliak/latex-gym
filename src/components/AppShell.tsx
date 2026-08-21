@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { curriculum } from '../data/curriculumRuntime';
 import { useAppStore } from '../store/useAppStore';
@@ -19,6 +19,7 @@ export function AppShell({children,plain=false}:{children:ReactNode;plain?:boole
   const streak=useAppStore(state=>state.streak);
   const settings=useAppStore(state=>state.settings);
   const [palette,setPalette]=useState(false);
+  const previousPath=useRef(location.pathname);
   const percent=Math.round((completed.length/Math.max(1,curriculum.lessons.length))*100);
   const immersive=!plain&&(location.pathname.startsWith('/lesson/')||/^\/practice\/[^/]+/.test(location.pathname));
   const showMobileNav=!plain&&!immersive&&!location.pathname.startsWith('/practice/');
@@ -32,6 +33,11 @@ export function AppShell({children,plain=false}:{children:ReactNode;plain?:boole
     window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);
   },[]);
   useEffect(()=>{setPalette(false);},[location.pathname]);
+  useEffect(()=>{
+    if(previousPath.current===location.pathname)return;
+    previousPath.current=location.pathname;
+    requestAnimationFrame(()=>document.getElementById('main-content')?.focus({preventScroll:true}));
+  },[location.pathname]);
   return <div className={`app ${showMobileNav?'app--mobile-nav':''} ${immersive?'app--immersive':''}`} style={{'--text-scale':scale} as CSSProperties}>
     <a className="skip-link" href="#main-content">К содержимому</a>
     {!plain&&!immersive&&<header className="topbar">
