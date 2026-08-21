@@ -38,6 +38,30 @@ describe('backend audit validator regressions',()=>{
     expect(validateExercise(exercise({mode:'Написать код',validators:[{...base,scope:'raw'}]}),source).ok).toBe(true);
   });
 
+  it('preserves legacy raw-regex exercises when their reference solution intentionally validates comments',()=>{
+    const legacy=exercise({
+      mode:'Архитектура',
+      solution:String.raw`\documentclass{article}
+% PREAMBLE
+\begin{document}
+% BODY
+Text
+\end{document}`,
+      validators:[{
+        type:'regex',
+        value:'PREAMBLE[\\s\\S]*\\\\begin\\{document\\}[\\s\\S]*BODY',
+        message:'boundaries',
+        hint:'comments mark the boundaries'
+      }]
+    });
+    expect(validateExercise(legacy,legacy.solution).ok).toBe(true);
+    expect(validateExercise(legacy,String.raw`\documentclass{article}
+% PREAMBLE
+\begin{document}
+Text
+\end{document}`).ok).toBe(false);
+  });
+
   it('rejects a negated conceptual chain that merely contains the expected words',()=>{
     const conceptual=exercise({
       validators:[{type:'containsText',value:'source.tex → compiler → document.pdf',message:'chain',hint:'chain'}],
