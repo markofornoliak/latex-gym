@@ -324,6 +324,8 @@ class CompilerManager implements LatexCompiler {
     const project=typeof input==='string'?singleFileProject(input):input;
     try{
       assertNotCancelled(controller.signal);
+      const requestedEngine=requestOptions.engine??'pdflatex';
+      if(!this.real.capabilities.engines.includes(requestedEngine))return await this.real.compile(project,requestOptions);
       const canTryReal=typeof Worker!=='undefined'&&!(typeof navigator!=='undefined'&&navigator.onLine===false)&&Date.now()>=this.realUnavailableUntil;
       if(canTryReal){
         try{return await this.real.compile(project,requestOptions);}
