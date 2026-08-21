@@ -1,7 +1,7 @@
 import { canonicalExerciseId, migrateDocumentKey, migrateExerciseIdList, migrateExerciseKeyedRecord, migrateLegacyDraftRecord } from '../data/exerciseIdentity';
 import type { Bookmark, ConceptMastery, HistoryEntry, MasteryEvidence } from '../types';
 
-export const PERSISTENCE_SCHEMA_VERSION=5;
+export const PERSISTENCE_SCHEMA_VERSION=6;
 export type PersistedSettings={textSize:'small'|'medium'|'large';wordWrap:boolean;autoClose:boolean;lineNumbers:boolean};
 export type PersistedOnboarding={goals:string[];experience:'new'|'basic'|'regular'|'advanced'|null;placementScore:number|null;placementTotal:number;placementEvidence:Record<string,boolean>;recommendedLessonId:string|null;completedAt:string|null};
 export type ParsedProgressImport={
@@ -51,8 +51,11 @@ function sanitizeMastery(value:Record<string,unknown>):Partial<ConceptMastery>{
   if(isFiniteNumber(value.transferSuccesses))out.transferSuccesses=finiteInteger(value.transferSuccesses,0,0);
   if(isFiniteNumber(value.projectSuccesses))out.projectSuccesses=finiteInteger(value.projectSuccesses,0,0);
   if(isFiniteNumber(value.solutionReveals))out.solutionReveals=finiteInteger(value.solutionReveals,0,0);
+  if(isFiniteNumber(value.delayedRecallSuccesses))out.delayedRecallSuccesses=finiteInteger(value.delayedRecallSuccesses,0,0);
+  if(value.lastSuccessfulDelayDays===null||isFiniteNumber(value.lastSuccessfulDelayDays))out.lastSuccessfulDelayDays=value.lastSuccessfulDelayDays===null?null:Math.max(0,Number(value.lastSuccessfulDelayDays));
   if(value.lastPracticed===null||isDateString(value.lastPracticed))out.lastPracticed=value.lastPracticed as string|null;
   if(value.nextReview===null||isDateString(value.nextReview))out.nextReview=value.nextReview as string|null;
+  if(value.lastIndependentSuccess===null||isDateString(value.lastIndependentSuccess))out.lastIndependentSuccess=value.lastIndependentSuccess as string|null;
   if(value.lastEvidence===null)out.lastEvidence=null;else if(isRecord(value.lastEvidence)){const evidence=sanitizeEvidence(value.lastEvidence);if(evidence)out.lastEvidence=evidence;}
   return out;
 }
