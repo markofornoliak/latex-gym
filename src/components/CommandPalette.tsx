@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { curriculum } from '../data/curriculumRuntime';
 import { searchRuntimeReference } from '../data/runtimeCatalog';
@@ -14,10 +14,10 @@ export default function CommandPalette({onClose}:{onClose:()=>void}){
   const inputRef=useRef<HTMLInputElement>(null);
   const dialogRef=useRef<HTMLElement>(null);
   const results=useMemo(()=>collectResults(query),[query]);
-  useEffect(()=>{
+  useLayoutEffect(()=>{
     const previous=document.activeElement instanceof HTMLElement?document.activeElement:null;
-    inputRef.current?.focus();
-    return()=>{if(previous?.isConnected)previous.focus();};
+    inputRef.current?.focus({preventScroll:true});
+    return()=>{if(previous?.isConnected)previous.focus({preventScroll:true});};
   },[]);
   useEffect(()=>{setActive(0);},[query]);
   const choose=(item:PaletteResult)=>{onClose();navigate(item.to);};
