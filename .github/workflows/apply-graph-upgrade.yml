@@ -3,6 +3,8 @@ name: Apply graph validation upgrade
 on:
   push:
     branches: [graph-validation-10-10]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
@@ -14,6 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: graph-validation-10-10
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
