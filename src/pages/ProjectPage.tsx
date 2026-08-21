@@ -1,9 +1,9 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BackIcon, ChevronIcon, PlayIcon } from '../components/Icons';
 import { LatexPreview } from '../components/LatexPreview';
 import { getRuntimeProject } from '../data/runtimeCatalog';
-import { compiler } from '../services/compiler';
+import { compiler, isCompilerCancellation } from '../services/compiler';
 import { compilationStateLabel, isCompilationBusy } from '../services/compilerState';
 import {
   encodeProjectAsset,
@@ -52,10 +52,12 @@ export function ProjectPage(){
   const [saved,setSaved]=useState(true);
   const [newFileName,setNewFileName]=useState('');
   const [fileError,setFileError]=useState('');
+  const compileRevision=useRef(0);
 
   useEffect(()=>{
     if(!project||!stage)return;
     let active=true;
+    compileRevision.current+=1;compiler.cancel('Project context changed');
     setDocumentsReady(false);
     const immediate=createProjectWorkspace(project,index,useAppStore.getState().drafts);
     setWorkspace(immediate);
@@ -68,7 +70,7 @@ export function ProjectPage(){
       setActiveFile(current=>current in hydrated.files?current:hydrated.mainFile);
       setDocumentsReady(true);
     });
-    return()=>{active=false;};
+    return()=>{active=false;compileRevision.current+=1;compiler.cancel('Project view changed');};
   },[project?.id,stage?.id,index]);
 
   const activeSource=workspace?.files[activeFile]??'';
@@ -87,6 +89,7 @@ export function ProjectPage(){
   const filePaths=sortProjectFiles(Object.keys(workspace.files),workspace.mainFile);
   const multiFile=filePaths.length>1;
   const activeIsAsset=isEncodedProjectAsset(activeSource);
+  const activeDiagnostics=(result?.diagnostics??[]).filter(diagnostic=>diagnostic.file?diagnostic.file===activeFile:activeFile===workspace.mainFile);
 
   const saveWorkspace=()=>{
     if(!documentsReady)return;
@@ -98,7 +101,7 @@ export function ProjectPage(){
     setDraft(projectFileDraftKey(project.id,activeFile),workspace.files[activeFile]??'');
     setActiveFile(path);setFileError('');
   };
-  const invalidateBuild=()=>{if(result)setResult(null);if(assessment)setAssessment(null);if(state!=='ready')setState('ready');};
+  const invalidateBuild=()=>{compileRevision.current+=1;compiler.cancel('Project source changed');if(result)setResult(null);if(assessment)setAssessment(null);if(state!=='ready')setState('ready');};
   const updateSource=(value:string)=>{
     if(!documentsReady)return;
     setWorkspace(current=>current?{...current,files:{...current.files,[activeFile]:value}}:current);
@@ -129,14 +132,18 @@ export function ProjectPage(){
   };
   const runCompile=async()=>{
     if(!documentsReady)return null;
+    const revision=++compileRevision.current;
+    const snapshot=toBinaryAwareCompilerProject(workspace);
     saveWorkspace();setState('queued');setAssessment(null);
     try{
-      const compiled=await compiler.compile(toBinaryAwareCompilerProject(workspace),{onPhase:setState});
+      const compiled=await compiler.compile(snapshot,{onPhase:phase=>{if(revision===compileRevision.current)setState(phase);}});
+      if(revision!==compileRevision.current)return null;
       setResult(compiled);
       return compiled;
     }catch(error){
+      if(revision!==compileRevision.current||isCompilerCancellation(error))return null;
       const message=error instanceof Error?error.message:String(error);setState('error');
-      const failed:CompileResult={ok:false,diagnostics:[{severity:'error',line:1,message:'Сборка проекта не завершена',explanation:'Компилятор не вернул результат, но все файлы проекта сохранены локально.',suggestion:'Проверьте структуру проекта и повторите сборку.',source:'latex-gym',originalCompilerMessage:message}],blocks:[],elapsedMs:1,engine:'educational-preview'};
+      const failed:CompileResult={ok:false,diagnostics:[{severity:'error',line:1,file:workspace.mainFile,message:'Сборка проекта не завершена',explanation:'Компилятор не вернул результат, но все файлы проекта сохранены локально.',suggestion:'Проверьте структуру проекта и повторите сборку.',source:'latex-gym',originalCompilerMessage:message}],blocks:[],elapsedMs:1,engine:'educational-preview'};
       setResult(failed);return null;
     }
   };
@@ -170,9 +177,9 @@ export function ProjectPage(){
           <div className="project-add-file"><label htmlFor="project-new-file">Добавить исходный файл</label><div><input id="project-new-file" value={newFileName} onChange={event=>{setNewFileName(event.target.value);setFileError('');}} placeholder="sections/discussion.tex" onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();addFile();}}}/><button type="button" className="secondary-button" onClick={addFile}>Добавить</button><label className="project-upload-button">PDF / изображение<input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" onChange={event=>{void uploadAsset(event);}}/></label></div>{fileError&&<small role="alert">{fileError}</small>}</div>
         </div>
 
-        <div className="project-active-file"><span>{activeFile}</span>{activeFile!==workspace.mainFile&&result?.diagnostics.length&&!activeIsAsset?<small>Диагностика TeX относится к общей сборке проекта; точные диапазоны subfile пока не симулируются.</small>:null}</div>
+        <div className="project-active-file"><span>{activeFile}</span>{activeFile!==workspace.mainFile&&result?.diagnostics.length&&!activeIsAsset?<small>{activeDiagnostics.length?'Для этого файла найдена диагностика TeX.':'Сообщения без надёжного имени файла показываются только для корневого документа.'}</small>:null}</div>
         <div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${state}`}>{compilationStateLabel(state)}</span><span>{!documentsReady?'Загрузка локальных файлов…':result?engineLabel(result):saved?'Все изменения сохранены локально':'Сохранение…'}</span></div>
-        {activeIsAsset?<div className="project-asset-inspector" role="region" aria-label={`Файл ${activeFile}`}><span>{fileKind(activeFile)}</span><h2>{activeFile}</h2><p>{formatBytes(encodedProjectAssetSize(activeSource))} · хранится локально и передаётся TeX как бинарный файл при сборке.</p><label className="secondary-button">Заменить файл<input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" onChange={event=>{void uploadAsset(event);}}/></label></div>:<Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={activeSource} onChange={updateSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onCompile={()=>{void runCompile();}} onSave={saveWorkspace} diagnostics={activeFile===workspace.mainFile?(result?.diagnostics??[]):[]}/></Suspense>}
+        {activeIsAsset?<div className="project-asset-inspector" role="region" aria-label={`Файл ${activeFile}`}><span>{fileKind(activeFile)}</span><h2>{activeFile}</h2><p>{formatBytes(encodedProjectAssetSize(activeSource))} · хранится локально и передаётся TeX как бинарный файл при сборке.</p><label className="secondary-button">Заменить файл<input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" onChange={event=>{void uploadAsset(event);}}/></label></div>:<Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={activeSource} onChange={updateSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onCompile={()=>{void runCompile();}} onSave={saveWorkspace} diagnostics={activeDiagnostics}/></Suspense>}
         {assessment&&<section className={`project-assessment ${assessment.ok?'project-assessment--ok':''}`} aria-live="polite"><header><div><span className="eyebrow">ПРОВЕРКА ЭТАПА</span><h2>{assessment.ok?'Этап подтверждён':'Проект ещё не готов'}</h2></div><small>{assessment.realCompile?'Проверено реальным TeX':'Проверка без подтверждённого real-PDF'}</small></header><div>{assessment.items.map(item=><div className="project-assessment-row" key={item.id}><span aria-hidden="true">{item.ok?'✓':'×'}</span><p><strong>{item.label}</strong>{item.detail&&<small>{item.detail}</small>}</p></div>)}</div></section>}
         <div className="project-editor-actions"><button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy||!documentsReady}><PlayIcon/>{!documentsReady?'Загрузка проекта…':busy?compilationStateLabel(state):'Скомпилировать проект'}</button><button className="primary-button" onClick={primaryAction} disabled={!documentsReady||busy||currentDone&&!next}>{currentDone?(next?'Продолжить':'Проект завершён'):'Проверить этап'}{currentDone&&next&&<ChevronIcon/>}</button></div>
       </section>
