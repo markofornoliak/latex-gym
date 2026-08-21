@@ -1,4 +1,4 @@
-@layer base, fidelity, device-layouts, laptop-polish, product, smart-editor, editor-reference, projects, project-workspace, reference, progress, interaction-polish, compiler-workspace, training-dashboard, onboarding, practice-modes;
+@layer base, fidelity, device-layouts, laptop-polish, product, smart-editor, editor-reference, projects, project-workspace, reference, progress, interaction-polish, compiler-workspace, training-dashboard, onboarding, practice-modes, frontend-audit;
 
 @import './index.css' layer(base);
 @import './fidelity.css' layer(fidelity);
@@ -16,3 +16,4 @@
 @import './trainingDashboard.css' layer(training-dashboard);
 @import './onboardingFlow.css' layer(onboarding);
 @import './modeAwarePractice.css' layer(practice-modes);
+@import './frontendAudit.css' layer(frontend-audit);
