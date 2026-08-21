@@ -7,6 +7,7 @@ import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, s
 import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { curriculum } from '../data/curriculumRuntime';
 import { analyzeLatexContext, environmentSuggestions, insertPackageIntoPreamble, packageSuggestions, referenceSuggestions } from '../services/editorIntelligence';
+import { EDITOR_DIAGNOSTIC_NAVIGATE, type EditorDiagnosticNavigateDetail } from '../services/editorNavigation';
 import { ExpandIcon } from './Icons';
 import type { Diagnostic, ReferenceEntry } from '../types';
 
@@ -22,6 +23,8 @@ type EditorProps={
   onSave?:()=>void;
   onShowShortcuts?:()=>void;
   diagnostics?:Diagnostic[];
+  allowFormat?:boolean;
+  filePath?:string;
 };
 
 const referenceEntries=curriculum.references;
@@ -37,17 +40,17 @@ const snippetCompletions:Completion[]=[
 ];
 
 const mobileAccessories=[
-  {label:'\\',insert:'\\'},
-  {label:'{ }',insert:'{}',cursorOffset:-1},
-  {label:'$',insert:'$$',cursorOffset:-1},
-  {label:'_',insert:'_'},
-  {label:'^',insert:'^'},
-  {label:'&',insert:'&'},
-  {label:'\\\\',insert:'\\\\'},
-  {label:'\\frac',insert:'\\frac{}{}',cursorOffset:-3},
-  {label:'\\sqrt',insert:'\\sqrt{}',cursorOffset:-1},
-  {label:'\\begin',insert:'\\begin{}',cursorOffset:-1},
-  {label:'\\end',insert:'\\end{}',cursorOffset:-1}
+  {label:'\\',ariaLabel:'Вставить обратную косую черту',insert:'\\'},
+  {label:'{ }',ariaLabel:'Вставить фигурные скобки',insert:'{}',cursorOffset:-1},
+  {label:'$',ariaLabel:'Вставить математический режим',insert:'$$',cursorOffset:-1},
+  {label:'_',ariaLabel:'Вставить нижний индекс',insert:'_'},
+  {label:'^',ariaLabel:'Вставить верхний индекс',insert:'^'},
+  {label:'&',ariaLabel:'Вставить точку выравнивания',insert:'&'},
+  {label:'\\\\',ariaLabel:'Вставить перенос строки LaTeX',insert:'\\\\'},
+  {label:'\\frac',ariaLabel:'Вставить дробь',insert:'\\frac{}{}',cursorOffset:-3},
+  {label:'\\sqrt',ariaLabel:'Вставить квадратный корень',insert:'\\sqrt{}',cursorOffset:-1},
+  {label:'\\begin',ariaLabel:'Вставить начало окружения',insert:'\\begin{}',cursorOffset:-1},
+  {label:'\\end',ariaLabel:'Вставить конец окружения',insert:'\\end{}',cursorOffset:-1}
 ] as const;
 
 function latexCompletion(context:CompletionContext){
@@ -142,7 +145,7 @@ class DiagnosticMarker extends GutterMarker {
   toDOM(){const marker=document.createElement('span');marker.className=`cm-diagnostic-marker cm-diagnostic-marker--${this.severity}`;marker.setAttribute('aria-hidden','true');marker.title=this.severity==='error'?'Ошибка TeX':this.severity==='warning'?'Предупреждение TeX':'Информация';return marker;}
 }
 
-export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,autoClose=true,minHeight=290,onReset,onCompile,onSave,onShowShortcuts,diagnostics=[]}:EditorProps){
+export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,autoClose=true,minHeight=290,onReset,onCompile,onSave,onShowShortcuts,diagnostics=[],allowFormat=true,filePath}:EditorProps){
   const host=useRef<HTMLDivElement>(null);
   const viewRef=useRef<EditorView|null>(null);
   const callbacks=useRef({onChange,onCompile,onSave,onShowShortcuts});
@@ -152,6 +155,8 @@ export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,au
   const settingsCompartment=useMemo(()=>new Compartment(),[]);
   const diagnosticsCompartment=useMemo(()=>new Compartment(),[]);
   const referenceEntry=getReferenceEntry(referenceId??undefined);
+  const sourceLineCount=Math.max(1,value.split('\n').length);
+  const navigableDiagnostics=diagnostics.filter(item=>item.line>=1&&item.line<=sourceLineCount);
   callbacks.current={onChange,onCompile,onSave,onShowShortcuts};
 
   useEffect(()=>{
@@ -195,12 +200,23 @@ export function CodeEditor({value,onChange,wordWrap=true,showLineNumbers=true,au
     view.dispatch({effects:diagnosticsCompartment.reconfigure(diagnosticExtensions(view,diagnostics))});
   },[diagnostics,diagnosticsCompartment,value]);
 
+  useEffect(()=>{
+    const onNavigate=(event:Event)=>{
+      const detail=(event as CustomEvent<EditorDiagnosticNavigateDetail>).detail;
+      if(!detail?.diagnostic)return;
+      if(detail.diagnostic.file&&filePath&&detail.diagnostic.file!==filePath)return;
+      jumpToDiagnostic(viewRef.current,detail.diagnostic);
+    };
+    window.addEventListener(EDITOR_DIAGNOSTIC_NAVIGATE,onNavigate);
+    return()=>window.removeEventListener(EDITOR_DIAGNOSTIC_NAVIGATE,onNavigate);
+  },[filePath]);
+
   return <div className={`editor-frame ${fullscreen?'editor-frame--fullscreen':''}`} style={{'--editor-min-height':`${minHeight}px`} as CSSProperties}>
     <div className="editor-toolbar">
-      <div className="editor-tools-left"><button type="button" onClick={()=>formatEditor(viewRef.current)} className="text-tool">Форматировать</button>{onReset&&<button type="button" onClick={onReset} className="text-tool">Сбросить</button>}<button type="button" onClick={()=>cursorReferenceId&&setReferenceId(cursorReferenceId)} className="text-tool" disabled={!cursorReferenceId} aria-label="Открыть справку для команды под курсором">Справка</button></div>
-      <div className="editor-tools-right">{diagnostics.length>0&&<div className="editor-diagnostic-nav" aria-label="Навигация по диагностике"><span>{diagnostics.filter(item=>item.severity==='error').length} ошибок · {diagnostics.filter(item=>item.severity==='warning').length} предупреждений</span><button type="button" className="text-tool" onClick={()=>jumpDiagnostic(viewRef.current,diagnostics,-1)} aria-label="Предыдущая диагностика">↑</button><button type="button" className="text-tool" onClick={()=>jumpDiagnostic(viewRef.current,diagnostics,1)} aria-label="Следующая диагностика">↓</button></div>}<button className="icon-button" type="button" onClick={()=>setFullscreen(value=>!value)} aria-label={fullscreen?'Выйти из полноэкранного редактора':'Открыть редактор на весь экран'}><ExpandIcon/></button></div>
+      <div className="editor-tools-left">{allowFormat&&<button type="button" onClick={()=>formatEditor(viewRef.current)} className="text-tool">Форматировать</button>}{onReset&&<button type="button" onClick={onReset} className="text-tool">Сбросить</button>}<button type="button" onClick={()=>cursorReferenceId&&setReferenceId(cursorReferenceId)} className="text-tool" disabled={!cursorReferenceId} aria-label="Открыть справку для команды под курсором">Справка</button></div>
+      <div className="editor-tools-right">{diagnostics.length>0&&(navigableDiagnostics.length>0?<div className="editor-diagnostic-nav" aria-label="Навигация по диагностике"><span>{diagnostics.filter(item=>item.severity==='error').length} ошибок · {diagnostics.filter(item=>item.severity==='warning').length} предупреждений</span><button type="button" className="text-tool" onClick={()=>jumpDiagnostic(viewRef.current,navigableDiagnostics,-1)} aria-label="Предыдущая диагностика">↑</button><button type="button" className="text-tool" onClick={()=>jumpDiagnostic(viewRef.current,navigableDiagnostics,1)} aria-label="Следующая диагностика">↓</button></div>:<span className="editor-diagnostic-nav--unlocated" role="status">Позиция диагностики не определена</span>)}<button className="icon-button" type="button" onClick={()=>setFullscreen(value=>!value)} aria-label={fullscreen?'Выйти из полноэкранного редактора':'Открыть редактор на весь экран'}><ExpandIcon/></button></div>
     </div>
-    <div className="latex-mobile-accessory" aria-label="Быстрые LaTeX-вставки">{mobileAccessories.map(item=><button type="button" key={item.label} onPointerDown={event=>event.preventDefault()} onClick={()=>insertEditorText(viewRef.current,item.insert,'cursorOffset' in item?item.cursorOffset:0)}>{item.label}</button>)}</div>
+    <div className="latex-mobile-accessory" aria-label="Быстрые LaTeX-вставки">{mobileAccessories.map(item=><button type="button" key={item.label} aria-label={item.ariaLabel} onPointerDown={event=>event.preventDefault()} onClick={()=>insertEditorText(viewRef.current,item.insert,'cursorOffset' in item?item.cursorOffset:0)}>{item.label}</button>)}</div>
     <div className="editor-reference-layout">
       <div ref={host} className="editor-host" />
       {referenceEntry&&<EditorReferencePanel entry={referenceEntry} onClose={()=>{setReferenceId(null);requestAnimationFrame(()=>viewRef.current?.focus());}} onAddPackage={referenceEntry.package&&!analyzeLatexContext(value).packages.has(referenceEntry.package)?()=>applyPackageQuickFix(viewRef.current,referenceEntry.package!):undefined}/>} 
@@ -284,8 +300,14 @@ function jumpDiagnostic(view:EditorView|null,diagnostics:Diagnostic[],direction:
   if(!ordered.length)return;
   const currentLine=view.state.doc.lineAt(view.state.selection.main.head).number;
   const target=direction>0?(ordered.find(item=>item.line>currentLine)??ordered[0]):([...ordered].reverse().find(item=>item.line<currentLine)??ordered.at(-1)!);
-  const range=normalizeDiagnosticRange(view,target);if(!range)return;
+  jumpToDiagnostic(view,target);
+}
+function jumpToDiagnostic(view:EditorView|null,diagnostic:Diagnostic){
+  if(!view)return false;
+  const range=normalizeDiagnosticRange(view,diagnostic);
+  if(!range)return false;
   view.dispatch({selection:{anchor:range.from},scrollIntoView:true});view.focus();
+  return true;
 }
 function insertEditorText(view:EditorView|null,text:string,cursorOffset=0){
   if(!view)return;

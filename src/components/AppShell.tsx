@@ -1,6 +1,7 @@
-import { lazy, Suspense, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { CURRICULUM_LESSON_COUNT } from '../data/curriculumMeta';
+import { applyPwaUpdate, getPwaLifecycleSnapshot, subscribePwaLifecycle } from '../services/pwaLifecycle';
 import { useAppStore } from '../store/useAppStore';
 import { BookIcon, PenIcon, ProjectIcon, ReferenceIcon, SearchIcon, SettingsIcon } from './Icons';
 import { Wordmark } from './Wordmark';
@@ -53,8 +54,16 @@ export function AppShell({children,plain=false}:{children:ReactNode;plain?:boole
     </header>}
     <main id="main-content" tabIndex={-1}>{children}</main>
     {showMobileNav&&<nav className="bottom-nav" aria-label="Мобильная навигация">{nav.map(({to,label,Icon})=><NavLink key={to} to={to} className={({isActive})=>isActive?'active':''}><Icon/><span>{label}</span></NavLink>)}</nav>}
+    <PwaStatusNotice/>
     {palette&&<Suspense fallback={null}><CommandPalette onClose={()=>setPalette(false)}/></Suspense>}
   </div>;
+}
+
+function PwaStatusNotice(){
+  const pwa=useSyncExternalStore(subscribePwaLifecycle,getPwaLifecycleSnapshot,getPwaLifecycleSnapshot);
+  if(!pwa.online)return <div className="pwa-status-notice" role="status" aria-live="polite"><strong>Офлайн</strong><span>Доступно ранее загруженное содержимое; первая загрузка TeX-движка может требовать сеть.</span></div>;
+  if(pwa.updateAvailable)return <div className="pwa-status-notice" role="status" aria-live="polite"><strong>Доступна новая версия</strong><button type="button" onClick={()=>{void applyPwaUpdate();}}>Обновить</button></div>;
+  return null;
 }
 
 export function ProgressRing({percent}:{percent:number}){

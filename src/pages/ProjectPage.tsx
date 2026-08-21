@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BackIcon, ChevronIcon, PlayIcon } from '../components/Icons';
-import { LatexPreview } from '../components/LatexPreview';
+import { LatexPreview, type DiagnosticNavigation } from '../components/LatexPreview';
 import { getRuntimeProject } from '../data/runtimeCatalog';
 import { compiler, isCompilerCancellation } from '../services/compiler';
 import { contextualizeProjectDiagnostics } from '../services/compilerDiagnosticContext';
 import { compilationStateLabel, isCompilationBusy } from '../services/compilerState';
+import { diagnosticFitsSource, requestDiagnosticNavigation } from '../services/editorNavigation';
 import {
   encodeProjectAsset,
   encodedProjectAssetSize,
@@ -28,7 +29,7 @@ import {
   type ProjectWorkspace
 } from '../services/projectWorkspace';
 import { initializeDocumentPersistence, useAppStore } from '../store/useAppStore';
-import type { CompilationState, CompileResult } from '../types';
+import type { CompilationState, CompileResult, Diagnostic } from '../types';
 
 const CodeEditor=lazy(()=>import('../components/CodeEditor').then(module=>({default:module.CodeEditor})));
 const EMPTY_PROJECT_PROGRESS:string[]=[];
@@ -54,6 +55,7 @@ export function ProjectPage(){
   const [newFileName,setNewFileName]=useState('');
   const [fileError,setFileError]=useState('');
   const compileRevision=useRef(0);
+  const pendingDiagnostic=useRef<Diagnostic|null>(null);
 
   useEffect(()=>{
     if(!project||!stage)return;
@@ -63,7 +65,7 @@ export function ProjectPage(){
     const immediate=createProjectWorkspace(project,index,useAppStore.getState().drafts);
     setWorkspace(immediate);
     setActiveFile(current=>current in immediate.files?current:immediate.mainFile);
-    setResult(null);setAssessment(null);setState('ready');setSaved(true);setFileError('');
+    setResult(null);setAssessment(null);setState('ready');setSaved(true);setFileError('');pendingDiagnostic.current=null;
     void initializeDocumentPersistence().then(()=>{
       if(!active)return;
       const hydrated=createProjectWorkspace(project,index,useAppStore.getState().drafts);
@@ -75,6 +77,7 @@ export function ProjectPage(){
   },[project?.id,stage?.id,index]);
 
   const activeSource=workspace?.files[activeFile]??'';
+  const activeIsAsset=isEncodedProjectAsset(activeSource);
   useEffect(()=>{
     if(!documentsReady||!project||!workspace||!(activeFile in workspace.files))return;
     setSaved(false);
@@ -83,13 +86,21 @@ export function ProjectPage(){
     return()=>window.clearTimeout(timeout);
   },[documentsReady,project?.id,activeFile,activeSource,setDraft]);
 
+  useEffect(()=>{
+    const diagnostic=pendingDiagnostic.current;
+    if(!diagnostic||!workspace||activeIsAsset)return;
+    const target=diagnostic.file??workspace.mainFile;
+    if(target!==activeFile)return;
+    pendingDiagnostic.current=null;
+    requestAnimationFrame(()=>requestDiagnosticNavigation(diagnostic));
+  },[activeFile,activeSource,activeIsAsset,workspace]);
+
   if(!project||!stage||!workspace)return <div className="page empty-state"><h1>Проект не найден</h1><Link to="/projects">Вернуться к проектам</Link></div>;
   const busy=isCompilationBusy(state);
   const currentDone=projectProgress.includes(stage.id);
   const next=project.stages[index+1];
   const filePaths=sortProjectFiles(Object.keys(workspace.files),workspace.mainFile);
   const multiFile=filePaths.length>1;
-  const activeIsAsset=isEncodedProjectAsset(activeSource);
   const activeDiagnostics=(result?.diagnostics??[]).filter(diagnostic=>diagnostic.file?diagnostic.file===activeFile:activeFile===workspace.mainFile);
 
   const saveWorkspace=()=>{
@@ -101,6 +112,20 @@ export function ProjectPage(){
     if(!documentsReady)return;
     setDraft(projectFileDraftKey(project.id,activeFile),workspace.files[activeFile]??'');
     setActiveFile(path);setFileError('');
+  };
+  const diagnosticNavigation:DiagnosticNavigation={
+    canNavigate:diagnostic=>{
+      const path=diagnostic.file??workspace.mainFile;
+      const source=workspace.files[path];
+      return typeof source==='string'&&!isEncodedProjectAsset(source)&&diagnosticFitsSource(diagnostic,source);
+    },
+    navigate:diagnostic=>{
+      const path=diagnostic.file??workspace.mainFile;
+      const source=workspace.files[path];
+      if(typeof source!=='string'||isEncodedProjectAsset(source)||!diagnosticFitsSource(diagnostic,source))return;
+      if(path!==activeFile){pendingDiagnostic.current=diagnostic;selectFile(path);return;}
+      requestDiagnosticNavigation(diagnostic);
+    }
   };
   const invalidateBuild=()=>{compileRevision.current+=1;compiler.cancel('Project source changed');if(result)setResult(null);if(assessment)setAssessment(null);if(state!=='ready')setState('ready');};
   const updateSource=(value:string)=>{
@@ -168,8 +193,8 @@ export function ProjectPage(){
 
   return <div className="project-workspace" data-project-files={filePaths.length} aria-busy={!documentsReady} inert={!documentsReady}>
     <aside className="project-stage-nav"><Link className="project-back" to="/projects" onClick={saveWorkspace}><BackIcon/> Проекты</Link><span className="eyebrow">{project.title}</span><nav aria-label="Этапы проекта">{project.stages.map((item,itemIndex)=><Link key={item.id} to={`/project/${project.id}/${item.id}`} onClick={saveWorkspace} className={`${item.id===stage.id?'active':''} ${projectProgress.includes(item.id)?'done':''}`}><span>{String(itemIndex+1).padStart(2,'0')}</span><strong>{item.title.replace(/^\d+\.\s*/, '')}</strong>{projectProgress.includes(item.id)&&<i>✓</i>}</Link>)}</nav></aside>
-    <main className="project-main">
-      <header className="project-header"><span className="eyebrow">ПРОЕКТ · ЭТАП {index+1} ИЗ {project.stages.length}</span><h1>{stage.title}</h1><p>{stage.objective}</p></header>
+    <section className="project-main" aria-labelledby="project-stage-title">
+      <header className="project-header"><span className="eyebrow">ПРОЕКТ · ЭТАП {index+1} ИЗ {project.stages.length}</span><h1 id="project-stage-title">{stage.title}</h1><p>{stage.objective}</p></header>
       <section className="project-requirements"><span className="eyebrow">КРИТЕРИИ ЭТАПА</span><ul>{stage.requirements.map(requirement=><li key={requirement}>{requirement}</li>)}</ul>{index>0&&<p className="project-integrity-note">Продолжайте тот же проект: требования предыдущих этапов должны оставаться рабочими.</p>}</section>
 
       <section className="project-editor">
@@ -181,12 +206,12 @@ export function ProjectPage(){
 
         <div className="project-active-file"><span>{activeFile}</span>{activeFile!==workspace.mainFile&&result?.diagnostics.length&&!activeIsAsset?<small>{activeDiagnostics.length?'Для этого файла найдена диагностика TeX.':'Сообщения без надёжного имени файла показываются только для корневого документа.'}</small>:null}</div>
         <div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${state}`}>{compilationStateLabel(state)}</span><span>{!documentsReady?'Загрузка локальных файлов…':result?engineLabel(result):saved?'Все изменения сохранены локально':'Сохранение…'}</span></div>
-        {activeIsAsset?<div className="project-asset-inspector" role="region" aria-label={`Файл ${activeFile}`}><span>{fileKind(activeFile)}</span><h2>{activeFile}</h2><p>{formatBytes(encodedProjectAssetSize(activeSource))} · хранится локально и передаётся TeX как бинарный файл при сборке.</p><label className="secondary-button">Заменить файл<input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" onChange={event=>{void uploadAsset(event);}}/></label></div>:<Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={activeSource} onChange={updateSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onCompile={()=>{void runCompile();}} onSave={saveWorkspace} diagnostics={activeDiagnostics}/></Suspense>}
+        {activeIsAsset?<div className="project-asset-inspector" role="region" aria-label={`Файл ${activeFile}`}><span>{fileKind(activeFile)}</span><h2>{activeFile}</h2><p>{formatBytes(encodedProjectAssetSize(activeSource))} · хранится локально и передаётся TeX как бинарный файл при сборке.</p><label className="secondary-button">Заменить файл<input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" onChange={event=>{void uploadAsset(event);}}/></label></div>:<Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={activeSource} onChange={updateSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={410} onCompile={()=>{void runCompile();}} onSave={saveWorkspace} diagnostics={activeDiagnostics} filePath={activeFile}/></Suspense>}
         {assessment&&<section className={`project-assessment ${assessment.ok?'project-assessment--ok':''}`} aria-live="polite"><header><div><span className="eyebrow">ПРОВЕРКА ЭТАПА</span><h2>{assessment.ok?'Этап подтверждён':'Проект ещё не готов'}</h2></div><small>{assessment.realCompile?'Проверено реальным TeX':'Проверка без подтверждённого real-PDF'}</small></header><div>{assessment.items.map(item=><div className="project-assessment-row" key={item.id}><span aria-hidden="true">{item.ok?'✓':'×'}</span><p><strong>{item.label}</strong>{item.detail&&<small>{item.detail}</small>}</p></div>)}</div></section>}
         <div className="project-editor-actions"><button className="compile-button" onClick={()=>{void runCompile();}} disabled={busy||!documentsReady}><PlayIcon/>{!documentsReady?'Загрузка проекта…':busy?compilationStateLabel(state):'Скомпилировать проект'}</button><button className="primary-button" onClick={primaryAction} disabled={!documentsReady||busy||currentDone&&!next}>{currentDone?(next?'Продолжить':'Проект завершён'):'Проверить этап'}{currentDone&&next&&<ChevronIcon/>}</button></div>
       </section>
-    </main>
-    <aside className="project-preview"><span className="eyebrow">РЕЗУЛЬТАТ</span><div className="project-paper"><LatexPreview result={result}/></div><p>{result?.pdf?`Реальный PDF собран из ${filePaths.length} ${pluralFiles(filePaths.length)}.`:result?.fallbackReason?multiFile?'Учебный fallback не считается подтверждением многофайлового проекта.':'Реальный TeX недоступен: показан явно обозначенный учебный fallback.':'Скомпилируйте весь проект, чтобы проверить root document, зависимости и выходной PDF.'}</p></aside>
+    </section>
+    <aside className="project-preview"><span className="eyebrow">РЕЗУЛЬТАТ</span><div className="project-paper"><LatexPreview result={result} diagnosticNavigation={diagnosticNavigation}/></div><p>{result?.pdf?`Реальный PDF собран из ${filePaths.length} ${pluralFiles(filePaths.length)}.`:result?.fallbackReason?multiFile?'Учебный fallback не считается подтверждением многофайлового проекта.':'Реальный TeX недоступен: показан явно обозначенный учебный fallback.':'Скомпилируйте весь проект, чтобы проверить root document, зависимости и выходной PDF.'}</p></aside>
   </div>;
 }
 

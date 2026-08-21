@@ -3,24 +3,29 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import type { CompileResult, Diagnostic, PreviewBlock } from '../types';
 
-export function LatexPreview({result,emptyText='Здесь появится результат компиляции'}:{result?:CompileResult|null;emptyText?:string}) {
+export type DiagnosticNavigation={
+  canNavigate:(diagnostic:Diagnostic)=>boolean;
+  navigate:(diagnostic:Diagnostic)=>void;
+};
+
+export function LatexPreview({result,emptyText='Здесь появится результат компиляции',diagnosticNavigation}:{result?:CompileResult|null;emptyText?:string;diagnosticNavigation?:DiagnosticNavigation}) {
   if(!result)return <div className="preview-empty">{emptyText}</div>;
   if(!result.ok)return <div className="compile-result compile-result--failed" role="status" aria-live="polite">
-    <DiagnosticsList diagnostics={result.diagnostics}/>
+    <DiagnosticsList diagnostics={result.diagnostics} navigation={diagnosticNavigation}/>
     <CompilerLog result={result}/>
   </div>;
-  if(result.pdf?.length)return <RealPdfPreview result={result}/>;
+  if(result.pdf?.length)return <RealPdfPreview result={result} diagnosticNavigation={diagnosticNavigation}/>;
   return <div className="compile-result compile-result--educational">
     <div className="preview-engine-note"><strong>Учебный предпросмотр</strong><span>Это не PDF-сборка TeX.</span></div>
     <article className="paper-preview" aria-label="Учебный предпросмотр LaTeX">
       {result.blocks.map((block,i)=><PreviewBlockView block={block} key={i}/>) }
     </article>
-    {result.diagnostics.length>0&&<DiagnosticsList diagnostics={result.diagnostics}/>} 
+    {result.diagnostics.length>0&&<DiagnosticsList diagnostics={result.diagnostics} navigation={diagnosticNavigation}/>} 
     <CompilerLog result={result}/>
   </div>;
 }
 
-function RealPdfPreview({result}:{result:CompileResult}){
+function RealPdfPreview({result,diagnosticNavigation}:{result:CompileResult;diagnosticNavigation?:DiagnosticNavigation}){
   const [url,setUrl]=useState<string|null>(null);
   useEffect(()=>{
     if(!result.pdf?.length){setUrl(null);return;}
@@ -36,19 +41,23 @@ function RealPdfPreview({result}:{result:CompileResult}){
       <span className="pdf-actions">{url&&<><a className="text-tool" href={url} target="_blank" rel="noreferrer">Открыть PDF</a><a className="text-tool" href={url} download="latex-gym.pdf">Скачать PDF</a></>}</span>
     </div>
     {url?<iframe className="pdf-frame" src={`${url}#view=FitH`} title="PDF, собранный TeX"/>:<div className="preview-empty">Подготовка PDF…</div>}
-    {result.diagnostics.length>0&&<DiagnosticsList diagnostics={result.diagnostics}/>} 
+    {result.diagnostics.length>0&&<DiagnosticsList diagnostics={result.diagnostics} navigation={diagnosticNavigation}/>} 
     <CompilerLog result={result}/>
   </div>;
 }
 
-function DiagnosticsList({diagnostics}:{diagnostics:Diagnostic[]}){
+function DiagnosticsList({diagnostics,navigation}:{diagnostics:Diagnostic[];navigation?:DiagnosticNavigation}){
   if(!diagnostics.length)return null;
   return <div className="diagnostics" aria-label="Диагностика компиляции">
-    {diagnostics.map((diagnostic,index)=><article className={`diagnostic diagnostic--${diagnostic.severity}`} key={`${diagnostic.severity}-${diagnostic.file??''}-${diagnostic.line}-${diagnostic.message}-${index}`}>
-      <header><span>{severityName(diagnostic.severity)}{diagnostic.cascade==='root'?' · вероятная первопричина':diagnostic.cascade==='secondary'?' · возможное следствие':''}</span><strong>{diagnostic.file?`${diagnostic.file}:${diagnostic.line}`:`Строка ${diagnostic.line}`}</strong></header>
-      {diagnostic.originalCompilerMessage&&diagnostic.source==='tex'&&<div className="diagnostic-original"><small>TeX</small><pre>{diagnostic.originalCompilerMessage}</pre></div>}
-      <div className="diagnostic-explanation"><small>LaTeX Gym</small><strong>{diagnostic.message}</strong><p>{diagnostic.explanation}</p>{diagnostic.suggestion&&<p className="diagnostic-suggestion">{diagnostic.suggestion}</p>}</div>
-    </article>)}
+    {diagnostics.map((diagnostic,index)=>{
+      const location=diagnostic.file?`${diagnostic.file}:${diagnostic.line}`:`Строка ${diagnostic.line}`;
+      const canNavigate=Boolean(navigation?.canNavigate(diagnostic));
+      return <article className={`diagnostic diagnostic--${diagnostic.severity}`} key={`${diagnostic.severity}-${diagnostic.file??''}-${diagnostic.line}-${diagnostic.message}-${index}`}>
+        <header><span>{severityName(diagnostic.severity)}{diagnostic.cascade==='root'?' · вероятная первопричина':diagnostic.cascade==='secondary'?' · возможное следствие':''}</span>{navigation?(canNavigate?<button type="button" className="diagnostic-location" onClick={()=>navigation.navigate(diagnostic)} aria-label={`Перейти к ${location}`}>{location}</button>:<span className="diagnostic-location-unavailable">Позиция в исходнике не определена</span>):<strong>{location}</strong>}</header>
+        {diagnostic.originalCompilerMessage&&diagnostic.source==='tex'&&<div className="diagnostic-original"><small>TeX</small><pre>{diagnostic.originalCompilerMessage}</pre></div>}
+        <div className="diagnostic-explanation"><small>LaTeX Gym</small><strong>{diagnostic.message}</strong><p>{diagnostic.explanation}</p>{diagnostic.suggestion&&<p className="diagnostic-suggestion">{diagnostic.suggestion}</p>}</div>
+      </article>;
+    })}
   </div>;
 }
 
