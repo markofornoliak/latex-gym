@@ -1,0 +1,55 @@
+name: Capture approved frontend visual baseline
+
+on:
+  push:
+    branches: [frontend-visual-baseline-20260821]
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    if: ${{ !contains(github.event.head_commit.message, 'capture approved visual baseline screenshots') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Capture current approved UI
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4173 >/tmp/preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4173/latex-gym/ >/dev/null && break; sleep 1; done
+          CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          mkdir -p qa/visual-baseline
+          capture() {
+            local name="$1" route="$2" width="$3" height="$4"
+            "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --run-all-compositor-stages-before-draw --virtual-time-budget=2400 --window-size="${width},${height}" --screenshot="qa/visual-baseline/${name}.png" "http://127.0.0.1:4173/latex-gym/#${route}"
+          }
+          capture phone-320-foundation /lesson/what-is-latex 320 568
+          capture phone-360-practice /practice/deep-001 360 800
+          capture phone-390-command /lesson/commands-foundation 390 844
+          capture phone-390-project /project/academic-paper/stage-10 390 844
+          capture phone-430-first-document /lesson/first-document-foundation 430 932
+          capture tablet-768-reference /reference/frac 768 1024
+          capture tablet-1024-project /project/academic-paper/stage-4 1024 1366
+          capture laptop-1280-lesson /lesson/table-anatomy 1280 800
+          capture desktop-1440-practice /practice/e01 1440 900
+          capture desktop-1920-project /project/academic-paper/stage-10 1920 1080
+          capture tv-2560-debug /lesson/debug-alignment-tab 2560 1440
+          capture tv-3840-project /project/technical-report/build 3840 2160
+      - name: Commit baseline screenshots
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add qa/visual-baseline
+          git commit -m 'chore: capture approved visual baseline screenshots'
+          git push origin HEAD:frontend-visual-baseline-20260821
