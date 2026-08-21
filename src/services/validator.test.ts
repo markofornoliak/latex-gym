@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Exercise } from '../types';
+import type { CompileResult, Exercise } from '../types';
 import { validateExercise, validatorInternals } from './validator';
 
-const compiled={ok:true,diagnostics:[],blocks:[],elapsedMs:1,engine:'educational-preview' as const};
+const educationalCompiled:CompileResult={ok:true,diagnostics:[],blocks:[],elapsedMs:1,engine:'educational-preview',providerId:'educational-preview',capabilities:{realPdf:false,engines:[],multiFile:false,bibtex:false,biber:false,multiplePasses:false,synctex:false,shellEscape:false,offline:true}};
+const realCompiled:CompileResult={ok:true,diagnostics:[],blocks:[],elapsedMs:1,engine:'pdflatex',providerId:'busytex-wasm',pdf:new Uint8Array([37,80,68,70]),capabilities:{realPdf:true,engines:['pdflatex','xelatex','lualatex'],multiFile:true,bibtex:true,biber:false,multiplePasses:true,synctex:false,shellEscape:false,offline:false}};
 
 const documentStructureExercise:Exercise={
   id:'validator-document-structure',lessonId:'validator-fixture',category:'Основы',difficulty:'Начальный',mode:'Собрать документ',
@@ -30,14 +31,26 @@ const sectionExercise:Exercise={
 };
 
 describe('semantic validation',()=>{
-  it('accepts a logically equivalent document structure solution',()=>{
+  it('accepts a logically equivalent document structure solution after real TeX compilation',()=>{
     const source='\\documentclass{article}\n\\begin{document}\nДругой допустимый абзац.\n\\end{document}';
-    expect(validateExercise(documentStructureExercise,source,compiled).ok).toBe(true);
+    expect(validateExercise(documentStructureExercise,source,realCompiled).ok).toBe(true);
+  });
+
+  it('does not award document-level compile evidence from the educational fallback',()=>{
+    const source='\\documentclass{article}\n\\begin{document}\nДругой допустимый абзац.\n\\end{document}';
+    const result=validateExercise(documentStructureExercise,source,educationalCompiled);
+    expect(result.ok).toBe(false);
+    expect(result.items.at(-1)?.message).toContain('реальная TeX-сборка');
+  });
+
+  it('allows an explicitly educational compile rule when an authored task requests it',()=>{
+    const exercise:Exercise={...documentStructureExercise,id:'educational-authority',execution:'fragment',validators:[{type:'compiles',authority:'educational',message:'Предпросмотр построен.',hint:'Проверьте фрагмент.'}],solution:'Text'};
+    expect(validateExercise(exercise,'Text',educationalCompiled).ok).toBe(true);
   });
 
   it('rejects an exercise without required section',()=>{
     const source='\\documentclass{article}\n\\begin{document}\nТекст.\n\\end{document}';
-    expect(validateExercise(sectionExercise,source,compiled).ok).toBe(false);
+    expect(validateExercise(sectionExercise,source,realCompiled).ok).toBe(false);
   });
 
   it('accepts package loading only from the preamble',()=>{
@@ -81,19 +94,19 @@ describe('semantic validation',()=>{
 
   it('does not loosen structural containsText checks when a compile result is present',()=>{
     const exercise:Exercise={id:'code-order',lessonId:'foundation',category:'Основы',difficulty:'Начальный',mode:'Архитектура',title:'Pipeline source',instructions:'Write exact structure.',requirements:['ordered marker'],starterCode:'\\documentclass{article}',validators:[{type:'containsText',value:'PREAMBLE → BODY',message:'Граница есть.',hint:'Добавьте маркер.'}],hints:[],solution:'PREAMBLE → BODY',concepts:['preamble']};
-    expect(validateExercise(exercise,'PREAMBLE text BODY',compiled).ok).toBe(false);
+    expect(validateExercise(exercise,'PREAMBLE text BODY',realCompiled).ok).toBe(false);
   });
 
   it('does not allow comments to satisfy containsText or fail forbiddenText',()=>{
     const requires:Exercise={id:'comment-required',lessonId:'synthetic',category:'Отладка',difficulty:'Начальный',mode:'Исправить ошибку',title:'Required',instructions:'Use section.',requirements:['section'],starterCode:'',validators:[{type:'containsText',value:'\\section{Results}',message:'Есть section.',hint:'Добавьте section.'}],hints:[],solution:'\\section{Results}',concepts:['section']};
     const forbids:Exercise={...requires,id:'comment-forbidden',validators:[{type:'forbiddenText',value:'\\mysterycommand',message:'Команда удалена.',hint:'Удалите команду.'}],solution:'Text'};
-    expect(validateExercise(requires,'% \\section{Results}\nText',compiled).ok).toBe(false);
-    expect(validateExercise(forbids,'% old: \\mysterycommand{Text}\nText',compiled).ok).toBe(true);
+    expect(validateExercise(requires,'% \\section{Results}\nText',educationalCompiled).ok).toBe(false);
+    expect(validateExercise(forbids,'% old: \\mysterycommand{Text}\nText',educationalCompiled).ok).toBe(true);
   });
 
   it('reports the approximate line for a failed forbidden-text rule',()=>{
     const exercise:Exercise={id:'synthetic',lessonId:'synthetic',category:'Отладка',difficulty:'Начальный',mode:'Рефакторинг',title:'No manual break',instructions:'Remove manual break.',requirements:['No \\\\'],starterCode:'First.\\\\\nSecond.',validators:[{type:'forbiddenText',value:'\\\\',message:'Ручной перенос удалён.',hint:'Используйте пустую строку.'}],hints:[],solution:'First.\n\nSecond.',concepts:['paragraph']};
-    const result=validateExercise(exercise,'First.\nSecond.\\\\',compiled);
+    const result=validateExercise(exercise,'First.\nSecond.\\\\',educationalCompiled);
     expect(result.ok).toBe(false);
     expect(result.items[0].line).toBe(2);
   });
