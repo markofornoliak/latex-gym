@@ -12,6 +12,7 @@ const realResult:CompileResult={
   ok:true,diagnostics:[],blocks:[],elapsedMs:20,engine:'pdflatex',providerId:'busytex-wasm',pdf:new Uint8Array([37,80,68,70])
 };
 const validTechnicalRoot='\\documentclass{report}\n\\usepackage[margin=28mm]{geometry}\n\\begin{document}\n\\chapter{Overview}\n\\include{chapters/system}\n\\include{chapters/validation}\n\\end{document}';
+const byLabel=(assessment:ReturnType<typeof assessProjectStage>,label:string)=>assessment.items.find(item=>item.label===label);
 
 describe('project workspace',()=>{
   it('migrates the existing single-file project draft into main.tex without discarding it',()=>{
@@ -59,8 +60,8 @@ describe('project workspace',()=>{
     workspace.files['main.tex']='\\documentclass{article}\n\\begin{document}\n\\end{document}';
     const assessment=assessProjectStage(project,stageIndex,workspace,realResult);
     expect(assessment.ok).toBe(false);
-    expect(assessment.items.find(item=>item.id.includes('cmd:title'))?.ok).toBe(false);
-    expect(assessment.items.find(item=>item.id.includes('cmd:maketitle'))?.ok).toBe(false);
+    expect(byLabel(assessment,'Задан title')?.ok).toBe(false);
+    expect(byLabel(assessment,'Метаданные выводятся через \\maketitle')?.ok).toBe(false);
   });
 
   it('does not count commands that only appear in LaTeX comments',()=>{
@@ -69,9 +70,20 @@ describe('project workspace',()=>{
     const workspace=createProjectWorkspace(project,stageIndex,{});
     workspace.files['main.tex']='\\documentclass{article}\n% \\title{Fake}\n% \\author{Fake}\n% \\maketitle\n\\begin{document}\n\\end{document}';
     const assessment=assessProjectStage(project,stageIndex,workspace,realResult);
-    expect(assessment.items.find(item=>item.id.includes('cmd:title'))?.ok).toBe(false);
-    expect(assessment.items.find(item=>item.id.includes('cmd:author'))?.ok).toBe(false);
-    expect(assessment.items.find(item=>item.id.includes('cmd:maketitle'))?.ok).toBe(false);
+    expect(byLabel(assessment,'Задан title')?.ok).toBe(false);
+    expect(byLabel(assessment,'Задан author')?.ok).toBe(false);
+    expect(byLabel(assessment,'Метаданные выводятся через \\maketitle')?.ok).toBe(false);
+  });
+
+  it('does not count commands hidden in an unused macro definition',()=>{
+    const project=getProject('academic-paper')!;
+    const stageIndex=project.stages.findIndex(stage=>stage.id==='stage-2');
+    const workspace=createProjectWorkspace(project,stageIndex,{});
+    workspace.files['main.tex']='\\documentclass{article}\n\\newcommand{\\fakeMetadata}{\\title{Fake}\\author{Fake}\\maketitle}\n\\begin{document}\nText\n\\end{document}';
+    const assessment=assessProjectStage(project,stageIndex,workspace,realResult);
+    expect(byLabel(assessment,'Задан title')?.ok).toBe(false);
+    expect(byLabel(assessment,'Задан author')?.ok).toBe(false);
+    expect(byLabel(assessment,'Метаданные выводятся через \\maketitle')?.ok).toBe(false);
   });
 
   it('ignores commented-out input dependencies',()=>{
