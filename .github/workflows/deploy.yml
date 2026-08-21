@@ -76,7 +76,7 @@ jobs:
             exit 1
           fi
 
-          echo 'QA real TeX matrix: pdfLaTeX, XeLaTeX, LuaLaTeX and BibTeX'
+          echo 'QA real TeX matrix: pdfLaTeX, XeLaTeX and BibTeX'
           if ! timeout 330s node scripts/qa/wait-browser-text.mjs \
             "$CHROME" \
             'http://127.0.0.1:4173/latex-gym/compiler-smoke.html' \
