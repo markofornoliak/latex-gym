@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wordmark } from '../components/Wordmark';
+import { learningRouteLabel } from '../services/learningTracks';
+import { assessPlacement } from '../services/placementAssessment';
 import { useAppStore, type OnboardingExperience } from '../store/useAppStore';
 
 const goals=[
@@ -42,8 +44,9 @@ export function OnboardingPage() {
 
   const currentTask=useMemo(()=>chooseTask(tasks,answers.map(answer=>answer.task.id),ability),[answers,ability]);
   const score=answers.filter(answer=>answer.correct).length;
-  const recommendation=recommendLesson(score,answers.length,experience);
-  const recommendedTrack=trackForGoals(selectedGoals);
+  const assessment=useMemo(()=>assessPlacement(answers.map(answer=>({concept:answer.task.concept,difficulty:answer.task.difficulty,correct:answer.correct})),experience),[answers,experience]);
+  const recommendation=assessment.recommendedLessonId;
+  const recommendedTrack=learningRouteLabel(selectedGoals,experience);
 
   useEffect(()=>{
     if(!finished){setRecommendedLessonTitle(null);return;}
@@ -82,7 +85,7 @@ export function OnboardingPage() {
 
       {step===3&&!finished&&currentTask&&<main className="onboarding-stage placement-stage"><div className="placement-heading"><span className="eyebrow">ДИАГНОСТИКА УРОВНЯ · {Math.min(answers.length+1,6)} ИЗ 6</span><span>Адаптивная сложность</span></div><h1>{currentTask.prompt}</h1>{currentTask.code&&<pre className="placement-code"><code>{currentTask.code}</code></pre>}<div className="placement-options">{currentTask.options.map(option=><button type="button" key={option.id} onClick={()=>answerTask(option.id)} disabled={Boolean(feedback)}>{option.label}</button>)}</div>{feedback&&<div className={`placement-feedback ${feedback.correct?'correct':'incorrect'}`} role="status"><strong>{feedback.correct?'Верно':'Не совсем'}</strong><p>{feedback.explanation}</p><button className="primary-button" onClick={nextPlacement}>{answers.length>=6?'Результат':'Следующая задача'}</button></div>}<p className="placement-note">Здесь нет вопросов на запоминание названий. Мы проверяем, как вы читаете, исправляете и структурируете LaTeX.</p></main>}
 
-      {step===3&&finished&&<main className="onboarding-stage placement-result"><span className="eyebrow">ДИАГНОСТИКА ЗАВЕРШЕНА</span><h1>{score} / {answers.length}</h1><p className="onboarding-lead">Стартовая точка выбрана по выполненным микрозаданиям. Диагностика создаёт начальную оценку уверенности по проверенным концептам, но не объявляет их «освоенными».</p><dl><div><dt>Рекомендуемый старт</dt><dd>{recommendedLessonTitle??'Основы LaTeX'}</dd></div><div><dt>Маршрут</dt><dd>{recommendedTrack}</dd></div><div><dt>Первый принцип</dt><dd>Структура → компиляция → диагностика → исправление</dd></div></dl><button className="primary-button primary-button--large" onClick={finish}>Перейти к тренировке</button><button className="text-tool placement-retry" onClick={()=>{setAnswers([]);setFeedback(null);setFinished(false);setAbility(experience?experienceAbility(experience):0);}}>Пройти диагностику ещё раз</button></main>}
+      {step===3&&finished&&<main className="onboarding-stage placement-result"><span className="eyebrow">ДИАГНОСТИКА ЗАВЕРШЕНА</span><h1>{score} / {answers.length}</h1><p className="onboarding-lead">Стартовая точка выбрана по выполненным микрозаданиям с учётом сложности реально заданных вопросов. Диагностика создаёт начальную оценку уверенности, но не объявляет концепты «освоенными».</p><dl><div><dt>Рекомендуемый старт</dt><dd>{recommendedLessonTitle??'Основы LaTeX'}</dd></div><div><dt>Маршрут</dt><dd>{recommendedTrack}</dd></div><div><dt>Первый принцип</dt><dd>Структура → компиляция → диагностика → исправление</dd></div></dl><button className="primary-button primary-button--large" onClick={finish}>Перейти к тренировке</button><button className="text-tool placement-retry" onClick={()=>{setAnswers([]);setFeedback(null);setFinished(false);setAbility(experience?experienceAbility(experience):0);}}>Пройти диагностику ещё раз</button></main>}
     </div>
   </div>;
 }
@@ -92,19 +95,3 @@ function chooseTask(pool:PlacementTask[],used:string[],ability:number){
   return remaining.sort((left,right)=>Math.abs(left.difficulty-ability)-Math.abs(right.difficulty-ability)||left.difficulty-right.difficulty)[0];
 }
 function experienceAbility(experience:OnboardingExperience){if(experience==='advanced')return 3;if(experience==='regular')return 2;if(experience==='basic')return 1;return 0;}
-function recommendLesson(score:number,total:number,experience:OnboardingExperience|null){
-  const ratio=total?score/total:0;
-  if(ratio<.34)return 'what-is-latex';
-  if(ratio<.5)return 'document-structure';
-  if(ratio<.67)return 'sections-paragraphs';
-  if(ratio<.84)return 'math-modes';
-  return experience==='advanced'?'equations-theorems':'fractions-powers';
-}
-function trackForGoals(selected:string[]){
-  if(selected.includes('scientific-papers'))return 'Основы LaTeX → Научная статья';
-  if(selected.includes('thesis'))return 'Основы LaTeX → Диплом / диссертация';
-  if(selected.includes('mathematics'))return 'Основы LaTeX → Математика';
-  if(selected.includes('engineering'))return 'Основы LaTeX → Физика и инженерные документы';
-  if(selected.includes('presentations'))return 'Основы LaTeX → Beamer';
-  return 'Основы LaTeX → Профессиональная практика';
-}

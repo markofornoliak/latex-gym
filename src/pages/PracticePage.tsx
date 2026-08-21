@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ChevronIcon } from '../components/Icons';
 import { curriculum } from '../data/curriculumRuntime';
-import { selectDailyTraining } from '../services/spacedRepetition';
+import { selectRuntimeDailyTraining } from '../services/runtimeWorkout';
 import { useAppStore } from '../store/useAppStore';
 import type { PracticeCategory } from '../types';
 
@@ -14,7 +14,7 @@ export function PracticePage(){
   const mastery=useAppStore(state=>state.conceptMastery);
   const completedLessons=useAppStore(state=>state.completedLessons);
   const completed=useAppStore(state=>state.completedExercises);
-  const daily=selectDailyTraining(exercises,scores,completedLessons,undefined,mastery);
+  const daily=selectRuntimeDailyTraining({conceptScores:scores,completedLessonIds:completedLessons,mastery});
   return <div className="page editorial-page">
     <header className="page-intro"><span className="eyebrow">ПРАКТИКА</span><h1>Тренировка исходника</h1><p>Подборка учитывает изученные темы, прежние ошибки и понятия, которые пора повторить. Проверка основана на требованиях, а не на полном совпадении с эталоном.</p></header>
     <section className="daily-training"><div className="section-heading"><h2>Тренировка дня</h2><span>5 задач</span></div>{daily.map((exercise,index)=><Link to={`/practice/${exercise.id}`} className="practice-row" key={exercise.id}><span>{index+1}</span><span><strong>{exercise.title}</strong><small>{exercise.mode} · {exercise.difficulty}</small></span><span className={completed.includes(exercise.id)?'done-mark':''}>{completed.includes(exercise.id)?'✓':<ChevronIcon/>}</span></Link>)}</section>

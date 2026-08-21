@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { REAL_TEX_CAPABILITIES } from './compiler';
+import { detectUnsupportedBibliography, REAL_TEX_CAPABILITIES } from './compiler';
 import { compilationStateLabel, isCompilationBusy } from './compilerState';
 
 describe('compiler contract',()=>{
@@ -22,5 +22,19 @@ describe('compiler contract',()=>{
     expect(compilationStateLabel('initializing')).toBe('Загрузка TeX');
     expect(compilationStateLabel('running-bibliography')).toBe('Библиография');
     expect(compilationStateLabel('recompiling')).toBe('Повторная компиляция');
+  });
+
+  it('does not reject commented or unused-definition biblatex as a Biber requirement',()=>{
+    const commented={mainFile:'main.tex',files:[{path:'main.tex',content:'% \\usepackage{biblatex}\n\\documentclass{article}\n\\begin{document}Text\\end{document}'}]};
+    const unused={mainFile:'main.tex',files:[{path:'main.tex',content:'\\documentclass{article}\n\\newcommand{\\unused}{\\usepackage{biblatex}}\n\\begin{document}Text\\end{document}'}]};
+    expect(detectUnsupportedBibliography(commented)).toBeNull();
+    expect(detectUnsupportedBibliography(unused)).toBeNull();
+  });
+
+  it('rejects active default Biber but permits explicit backend=bibtex',()=>{
+    const biber={mainFile:'main.tex',files:[{path:'main.tex',content:'\\documentclass{article}\n\\usepackage{biblatex}\n\\begin{document}Text\\end{document}'}]};
+    const bibtex={mainFile:'main.tex',files:[{path:'main.tex',content:'\\documentclass{article}\n\\usepackage[backend=bibtex]{biblatex}\n\\begin{document}Text\\end{document}'}]};
+    expect(detectUnsupportedBibliography(biber)).toMatchObject({file:'main.tex',line:2});
+    expect(detectUnsupportedBibliography(bibtex)).toBeNull();
   });
 });

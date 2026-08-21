@@ -7,6 +7,7 @@ import type {
   CompilerProjectFile
 } from '../types';
 import { diagnoseLatex, parseTexLog } from './compilerDiagnostics';
+import { activeLatexSource } from './latexSourceAnalysis';
 
 export interface CompilerProvider {
   readonly id:string;
@@ -69,15 +70,16 @@ export class EducationalPreviewCompiler implements CompilerProvider {
     const id=++this.seq;
     return new Promise((resolve,reject)=>{
       const onAbort=()=>{
-        const pending=this.pending.get(id);if(!pending)return;
-        window.clearTimeout(pending.timer);pending.cleanup();this.pending.delete(id);reject(cancellationFromSignal(options.signal));
+        if(!this.pending.has(id))return;
+        this.failAll(cancellationFromSignal(options.signal));
       };
       const cleanup=()=>options.signal?.removeEventListener('abort',onAbort);
       const timer=window.setTimeout(()=>{
-        cleanup();this.pending.delete(id);reject(new Error('Educational preview timed out'));
+        if(this.pending.has(id))this.failAll(new Error('Educational preview timed out'));
       },8000);
       this.pending.set(id,{resolve,reject,timer,cleanup});
       options.signal?.addEventListener('abort',onAbort,{once:true});
+      if(options.signal?.aborted){onAbort();return;}
       worker.postMessage({id,source});
     });
   }
@@ -150,7 +152,7 @@ export class WasmTexCompilerProvider implements CompilerProvider {
     assertNotCancelled(options.signal);
     const started=performance.now();
     const source=mainSource(project);
-    const unsupported=unsupportedBibliography(project);
+    const unsupported=detectUnsupportedBibliography(project);
     if(unsupported){
       options.onPhase?.('error');
       return {
@@ -358,10 +360,10 @@ function mainSource(project:CompilerProject){
   return typeof file?.content==='string'?file.content:new TextDecoder().decode(file?.content??new Uint8Array());
 }
 
-function unsupportedBibliography(project:CompilerProject){
+export function detectUnsupportedBibliography(project:CompilerProject){
   for(const file of project.files){
     if(typeof file.content!=='string'||!file.path.match(/\.(?:tex|sty|cls)$/i))continue;
-    const source=file.content;
+    const source=activeLatexSource(file.content);
     const usesBiblatex=/\\usepackage(?:\[[^\]]*\])?\{biblatex\}/.test(source);
     const explicitlyBibtex=/\\usepackage\[[^\]]*backend\s*=\s*bibtex[^\]]*\]\{biblatex\}/.test(source);
     const explicitlyBiber=/\\usepackage\[[^\]]*backend\s*=\s*biber[^\]]*\]\{biblatex\}/.test(source);

@@ -8,13 +8,32 @@ import type { CompileResult, CompilerProject, Diagnostic } from '../types';
 export function contextualizeProjectDiagnostics(result:CompileResult,project:CompilerProject):CompileResult{
   if(!result.diagnostics.length)return result;
   const textFiles=project.files.filter(file=>typeof file.content==='string'&&/\.(?:tex|sty|cls|bib)$/i.test(file.path));
-  const errorIndexes=result.diagnostics.map((item,index)=>item.severity==='error'?index:-1).filter(index=>index>=0);
+  const cascade=classifyCascade(result.diagnostics);
   const diagnostics=result.diagnostics.map((diagnostic,index)=>{
     const file=diagnostic.file??inferDiagnosticFile(result.rawLog??'',diagnostic,textFiles.map(item=>item.path),project.mainFile);
-    const cascade=diagnostic.severity!=='error'?diagnostic.cascade:errorIndexes.length>1?(index===errorIndexes[0]?'root':'secondary'):diagnostic.cascade;
-    return {...diagnostic,...(file?{file}:{}),...(cascade?{cascade}: {})};
+    const cascadeLabel=diagnostic.severity==='error'?(cascade.get(index)??diagnostic.cascade):diagnostic.cascade;
+    return {...diagnostic,...(file?{file}:{}),...(cascadeLabel?{cascade:cascadeLabel}: {})};
   });
   return {...result,diagnostics};
+}
+
+export function classifyCascade(diagnostics:Diagnostic[]){
+  const labels=new Map<number,'root'|'secondary'>();
+  const errors=diagnostics.map((item,index)=>({item,index})).filter(({item})=>item.severity==='error');
+  if(errors.length<2)return labels;
+  const first=errors[0];
+  const secondary=errors.slice(1).filter(({item})=>isLikelyCascade(first.item,item));
+  if(!secondary.length)return labels;
+  labels.set(first.index,'root');
+  for(const item of secondary)labels.set(item.index,'secondary');
+  return labels;
+}
+
+function isLikelyCascade(root:Diagnostic,candidate:Diagnostic){
+  const lineDistance=Math.max(0,(candidate.line??1)-(root.line??1));
+  if(lineDistance>12)return false;
+  const message=`${candidate.message} ${candidate.originalCompilerMessage??''}`.toLocaleLowerCase('en');
+  return /missing [}\$]|extra }|runaway|paragraph ended before|file ended while scanning|emergency stop|alignment tab|math shift|no legal \bend found/.test(message);
 }
 
 export function inferDiagnosticFile(rawLog:string,diagnostic:Diagnostic,knownPaths:string[],mainFile:string){

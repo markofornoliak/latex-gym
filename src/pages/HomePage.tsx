@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
 import { ChevronIcon, CheckIcon } from '../components/Icons';
 import { curriculum } from '../data/curriculumRuntime';
-import { buildDailyWorkout, type WorkoutReason } from '../services/spacedRepetition';
+import { nextBestLearningAction } from '../services/nextBestLearningAction';
+import { buildRuntimeDailyWorkout } from '../services/runtimeWorkout';
+import type { WorkoutReason } from '../services/spacedRepetition';
 import { useAppStore } from '../store/useAppStore';
 
 const {exercises,lessons,modules,projects}=curriculum;
@@ -13,18 +15,24 @@ export function HomePage() {
   const conceptScores=useAppStore(state=>state.conceptScores);
   const mastery=useAppStore(state=>state.conceptMastery);
   const projectProgress=useAppStore(state=>state.completedProjectStages);
+  const onboarding=useAppStore(state=>state.onboarding);
   const streak=useAppStore(state=>state.streak);
 
-  const current=curriculum.lessonById[currentId]??lessons[0];
+  const storedCurrent=curriculum.lessonById[currentId]??lessons[0];
+  const workout=buildRuntimeDailyWorkout({conceptScores,completedLessonIds:completed,mastery});
+  const nextAction=nextBestLearningAction({lessons,exercises,projects,graph:curriculum.graph,conceptScores,mastery,completedLessonIds:completed,completedProjectStages:projectProgress,goals:onboarding.goals,experience:onboarding.experience});
+  const currentHasProgress=!completed.includes(storedCurrent.id)&&exerciseDone.some(id=>storedCurrent.exercises.some(exercise=>exercise.id===id));
+  const recommendedLesson=completed.length>0&&!currentHasProgress&&nextAction?.kind==='lesson'?curriculum.lessonById[nextAction.lessonId]:undefined;
+  const current=recommendedLesson??storedCurrent;
   const mod=curriculum.moduleById[current.moduleId]!;
   const currentProgress=completed.includes(current.id)?100:Math.min(85,Math.round((exerciseDone.filter(id=>current.exercises.some(exercise=>exercise.id===id)).length/Math.max(1,current.exercises.length))*100));
-  const workout=buildDailyWorkout(exercises,conceptScores,completed,undefined,mastery,{graph:curriculum.graph,lessons});
   const counts=countReasons(workout.map(item=>item.reason));
   const dueConcepts=Object.entries(mastery).filter(([,state])=>state.nextReview&&new Date(state.nextReview).getTime()<=Date.now()).sort(([,left],[,right])=>new Date(left.nextReview!).getTime()-new Date(right.nextReview!).getTime()).slice(0,4);
   const weakConcepts=Object.entries(mastery).filter(([,state])=>state.attempts>0&&state.score<.68).sort(([,left],[,right])=>left.score-right.score).slice(0,3);
   const activeProject=projects.map(project=>({project,done:projectProgress[project.id]?.length??0,completed:new Set(projectProgress[project.id]??[])})).filter(item=>item.done>0&&item.done<item.project.stages.length).sort((a,b)=>b.done-a.done)[0];
   const activeStage=activeProject?.project.stages.find(stage=>!activeProject.completed.has(stage.id));
-  const firstWorkout=workout[0]?.exercise;
+  const preferredWorkout=nextAction?.kind==='practice'?workout.find(item=>item.exercise.id===nextAction.exerciseId):undefined;
+  const firstWorkout=(preferredWorkout??workout[0])?.exercise;
 
   return <div className="page home-page training-dashboard">
     <section className="training-hero" aria-labelledby="training-title">

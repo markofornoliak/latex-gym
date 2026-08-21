@@ -88,6 +88,18 @@ jobs:
             exit 1
           fi
 
+          echo 'QA production compiler API: engines, multi-file, BibTeX, Biber rejection, cancellation and recovery'
+          timeout 360s "$CHROME" --headless --no-sandbox --disable-gpu \
+            --virtual-time-budget=300000 --dump-dom \
+            'http://127.0.0.1:4173/latex-gym/?qa=compiler-api' \
+            > /tmp/compiler-api-smoke.html 2> /tmp/compiler-api-smoke.browser.log || true
+          if ! grep -Fq 'COMPILER_API_SMOKE_PASS' /tmp/compiler-api-smoke.html; then
+            echo 'Production compiler API smoke did not complete successfully.'
+            cat /tmp/compiler-api-smoke.html || true
+            cat /tmp/compiler-api-smoke.browser.log || true
+            exit 1
+          fi
+
           echo 'QA behavior: bookmark mutation, command-palette focus and SPA route focus'
           timeout 60s "$CHROME" --headless --no-sandbox --disable-gpu \
             --virtual-time-budget=20000 --dump-dom \

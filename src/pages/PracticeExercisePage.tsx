@@ -5,6 +5,7 @@ import { LatexPreview } from '../components/LatexPreview';
 import { getRuntimeExercise, getRuntimeLesson } from '../data/runtimeCatalog';
 import { useCompilationSession } from '../hooks/useCompilationSession';
 import { useDocumentDraft } from '../hooks/useDocumentDraft';
+import { attemptIndependence, nextAttemptHintLevel } from '../services/attemptEvidence';
 import { compiler, isCompilerCancellation } from '../services/compiler';
 import { compilationStateLabel, isCompilationBusy } from '../services/compilerState';
 import { getExerciseInteraction, initialExerciseDraft } from '../services/exerciseInteraction';
@@ -23,7 +24,6 @@ export function PracticeExercisePage(){
   const recordAttempt=useAppStore(state=>state.recordExerciseAttempt);
   const recordHint=useAppStore(state=>state.recordHint);
   const recordSolutionReveal=useAppStore(state=>state.recordSolutionReveal);
-  const hintsUsed=useAppStore(state=>state.hintsUsed);
   const bookmarks=useAppStore(state=>state.bookmarks);
   const toggleBookmark=useAppStore(state=>state.toggleBookmark);
   const draftKey=exercise?`exercise:${exercise.id}`:'exercise:missing';
@@ -36,15 +36,14 @@ export function PracticeExercisePage(){
   const [validation,setValidation]=useState<ValidationResult|null>(null);
   const [targetCompileState,setTargetCompileState]=useState<CompilationState>('ready');
   const [solution,setSolution]=useState(false);
-  const [hintOpenedThisAttempt,setHintOpenedThisAttempt]=useState(false);
+  const [hintLevelThisAttempt,setHintLevelThisAttempt]=useState(0);
   const [shortcutsOpen,setShortcutsOpen]=useState(false);
   const [mobileView,setMobileView]=useState<MobilePracticeView>('task');
   const mobileScroll=useRef<Record<MobilePracticeView,number>>({task:0,code:0,result:0});
-  const hintLevel=exercise?(hintsUsed[exercise.id]??0):0;
 
   useEffect(()=>{
     if(!exercise)return;
-    compilation.reset();setTargetResult(null);setValidation(null);setSolution(false);setHintOpenedThisAttempt(false);setTargetCompileState('ready');setMobileView('task');mobileScroll.current={task:0,code:0,result:0};
+    compilation.reset();setTargetResult(null);setValidation(null);setSolution(false);setHintLevelThisAttempt(0);setTargetCompileState('ready');setMobileView('task');mobileScroll.current={task:0,code:0,result:0};
     const key=`latex-gym:scroll:${exercise.id}`;const restored=Number(sessionStorage.getItem(key)??0);requestAnimationFrame(()=>window.scrollTo({top:restored,behavior:'auto'}));
     return()=>{sessionStorage.setItem(key,String(window.scrollY));};
   },[exercise?.id]);
@@ -73,7 +72,7 @@ export function PracticeExercisePage(){
   const setExerciseSource=(value:string)=>{draft.setValue(value);if(validation)setValidation(null);if(result||compileState!=='ready')compilation.invalidate();};
   const resetEditor=()=>setExerciseSource(exercise.starterCode);
   const saveNow=()=>{void draft.saveNow();};
-  const evidenceIndependence=()=>solution?'revealed' as const:hintOpenedThisAttempt?'hinted' as const:'independent' as const;
+  const evidenceIndependence=()=>attemptIndependence({solutionRevealed:solution,hintLevelThisAttempt});
   const recordChecked=(checked:ValidationResult,realCompile:boolean,context:'practice'|'transfer'='practice')=>{
     setValidation(checked);switchMobileView('result');recordAttempt(exercise.id,checked.ok,exercise.concepts,exercise.title,{independence:evidenceIndependence(),context,realCompile});
   };
@@ -86,9 +85,9 @@ export function PracticeExercisePage(){
     const compiled=await runCompile();if(!compiled)return;
     recordChecked(validateExercise(exercise,source,compiled),Boolean(compiled.pdf?.length&&!compiled.fallbackReason),interaction.kind==='reconstruction'?'transfer':'practice');
   };
-  const revealHint=()=>{const next=Math.min(exercise.hints.length,hintLevel+1);recordHint(exercise.id,next);setHintOpenedThisAttempt(true);};
+  const revealHint=()=>{const next=nextAttemptHintLevel(hintLevelThisAttempt,exercise.hints.length);setHintLevelThisAttempt(next);recordHint(exercise.id,next);};
   const revealSolution=()=>{setSolution(true);recordSolutionReveal(exercise.id);};
-  const renderHints=(variant:'desktop'|'mobile')=><div className={`hint-area hint-area--${variant}`}><div className="hint-heading"><span>Подсказки</span><button onClick={revealHint} disabled={hintLevel>=exercise.hints.length}>{hintLevel>=exercise.hints.length?'Все открыты':'Открыть подсказку'}</button></div>{exercise.hints.slice(0,hintLevel).map((hint,index)=><p key={index}><b>{index+1}.</b> {hint}</p>)}{hintLevel>=exercise.hints.length&&!solution&&<button className="text-tool reveal-solution" onClick={revealSolution}>Показать одно решение</button>}</div>;
+  const renderHints=(variant:'desktop'|'mobile')=><div className={`hint-area hint-area--${variant}`}><div className="hint-heading"><span>Подсказки</span><button onClick={revealHint} disabled={hintLevelThisAttempt>=exercise.hints.length}>{hintLevelThisAttempt>=exercise.hints.length?'Все открыты':'Открыть подсказку'}</button></div>{exercise.hints.slice(0,hintLevelThisAttempt).map((hint,index)=><p key={index}><b>{index+1}.</b> {hint}</p>)}{hintLevelThisAttempt>=exercise.hints.length&&!solution&&<button className="text-tool reveal-solution" onClick={revealSolution}>Показать одно решение</button>}</div>;
   const mobileTabs:ReadonlyArray<readonly [MobilePracticeView,string]>=[['task','Задание'],['code',interaction.middleTabLabel],['result',interaction.resultTabLabel]];
 
   return <div className={`practice-screen practice-screen--${interaction.kind}`} data-compilation-state={compileState} data-mobile-view={mobileView} data-exercise-interaction={interaction.kind} data-execution={interaction.execution}>

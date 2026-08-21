@@ -1,6 +1,27 @@
 const escapeRegExp=(value:string)=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 
-export function stripLatexComments(source:string){return source.replace(/(^|[^\\])%.*$/gm,'$1');}
+/** TeX starts a comment at % unless it is preceded by an odd run of backslashes. */
+export function isLatexCommentPercent(source:string,index:number){
+  if(source[index]!=='%')return false;
+  let slashes=0;
+  for(let cursor=index-1;cursor>=0&&source[cursor]==='\\';cursor-=1)slashes+=1;
+  return slashes%2===0;
+}
+
+/** Strip comments while preserving line structure and TeX backslash-parity semantics. */
+export function stripLatexComments(source:string){
+  let output='';
+  for(let index=0;index<source.length;index+=1){
+    if(source[index]==='%'&&isLatexCommentPercent(source,index)){
+      const newline=source.indexOf('\n',index);
+      if(newline<0)break;
+      output+='\n';index=newline;
+      continue;
+    }
+    output+=source[index];
+  }
+  return output;
+}
 export function normalizeGroupWhitespace(source:string){return source.replace(/[ \t]+}/g,'}');}
 
 /**
@@ -39,6 +60,7 @@ export function stripLatexDefinitionBodies(source:string){
 }
 
 export function activeLatexSource(source:string){return stripLatexDefinitionBodies(stripLatexComments(source));}
+export function activeLatexPreamble(source:string){return activeLatexSource(source).split(/\\begin\s*\{document\}/)[0]??'';}
 
 export function commandCount(source:string,name:string){
   const escaped=escapeRegExp(name);
@@ -56,7 +78,7 @@ export function environmentCount(source:string,name:string){
 }
 
 export function loadedPackages(source:string){
-  const preamble=(stripLatexComments(source).split(/\\begin\s*\{document\}/)[0]??'');
+  const preamble=activeLatexPreamble(source);
   const result=new Set<string>();
   for(const match of preamble.matchAll(/\\usepackage(?:\[[^\]]*\])?\{([^}]+)\}/g))for(const name of match[1].split(',').map(value=>value.trim()).filter(Boolean))result.add(name);
   return result;
@@ -65,11 +87,11 @@ export function loadedPackages(source:string){
 export function hasPackage(source:string,name:string){return loadedPackages(source).has(name);}
 
 export function documentClass(source:string){
-  return stripLatexComments(source).match(/\\documentclass(?:\[([^\]]*)\])?\{([^}]+)\}/)?.[2]?.trim()??null;
+  return activeLatexPreamble(source).match(/\\documentclass(?:\[([^\]]*)\])?\{([^}]+)\}/)?.[2]?.trim()??null;
 }
 
 export function documentClassOptions(source:string){
-  const match=stripLatexComments(source).match(/\\documentclass(?:\[([^\]]*)\])?\{[^}]+\}/);
+  const match=activeLatexPreamble(source).match(/\\documentclass(?:\[([^\]]*)\])?\{[^}]+\}/);
   return (match?.[1]??'').split(',').map(value=>value.trim()).filter(Boolean);
 }
 
@@ -83,7 +105,7 @@ export function hasParagraph(source:string){
   return /[\p{L}\p{N}]{2,}/u.test(stripped);
 }
 
-export function hasInlineMath(source:string){return /(?<!\\)\$[^$\n]+(?<!\\)\$/.test(activeLatexSource(source));}
+export function hasInlineMath(source:string){return /(?<!\\)\$[^$\n]+(?<!\\)\$|\\\([^\n]+\\\)/.test(activeLatexSource(source));}
 export function hasDisplayMath(source:string){return /\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\\begin\{(?:equation\*?|align\*?)\}[\s\S]*?\\end\{(?:equation\*?|align\*?)\}/.test(activeLatexSource(source));}
 
 export function environmentsBalanced(source:string){
@@ -109,7 +131,7 @@ function findGroupEnd(source:string,open:number){
   let depth=0;
   for(let index=open;index<source.length;index++){
     const char=source[index];
-    if(char==='%'&&source[index-1]!=='\\'){
+    if(char==='%'&&isLatexCommentPercent(source,index)){
       const newline=source.indexOf('\n',index);if(newline<0)return -1;index=newline;continue;
     }
     if(char==='{'&&source[index-1]!=='\\')depth+=1;

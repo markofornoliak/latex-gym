@@ -15,7 +15,7 @@ describe('project compiler diagnostic context',()=>{
     expect(inferDiagnosticFile(log,{severity:'error',line:2,message:'Undefined control sequence',explanation:'x'},project.files.map(file=>file.path),project.mainFile)).toBeUndefined();
   });
 
-  it('marks only the first TeX error as the likely root of a cascade',()=>{
+  it('marks a nearby structural follow-up as a likely cascade',()=>{
     const result:CompileResult={ok:false,engine:'pdflatex',elapsedMs:1,blocks:[],rawLog:'',diagnostics:[
       {severity:'error',line:2,message:'Undefined control sequence',explanation:'x'},
       {severity:'error',line:3,message:'Missing } inserted',explanation:'x'},
@@ -25,5 +25,15 @@ describe('project compiler diagnostic context',()=>{
     expect(contextual.diagnostics[0].cascade).toBe('root');
     expect(contextual.diagnostics[1].cascade).toBe('secondary');
     expect(contextual.diagnostics[2].cascade).toBeUndefined();
+  });
+
+  it('does not label an independent later TeX error as a cascade',()=>{
+    const result:CompileResult={ok:false,engine:'pdflatex',elapsedMs:1,blocks:[],rawLog:'',diagnostics:[
+      {severity:'error',line:2,message:'Undefined control sequence',explanation:'x'},
+      {severity:'error',line:40,message:"File `plot.pdf' not found",explanation:'x'}
+    ]};
+    const contextual=contextualizeProjectDiagnostics(result,project);
+    expect(contextual.diagnostics[0].cascade).toBeUndefined();
+    expect(contextual.diagnostics[1].cascade).toBeUndefined();
   });
 });

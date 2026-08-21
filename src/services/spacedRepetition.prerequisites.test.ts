@@ -17,7 +17,7 @@ describe('dependency-aware daily workout',()=>{
     expect(workout.map(item=>item.exercise.id)).toEqual(['base-exercise']);
   });
 
-  it('unlocks dependent practice from completed teaching or positive prerequisite mastery evidence',()=>{
+  it('unlocks dependent practice from completed teaching or real prerequisite mastery evidence',()=>{
     const byLesson=buildDailyWorkout([baseExercise,advancedExercise],{},['base-lesson'],'2026-08-21',{},context);
     expect(byLesson.some(item=>item.exercise.id==='advanced-exercise')).toBe(true);
     const mastery:Record<string,ConceptMastery>={base:mastered()};
@@ -25,7 +25,18 @@ describe('dependency-aware daily workout',()=>{
     expect(byMastery.some(item=>item.exercise.id==='advanced-exercise')).toBe(true);
   });
 
-  it('keeps review practice available when the target concept already has successful evidence',()=>{
+  it('does not treat one correct placement answer as prerequisite mastery',()=>{
+    const mastery:Record<string,ConceptMastery>={base:placementSuccess()};
+    const workout=buildDailyWorkout([baseExercise,advancedExercise],{base:1},[],'2026-08-21',mastery,context);
+    expect(workout.map(item=>item.exercise.id)).toEqual(['base-exercise']);
+  });
+
+  it('preserves legacy positive scores only when no modern mastery record exists',()=>{
+    const workout=buildDailyWorkout([baseExercise,advancedExercise],{base:1},[],'2026-08-21',{},context);
+    expect(workout.some(item=>item.exercise.id==='advanced-exercise')).toBe(true);
+  });
+
+  it('keeps review practice available when the target concept has real successful evidence',()=>{
     const mastery:Record<string,ConceptMastery>={advanced:mastered()};
     const workout=buildDailyWorkout([advancedExercise],{},[],'2026-08-21',mastery,context);
     expect(workout.map(item=>item.exercise.id)).toContain('advanced-exercise');
@@ -35,3 +46,4 @@ describe('dependency-aware daily workout',()=>{
 function exercise(id:string,lessonId:string,concept:string):Exercise{return {id,lessonId,category:'Основы',difficulty:'Начальный',mode:'Написать код',title:id,instructions:id,requirements:[id],starterCode:'',validators:[],hints:[],solution:'ok',concepts:[concept],prerequisites:[]};}
 function lesson(id:string,introduces:string[],prerequisites:string[],item:Exercise):Lesson{return {id,moduleId:'module',number:1,title:id,subtitle:id,difficulty:'Начальный',theory:[],pedagogy:{objective:id,prerequisites,introduces,reinforces:[],misconceptions:[],practiceObjective:id,masteryCriteria:[id]},examples:[],exercises:[item],relatedCommands:[]};}
 function mastered():ConceptMastery{return {score:.9,attempts:2,successes:2,mistakeCount:0,lastPracticed:'2026-08-20T00:00:00.000Z',stability:4,nextReview:'2026-08-21T00:00:00.000Z',independentSuccesses:2,hintedSuccesses:0,transferSuccesses:0,projectSuccesses:0,solutionReveals:0,delayedRecallSuccesses:1,lastIndependentSuccess:'2026-08-20T00:00:00.000Z',lastSuccessfulDelayDays:2,lastEvidence:null};}
+function placementSuccess():ConceptMastery{return {score:.4512,attempts:1,successes:1,mistakeCount:0,lastPracticed:'2026-08-21T00:00:00.000Z',stability:1.1,nextReview:'2026-08-22T00:00:00.000Z',independentSuccesses:1,hintedSuccesses:0,transferSuccesses:0,projectSuccesses:0,solutionReveals:0,delayedRecallSuccesses:0,lastIndependentSuccess:null,lastSuccessfulDelayDays:null,lastEvidence:{outcome:'success',independence:'independent',context:'placement',realCompile:false}};}

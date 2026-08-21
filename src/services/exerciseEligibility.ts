@@ -3,6 +3,12 @@ import type { CurriculumGraph } from './curriculumGraph';
 
 export type WorkoutCurriculumContext={graph?:CurriculumGraph;lessons?:readonly Lesson[]};
 
+/** Placement familiarity may rank work, but it cannot by itself satisfy a prerequisite. */
+export function isPrerequisiteReady(state:ConceptMastery|undefined){
+  if(!state)return false;
+  return Boolean(state.lastIndependentSuccess)||(state.transferSuccesses??0)>0||(state.projectSuccesses??0)>0;
+}
+
 export function filterEligibleExercises(
   exercises:readonly Exercise[],
   conceptScores:Record<string,number>,
@@ -16,12 +22,14 @@ export function filterEligibleExercises(
   const completed=new Set(completedLessonIds);
   const known=new Set<string>();
   for(const lessonId of completed){for(const conceptId of lessonById.get(lessonId)?.pedagogy?.introduces??[])known.add(conceptId);}
-  for(const [conceptId,state] of Object.entries(mastery))if(state.successes>0)known.add(conceptId);
-  for(const [conceptId,score] of Object.entries(conceptScores))if(score>0)known.add(conceptId);
+  for(const [conceptId,state] of Object.entries(mastery))if(isPrerequisiteReady(state))known.add(conceptId);
+  // Preserve pre-mastery legacy progress without allowing modern placement scores
+  // to masquerade as practice evidence: placement always creates a mastery record.
+  for(const [conceptId,score] of Object.entries(conceptScores))if(score>0&&!mastery[conceptId])known.add(conceptId);
 
   return exercises.filter(exercise=>{
     if(completed.has(exercise.lessonId))return true;
-    if(exercise.concepts.length>0&&exercise.concepts.every(conceptId=>(mastery[conceptId]?.successes??0)>0))return true;
+    if(exercise.concepts.length>0&&exercise.concepts.every(conceptId=>isPrerequisiteReady(mastery[conceptId])))return true;
     const required=new Set<string>(exercise.prerequisites??[]);
     for(const prerequisite of lessonById.get(exercise.lessonId)?.pedagogy?.prerequisites??[])required.add(prerequisite);
     const visited=new Set<string>();
