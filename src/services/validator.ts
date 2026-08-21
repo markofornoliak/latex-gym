@@ -20,6 +20,8 @@ import {
 export type ValidationItem = { ok:boolean; message:string; hint:string; line?:number };
 export type ValidationResult = { ok:boolean; items:ValidationItem[] };
 
+type RegexValidatorRule=Extract<ValidatorRule,{type:'regex'}>;
+
 const normalizeConceptText=(value:string)=>value.toLocaleLowerCase('ru-RU').replace(/[—–]/g,'-').replace(/[^\p{L}\p{N}.@_+\\-]+/gu,' ').replace(/\s+/g,' ').trim();
 const conceptualNegation=/\b(?:не|нет|нельзя|неверно|ошибочно|not|never|without|incorrect|false)\b/iu;
 
@@ -41,10 +43,28 @@ function hasConceptualText(source:string,value:string){
   return true;
 }
 
+/**
+ * Scope became explicit after part of the curriculum had already been authored.
+ * Preserve those legacy exercises without weakening the normal active-source default:
+ * raw scope is inferred only when the exercise's own reference solution proves that
+ * the regex is intentionally looking at commented source.
+ */
+function resolveExerciseRule(exercise:Exercise,rule:ValidatorRule):ValidatorRule{
+  if(rule.type!=='regex'||rule.scope!==undefined)return rule;
+  const activeMatches=regexMatches(rule,exercise.solution,'active');
+  if(activeMatches)return rule;
+  return regexMatches(rule,exercise.solution,'raw')?{...rule,scope:'raw'}:rule;
+}
+
+function regexMatches(rule:RegexValidatorRule,source:string,scope:'active'|'raw'){
+  try{return new RegExp(rule.value,rule.flags).test(scope==='raw'?source:activeLatexSource(source));}
+  catch{return false;}
+}
+
 export function validateExercise(exercise:Exercise,source:string,compileResult?:CompileResult):ValidationResult{
   const execution=exerciseExecution(exercise);
   const conceptualAnswer=!compileResult&&execution==='concept';
-  const items=exercise.validators.map(rule=>validateRule(rule,source,compileResult,conceptualAnswer,execution));
+  const items=exercise.validators.map(rule=>validateRule(resolveExerciseRule(exercise,rule),source,compileResult,conceptualAnswer,execution));
   if(execution==='reconstruction')items.push(validateReconstruction(exercise,source));
   return {ok:items.every(item=>item.ok),items};
 }
@@ -59,7 +79,7 @@ export function validateRule(rule:ValidatorRule,source:string,compileResult?:Com
     case 'package':ok=hasPackage(source,rule.value);break;
     case 'containsText':ok=conceptualAnswer?hasConceptualText(source,rule.value):hasActiveStructuralText(source,rule.value);line=ok?undefined:firstActiveLineContaining(source,rule.value);break;
     case 'forbiddenText':ok=!hasActiveStructuralText(source,rule.value);line=ok?undefined:firstActiveLineContaining(source,rule.value);break;
-    case 'regex':try{ok=new RegExp(rule.value,rule.flags).test(rule.scope==='raw'?source:activeLatexSource(source));}catch{ok=false;}break;
+    case 'regex':ok=regexMatches(rule,source,rule.scope==='raw'?'raw':'active');break;
     case 'paragraph':ok=hasParagraph(source);break;
     case 'inlineMath':ok=hasInlineMath(source);break;
     case 'displayMath':ok=hasDisplayMath(source);break;
