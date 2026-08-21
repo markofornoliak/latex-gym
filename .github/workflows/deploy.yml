@@ -88,7 +88,7 @@ jobs:
             exit 1
           fi
 
-          echo 'QA behavior: bookmark mutation, command-palette focus and SPA route focus'
+          echo 'QA behavior: focus, tabs, diagnostics, PWA copy and route semantics'
           timeout 60s "$CHROME" --headless --no-sandbox --disable-gpu \
             --virtual-time-budget=20000 --dump-dom \
             'http://127.0.0.1:4173/latex-gym/behavior-smoke.html' \
@@ -156,6 +156,25 @@ jobs:
           grep -Fq 'sections/introduction.tex' /tmp/desktop-1920-project.html
           grep -Fq 'chapters/system.tex' /tmp/tv-3840-project.html
           grep -Fq 'Проверить этап' /tmp/tv-3840-project.html
+
+          # Compare rendered pixels against the reviewed baseline. Small antialiasing
+          # differences are tolerated; a meaningful layout/style drift fails the build.
+          mkdir -p dist/visual-baseline dist/visual-current
+          cp qa/visual-baseline/*.png dist/visual-baseline/
+          cp qa-screenshots/*.png dist/visual-current/
+          cp scripts/qa/visual-regression.html dist/visual-regression.html
+          timeout 60s "$CHROME" --headless --no-sandbox --disable-gpu \
+            --virtual-time-budget=30000 --dump-dom \
+            'http://127.0.0.1:4173/latex-gym/visual-regression.html' \
+            > /tmp/visual-regression.html 2> /tmp/visual-regression.browser.log || true
+          if ! grep -Fq 'VISUAL_REGRESSION_PASS' /tmp/visual-regression.html; then
+            echo 'Visual regression exceeded the approved pixel budget.'
+            cat /tmp/visual-regression.html || true
+            cat /tmp/visual-regression.browser.log || true
+            exit 1
+          fi
+          cat /tmp/visual-regression.html
+          rm -rf dist/visual-baseline dist/visual-current dist/visual-regression.html
 
           # A second load of the same deep route exercises reload/direct-route behavior.
           "$CHROME" --headless --no-sandbox --disable-gpu --virtual-time-budget=1600 \
