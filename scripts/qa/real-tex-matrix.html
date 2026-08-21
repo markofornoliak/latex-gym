@@ -1,0 +1,60 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>LaTeX Gym real TeX matrix smoke</title>
+<body data-state="starting">REAL_TEX_MATRIX_STARTING<script>
+const tests=[
+  {
+    name:'pdftex',driver:'pdftex_bibtex8',bibtex:false,
+    files:[
+      {path:'main.tex',contents:'\\documentclass{article}\n\\begin{document}\n\\input{sections/body}\n\\end{document}'},
+      {path:'sections/body.tex',contents:'LaTeX Gym pdfLaTeX multi-file smoke.'}
+    ]
+  },
+  {
+    name:'xetex',driver:'xetex_bibtex8_dvipdfmx',bibtex:false,
+    files:[{path:'main.tex',contents:'\\documentclass{article}\n\\begin{document}\nXeLaTeX engine smoke.\n\\end{document}'}]
+  },
+  {
+    name:'luatex',driver:'luahbtex_bibtex8',bibtex:false,
+    files:[{path:'main.tex',contents:'\\documentclass{article}\n\\begin{document}\nLuaLaTeX engine smoke.\n\\end{document}'}]
+  },
+  {
+    name:'bibtex',driver:'pdftex_bibtex8',bibtex:true,
+    files:[
+      {path:'main.tex',contents:'\\documentclass{article}\n\\begin{document}\nCitation~\\cite{knuth1984}.\\bibliographystyle{plain}\\bibliography{refs}\\end{document}'},
+      {path:'refs.bib',contents:'@book{knuth1984,title={The TeXbook},author={Knuth, Donald E.},year={1984},publisher={Addison-Wesley}}'}
+    ]
+  }
+];
+const worker=new Worker('./busytex.worker.js');
+let index=-1;
+let current=null;
+let timer=setTimeout(()=>fail('matrix timeout'),240000);
+function fail(message){clearTimeout(timer);document.body.dataset.state='failed';document.body.textContent=`REAL_TEX_MATRIX_FAIL ${message}`;worker.terminate();}
+function pdfSignature(pdf){return pdf&&pdf.length>=4?String.fromCharCode(pdf[0],pdf[1],pdf[2],pdf[3]):'';}
+function runNext(){
+  index++;
+  if(index>=tests.length){clearTimeout(timer);document.body.dataset.state='passed';document.body.textContent=`REAL_TEX_MATRIX_PASS ${tests.map(test=>test.name).join(',')}`;worker.terminate();return;}
+  current=tests[index];
+  document.body.dataset.state='compiling';
+  document.body.textContent=`REAL_TEX_MATRIX_${current.name.toUpperCase()}_COMPILING`;
+  worker.postMessage({type:'compile',requestId:index+1,files:current.files,mainFile:'main.tex',bibtex:current.bibtex,driver:current.driver});
+}
+worker.onerror=event=>fail(event.message||'worker error');
+worker.onmessage=event=>{
+  const message=event.data||{};
+  if(message.type==='runtime-error')return fail(`${current?.name||'init'}: ${message.message||'runtime error'}`);
+  if(message.type==='initialized'&&index<0){runNext();return;}
+  if(message.type!=='compile-result'||message.requestId!==index+1)return;
+  const result=message.result||{};
+  const signature=pdfSignature(result.pdf);
+  if(signature!=='%PDF')return fail(`${current.name}: invalid PDF signature ${signature||'empty'}`);
+  if(Number(result.exit_code||0)!==0)return fail(`${current.name}: exit ${result.exit_code}`);
+  if(current.name==='bibtex'){
+    const trace=`${result.log||''}\n${JSON.stringify(result.logs||[])}`;
+    if(!/bibtex8/i.test(trace))return fail('bibtex: bibliography phase was not observed');
+  }
+  runNext();
+};
+worker.postMessage({type:'initialize'});
+</script></body>
