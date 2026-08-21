@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>LaTeX Gym visual regression</title>
+<body data-state="starting">VISUAL_REGRESSION_STARTING
+<script>
+const names=[
+  'phone-320-foundation','phone-360-practice','phone-390-command','phone-390-project','phone-430-first-document',
+  'tablet-768-reference','tablet-1024-project','laptop-1280-lesson','desktop-1440-practice','desktop-1920-project',
+  'tv-2560-debug','tv-3840-project'
+];
+const channelThreshold=32;
+const changedPixelBudget=.01;
+const load=url=>new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(new Error(`load failed: ${url}`));image.src=url;});
+const pixels=image=>{const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;const context=canvas.getContext('2d',{willReadFrequently:true});context.drawImage(image,0,0);return context.getImageData(0,0,canvas.width,canvas.height).data;};
+(async()=>{
+  try{
+    const results=[];
+    for(const name of names){
+      const [baseline,current]=await Promise.all([load(`./visual-baseline/${name}.png`),load(`./visual-current/${name}.png`)]);
+      if(baseline.naturalWidth!==current.naturalWidth||baseline.naturalHeight!==current.naturalHeight)throw new Error(`${name}: dimensions changed ${baseline.naturalWidth}x${baseline.naturalHeight} -> ${current.naturalWidth}x${current.naturalHeight}`);
+      const before=pixels(baseline),after=pixels(current);let changed=0;const total=before.length/4;
+      for(let offset=0;offset<before.length;offset+=4){
+        const delta=Math.max(Math.abs(before[offset]-after[offset]),Math.abs(before[offset+1]-after[offset+1]),Math.abs(before[offset+2]-after[offset+2]));
+        if(delta>channelThreshold)changed+=1;
+      }
+      const ratio=changed/total;results.push(`${name}=${(ratio*100).toFixed(3)}%`);
+      if(ratio>changedPixelBudget)throw new Error(`${name}: ${(ratio*100).toFixed(3)}% changed pixels exceeds ${(changedPixelBudget*100).toFixed(2)}% budget`);
+    }
+    document.body.dataset.state='passed';document.body.textContent=`VISUAL_REGRESSION_PASS ${results.join(' ')}`;
+  }catch(error){document.body.dataset.state='failed';document.body.textContent=`VISUAL_REGRESSION_FAIL ${error instanceof Error?error.message:String(error)}`;}
+})();
+</script>
