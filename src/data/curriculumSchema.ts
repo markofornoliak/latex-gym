@@ -13,6 +13,7 @@ type AssertValue=(value:unknown,path:string)=>void;
 const difficulties=new Set(['Начальный','Базовый','Средний','Продвинутый','Экспертный']);
 const practiceCategories=new Set(['Основы','Текст','Математика','Таблицы','Графика','TikZ','Библиография','Большие документы','Отладка','Academic challenges']);
 const exerciseModes=new Set(['Написать код','Исправить ошибку','Предсказать результат','Дополнить документ','Рефакторинг','Найти ошибку','Воссоздать результат','Текст → LaTeX','Улучшить код','Собрать документ','Объяснить','Архитектура']);
+const exerciseExecutions=new Set(['concept','fragment','document','reconstruction']);
 const validatorTypes=new Set(['documentClass','documentClassOption','environment','command','package','containsText','forbiddenText','regex','paragraph','inlineMath','displayMath','balancedEnvironments','compiles']);
 const valueValidatorTypes=new Set(['documentClass','documentClassOption','environment','command','package','containsText','forbiddenText','regex']);
 const learningBlockTypes=new Set(['concept','explanation','syntax','anatomy','flow','example','source-output','comparison','mistake','warning','checkpoint']);
@@ -117,6 +118,7 @@ function exerciseValue(value:unknown,path:string){
   enumString(item.category,`${path}.category`,practiceCategories);
   enumString(item.difficulty,`${path}.difficulty`,difficulties);
   enumString(item.mode,`${path}.mode`,exerciseModes);
+  if(item.execution!==undefined)enumString(item.execution,`${path}.execution`,exerciseExecutions);
   string(item.title,`${path}.title`);
   string(item.instructions,`${path}.instructions`);
   stringArray(item.requirements,`${path}.requirements`);
@@ -135,7 +137,10 @@ function validatorValue(value:unknown,path:string){
   string(item.hint,`${path}.hint`);
   if(valueValidatorTypes.has(type))string(item.value,`${path}.value`);
   if(type==='command')optionalNumber(item.min,`${path}.min`);
-  if(type==='regex')optionalString(item.flags,`${path}.flags`);
+  if(type==='regex'){
+    optionalString(item.flags,`${path}.flags`);
+    if(item.scope!==undefined)enumString(item.scope,`${path}.scope`,new Set(['active','raw']));
+  }
   if(type==='compiles'&&item.authority!==undefined)enumString(item.authority,`${path}.authority`,new Set(['educational','real-tex']));
 }
 
