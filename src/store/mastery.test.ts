@@ -84,4 +84,17 @@ describe('canonical mastery migration',()=>{
     expect(fraction.score).toBeGreaterThan(.6);
     expect(fraction.score).toBeLessThan(.8);
   });
+
+  it('repairs impossible imported counter relations instead of trusting them or dropping progress',()=>{
+    const state=migrateConceptMastery({fraction:{score:1,attempts:2,successes:999,mistakeCount:999,independentSuccesses:999,hintedSuccesses:999,transferSuccesses:999,projectSuccesses:999,delayedRecallSuccesses:999}}).fraction;
+    expect(state.attempts).toBe(2);
+    expect(state.successes).toBe(2);
+    expect(state.mistakeCount).toBe(2);
+    expect(state.independentSuccesses).toBe(2);
+    expect(state.hintedSuccesses).toBe(2);
+    expect(state.transferSuccesses).toBe(2);
+    expect(state.projectSuccesses).toBe(2);
+    expect(state.delayedRecallSuccesses).toBe(2);
+    expect(state.score).toBe(1);
+  });
 });
