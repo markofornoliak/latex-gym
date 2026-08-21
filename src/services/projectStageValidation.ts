@@ -19,6 +19,7 @@ type Rule=
   | {type:'documentClass';name:string;label:string}
   | {type:'inlineMath';label:string;scope?:'main'|'all'}
   | {type:'displayMath';label:string;scope?:'main'|'all'}
+  | {type:'math';label:string;scope?:'main'|'all'}
   | {type:'activeRegex';pattern:string;flags?:string;label:string;scope?:'main'|'all';negate?:boolean}
   | {type:'file';path:string;label?:string}
   | {type:'contains';path:string;value:string;label:string}
@@ -152,7 +153,7 @@ export const projectStageRuleContracts:Record<string,readonly Rule[]>={
     {type:'command',name:'section',label:'Презентация разделена на секции'},
     {type:'environment',name:'frame',label:'Есть несколько содержательных frames',min:2}
   ],
-  'beamer-presentation:math':[{type:'inlineMath',label:'На слайде есть математическая формула',scope:'all'},{type:'displayMath',label:'На слайде есть математическая формула',scope:'all'}],
+  'beamer-presentation:math':[{type:'math',label:'На слайде есть математическая формула',scope:'all'}],
   'beamer-presentation:figure':[{type:'command',name:'includegraphics',label:'Результат подключён через \\includegraphics'}],
   'beamer-presentation:final':[{type:'environment',name:'frame',label:'Сохранена последовательность нескольких frames',min:3}]
 };
@@ -173,7 +174,7 @@ export function assertProjectStageRuleCoverage(projects:readonly LearningProject
 function evaluateRule(rule:Rule,workspace:ProjectValidationWorkspace,id:string):ProjectStageValidationItem{
   const main=workspace.files[workspace.mainFile]??'';
   const all=Object.entries(workspace.files).filter(([path])=>path.endsWith('.tex')).map(([,content])=>content).join('\n');
-  const source=rule.type==='activeRegex'||rule.type==='inlineMath'||rule.type==='displayMath'?(rule.scope==='all'?all:main):all;
+  const source=rule.type==='activeRegex'||rule.type==='inlineMath'||rule.type==='displayMath'||rule.type==='math'?(rule.scope==='all'?all:main):all;
   let ok=false;let detail:string|undefined;
   switch(rule.type){
     case 'command':ok=commandCount(all,rule.name)>=(rule.min??1);break;
@@ -182,6 +183,7 @@ function evaluateRule(rule:Rule,workspace:ProjectValidationWorkspace,id:string):
     case 'documentClass':ok=documentClass(main)===rule.name;break;
     case 'inlineMath':ok=hasInlineMath(source);break;
     case 'displayMath':ok=hasDisplayMath(source);break;
+    case 'math':ok=hasInlineMath(source)||hasDisplayMath(source);break;
     case 'activeRegex':{const matched=new RegExp(rule.pattern,rule.flags).test(activeLatexSource(source));ok=rule.negate?!matched:matched;break;}
     case 'file':ok=rule.path in workspace.files;break;
     case 'contains':ok=activeLatexSource(workspace.files[rule.path]??'').includes(rule.value);break;
