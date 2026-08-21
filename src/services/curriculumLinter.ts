@@ -56,7 +56,7 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
         if(lesson.moduleId!==module.id)issues.push({severity:'error',code:'lesson-module-mismatch',moduleId:module.id,lessonId:lesson.id,message:`Lesson ${lesson.id} declares module ${lesson.moduleId}, but is stored in ${module.id}.`});
         if(!positiveInteger(lesson.number))issues.push({severity:'error',code:'invalid-lesson-number',moduleId:module.id,lessonId:lesson.id,message:`Lesson number must be a positive integer, received ${lesson.number}.`});
         const priorLesson=lessonNumbers.get(lesson.number);
-        if(priorLesson)issues.push({severity:'error',code:'duplicate-module-number',moduleId:module.id,lessonId:lesson.id,message:`Lesson number ${lesson.number} is already used by ${priorLesson} in module ${module.id}.`});
+        if(priorLesson)issues.push({severity:'error',code:'duplicate-lesson-number',moduleId:module.id,lessonId:lesson.id,message:`Lesson number ${lesson.number} is already used by ${priorLesson} in module ${module.id}.`});
         else lessonNumbers.set(lesson.number,lesson.id);
         if(lesson.number<previousLessonNumber)issues.push({severity:'warning',code:'lesson-number-order',moduleId:module.id,lessonId:lesson.id,message:`Lesson ${lesson.id} appears after a lesson with a larger number in module ${module.id}.`});
         previousLessonNumber=lesson.number;
