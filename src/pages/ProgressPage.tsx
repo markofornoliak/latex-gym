@@ -27,7 +27,7 @@ export function ProgressPage(){
 
     <section className="progress-section practice-ledger"><div className="section-heading"><h2>Практика</h2><span>{completedExercises.length} / {exercises.length} задач</span></div><dl><div><dt>Попытки</dt><dd>{attemptCount}</dd></div><div><dt>Успешные решения</dt><dd>{successCount}</dd></div><div><dt>Успешность</dt><dd>{attemptCount?`${practiceRate}%`:'—'}</dd></div><div><dt>Текущая серия</dt><dd>{streak.count?`${streak.count} дн.`:'—'}</dd></div></dl></section>
 
-    <section className="progress-section concept-review"><div className="section-heading"><h2>Понятия к повторению</h2><span>{Object.keys(mastery).length} отслеживается</span></div>{review.length?<div className="mastery-list">{review.map(([id,state])=><div className="mastery-row" key={id}><span><strong>{curriculum.conceptById[id]?.title??id}</strong><small>{masteryLabel(state.score,state.nextReview)}</small></span><div aria-label={`Устойчивость ${Math.round(state.score*100)}%`}><i style={{width:`${Math.round(state.score*100)}%`}}/></div></div>)}</div>:<p className="progress-empty">После первых упражнений здесь появятся понятия, которым полезно повторение.</p>}</section>
+    <section className="progress-section concept-review"><div className="section-heading"><h2>Понятия к повторению</h2><span>{Object.keys(mastery).length} отслеживается</span></div>{review.length?<div className="mastery-list">{review.map(([id,state])=><div className="mastery-row" key={id}><span><strong>{curriculum.conceptById[id]?.title??id}</strong><small>{masteryLabel(state.score,state.nextReview,state.delayedRecallSuccesses)}</small></span><div aria-label={`Текущая уверенность ${Math.round(state.score*100)}%`}><i style={{width:`${Math.round(state.score*100)}%`}}/></div></div>)}</div>:<p className="progress-empty">После первых упражнений здесь появятся понятия, которым полезно повторение.</p>}</section>
 
     <section className="progress-section project-progress"><div className="section-heading"><h2>Проекты</h2><span>{completedStages} / {projectStages} этапов</span></div>{projects.map(project=>{const done=projectProgress[project.id]?.length??0;return <Link to={`/project/${project.id}`} className="project-progress-row" key={project.id}><span><strong>{project.title}</strong><small>{done?`${done} из ${project.stages.length} этапов`:'Не начат'}</small></span><div><i style={{width:`${done/project.stages.length*100}%`}}/></div></Link>;})}</section>
 
@@ -35,14 +35,15 @@ export function ProgressPage(){
   </div>;
 }
 
-function reviewPriority(state:{score:number;nextReview:string|null;mistakeCount:number}){
+function reviewPriority(state:{score:number;nextReview:string|null;mistakeCount:number;delayedRecallSuccesses:number}){
   const due=state.nextReview?new Date(state.nextReview).getTime()<=Date.now():true;
-  return state.score+(due?-1:0)-Math.min(.4,state.mistakeCount*.04);
+  return state.score+(due?-1:0)+(state.delayedRecallSuccesses===0?-.25:0)-Math.min(.4,state.mistakeCount*.04);
 }
-function masteryLabel(score:number,nextReview:string|null){
+function masteryLabel(score:number,nextReview:string|null,delayedRecallSuccesses:number){
   const due=nextReview?new Date(nextReview).getTime()<=Date.now():true;
   if(due&&score<.7)return 'повторить сейчас';
   if(score<.55)return 'требует практики';
   if(score<.8)return 'закрепить';
-  return due?'короткое повторение':'устойчиво';
+  if(delayedRecallSuccesses===0)return 'нужно проверить позже';
+  return due?'короткое повторение':'устойчиво после повторения';
 }
