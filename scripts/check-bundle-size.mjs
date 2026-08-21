@@ -15,17 +15,24 @@ const failures=[];
 const initial=stats.find(file=>/^index-[\w-]+\.js$/.test(file.name));
 if(!initial)throw new Error('Production initial index chunk was not found in dist/assets.');
 const css=stats.find(file=>/^index-[\w-]+\.css$/.test(file.name));
+const curriculum=stats.find(file=>/^curriculumRuntime-[\w-]+\.js$/.test(file.name));
+if(!curriculum)throw new Error('Deferred curriculum runtime chunk was not found; the bootstrap split may have regressed.');
 const js=stats.filter(file=>file.name.endsWith('.js'));
-const largestLazy=js.filter(file=>file!==initial).sort((a,b)=>b.raw-a.raw)[0];
+const largestExecutableLazy=js.filter(file=>file!==initial&&file!==curriculum).sort((a,b)=>b.raw-a.raw)[0];
 
+// Keep executable bootstrap/lazy code tight. The curriculum chunk is mostly
+// authored course data, so it receives a separate compressed-size-aware budget
+// instead of silently inflating the generic JavaScript allowance.
 check(initial,'initial JS',320*1024,95*1024);
-if(largestLazy)check(largestLazy,'largest lazy JS',420*1024,130*1024);
+check(curriculum,'deferred curriculum data',1500*1024,190*1024);
+if(largestExecutableLazy)check(largestExecutableLazy,'largest executable lazy JS',420*1024,130*1024);
 if(css)check(css,'application CSS',120*1024,25*1024);
 
 console.log('\nBundle budget report');
-console.log(`  initial JS      ${basename(initial.name)}  ${format(initial.raw)} raw / ${format(initial.gzip)} gzip`);
-if(largestLazy)console.log(`  largest lazy JS ${basename(largestLazy.name)}  ${format(largestLazy.raw)} raw / ${format(largestLazy.gzip)} gzip`);
-if(css)console.log(`  application CSS ${basename(css.name)}  ${format(css.raw)} raw / ${format(css.gzip)} gzip`);
+console.log(`  initial JS              ${basename(initial.name)}  ${format(initial.raw)} raw / ${format(initial.gzip)} gzip`);
+console.log(`  deferred curriculum     ${basename(curriculum.name)}  ${format(curriculum.raw)} raw / ${format(curriculum.gzip)} gzip`);
+if(largestExecutableLazy)console.log(`  largest executable lazy ${basename(largestExecutableLazy.name)}  ${format(largestExecutableLazy.raw)} raw / ${format(largestExecutableLazy.gzip)} gzip`);
+if(css)console.log(`  application CSS         ${basename(css.name)}  ${format(css.raw)} raw / ${format(css.gzip)} gzip`);
 
 if(failures.length){
   console.error('\nBundle budget exceeded:');
