@@ -24,7 +24,7 @@ export default function CommandPalette({onClose}:{onClose:()=>void}){
   const onDialogKeyDown=(event:ReactKeyboardEvent<HTMLElement>)=>{
     if(event.key==='Escape'){event.preventDefault();event.stopPropagation();onClose();return;}
     if(event.key!=='Tab')return;
-    const focusable=[...(dialogRef.current?.querySelectorAll<HTMLElement>('input,button,[href],[tabindex]:not([tabindex="-1"])')??[])].filter(element=>!element.hasAttribute('disabled')&&element.getAttribute('aria-hidden')!=='true');
+    const focusable=[...(dialogRef.current?.querySelectorAll<HTMLElement>('input,button,[href],[tabindex]')??[])].filter(element=>element.tabIndex>=0&&!element.hasAttribute('disabled')&&element.getAttribute('aria-hidden')!=='true');
     if(!focusable.length){event.preventDefault();return;}
     const first=focusable[0],last=focusable.at(-1)!;
     if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
