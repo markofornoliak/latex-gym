@@ -47,7 +47,10 @@ export function nextBestLearningAction(input:NextLearningActionInput):NextLearni
   const goalLesson=preferred.find(lesson=>!input.completedLessonIds.includes(lesson.id)&&lessonReady(lesson,input));
   if(goalLesson)return {kind:'lesson',lessonId:goalLesson.id,reason:'goal-track'};
 
-  const goalProject=preferredProjectIds(input.goals,input.experience).map(id=>input.projects.find(project=>project.id===id)).find((project):project is LearningProject=>Boolean(project)&&projectReady(project,input)&&project.stages.some(stage=>!(input.completedProjectStages[project.id]??[]).includes(stage.id)));
+  const goalProject=preferredProjectIds(input.goals,input.experience)
+    .map(id=>input.projects.find(project=>project.id===id))
+    .filter((project):project is LearningProject=>Boolean(project))
+    .find(project=>projectReady(project,input)&&project.stages.some(stage=>!(input.completedProjectStages[project.id]??[]).includes(stage.id)));
   if(goalProject){
     const done=new Set(input.completedProjectStages[goalProject.id]??[]);
     const next=goalProject.stages.find(stage=>!done.has(stage.id));

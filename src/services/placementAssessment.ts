@@ -25,7 +25,9 @@ export function assessPlacement(evidence:readonly PlacementAssessmentEvidence[],
   for(let level=0;level<=3;level+=1)if(correctByDifficulty[level]>0)demonstratedDifficulty=level;
 
   const foundationalFailures=evidence.filter(item=>!item.correct&&item.difficulty===0).length;
-  let level=weightedAccuracy<.30?0:weightedAccuracy<.44?1:weightedAccuracy<.57?2:weightedAccuracy<.69?3:weightedAccuracy<.82?4:5;
+  // Conservative boundaries keep a learner with mixed evidence at the last clearly
+  // demonstrated layer instead of promoting on a narrow weighted majority.
+  let level=weightedAccuracy<.30?0:weightedAccuracy<.44?1:weightedAccuracy<.62?2:weightedAccuracy<.75?3:weightedAccuracy<.86?4:5;
   if(foundationalFailures>0)level=Math.min(level,1);
   if(demonstratedDifficulty<2)level=Math.min(level,2);
   if(demonstratedDifficulty<3)level=Math.min(level,4);

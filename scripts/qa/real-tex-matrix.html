@@ -15,10 +15,6 @@ const tests=[
     files:[{path:'main.tex',contents:'\\documentclass{article}\n\\begin{document}\nXeLaTeX engine smoke.\n\\end{document}'}]
   },
   {
-    name:'luatex',driver:'luahbtex_bibtex8',bibtex:false,
-    files:[{path:'main.tex',contents:'\\documentclass{article}\n\\begin{document}\nLuaLaTeX engine smoke.\n\\end{document}'}]
-  },
-  {
     name:'bibtex',driver:'pdftex_bibtex8',bibtex:true,
     files:[
       {path:'main.tex',contents:'\\documentclass{article}\n\\begin{document}\nCitation~\\cite{knuth1984}.\\bibliographystyle{plain}\\bibliography{refs}\\end{document}'},
@@ -29,13 +25,17 @@ const tests=[
 const worker=new Worker('./busytex.worker.js');
 let index=-1;
 let current=null;
-// Keep this above Chrome's virtual-time budget. The workflow-level `timeout`
-// remains the authoritative wall-clock hang guard.
+let progress=[];
 let timer=setTimeout(()=>fail('matrix watchdog timeout'),600000);
 function fail(message){clearTimeout(timer);document.body.dataset.state='failed';document.body.textContent=`REAL_TEX_MATRIX_FAIL ${message}`;worker.terminate();}
 function pdfSignature(pdf){return pdf&&pdf.length>=4?String.fromCharCode(pdf[0],pdf[1],pdf[2],pdf[3]):'';}
+function diagnosticTail(result){
+  const trace=[result.log||'',...(result.logs||[]).flatMap(item=>[item.cmd||'',item.log||'',item.stdout||'',item.stderr||''])].filter(Boolean).join('\n');
+  return `${trace}\n${progress.join('\n')}`.replace(/\s+/g,' ').trim().slice(-1400);
+}
 function runNext(){
   index++;
+  progress=[];
   if(index>=tests.length){clearTimeout(timer);document.body.dataset.state='passed';document.body.textContent=`REAL_TEX_MATRIX_PASS ${tests.map(test=>test.name).join(',')}`;worker.terminate();return;}
   current=tests[index];
   document.body.dataset.state='compiling';
@@ -45,16 +45,17 @@ function runNext(){
 worker.onerror=event=>fail(event.message||'worker error');
 worker.onmessage=event=>{
   const message=event.data||{};
+  if(message.type==='progress'){progress.push(String(message.message||''));if(progress.length>80)progress.shift();return;}
   if(message.type==='runtime-error')return fail(`${current?.name||'init'}: ${message.message||'runtime error'}`);
   if(message.type==='initialized'&&index<0){runNext();return;}
   if(message.type!=='compile-result'||message.requestId!==index+1)return;
   const result=message.result||{};
   const signature=pdfSignature(result.pdf);
-  if(signature!=='%PDF')return fail(`${current.name}: invalid PDF signature ${signature||'empty'}`);
-  if(Number(result.exit_code||0)!==0)return fail(`${current.name}: exit ${result.exit_code}`);
+  if(signature!=='%PDF')return fail(`${current.name}: invalid PDF signature ${signature||'empty'}; exit=${String(result.exit_code)}; ${diagnosticTail(result)}`);
+  if(Number(result.exit_code||0)!==0)return fail(`${current.name}: exit ${result.exit_code}; ${diagnosticTail(result)}`);
   if(current.name==='bibtex'){
     const trace=`${result.log||''}\n${JSON.stringify(result.logs||[])}`;
-    if(!/bibtex8/i.test(trace))return fail('bibtex: bibliography phase was not observed');
+    if(!/bibtex8/i.test(trace))return fail(`bibtex: bibliography phase was not observed; ${diagnosticTail(result)}`);
   }
   runNext();
 };

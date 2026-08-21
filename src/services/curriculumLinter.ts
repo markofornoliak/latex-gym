@@ -3,7 +3,7 @@ import { concepts as defaultConcepts } from '../data/concepts';
 import { projects as defaultProjects } from '../data/projects';
 import { buildCurriculumGraph } from './curriculumGraph';
 import { validateDependencyStructure } from './dependencyValidation';
-import { validateRule } from './validator';
+import { validateExercise } from './validator';
 
 export type CurriculumIssue={
   severity:'error'|'warning';code:string;message:string;moduleId?:string;lessonId?:string;exerciseId?:string;projectId?:string;conceptId?:string;referenceId?:string;
@@ -119,7 +119,8 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
     for(const prerequisite of exercise.prerequisites??[])if(!conceptIdSet.has(prerequisite))issues.push({severity:'error',code:'unknown-exercise-prerequisite',conceptId:prerequisite,exerciseId:exercise.id,message:`Unknown exercise prerequisite: ${prerequisite}`});
     if(!exercise.solution.trim())issues.push({severity:'error',code:'empty-solution',exerciseId:exercise.id,message:'Exercise solution is empty.'});
     if(exercise.validators.length===0)issues.push({severity:'error',code:'missing-validators',exerciseId:exercise.id,message:'Exercise has no validation rules.'});
-    for(const rule of exercise.validators){
+    const solutionValidation=validateExercise(exercise,exercise.solution);
+    for(const [ruleIndex,rule] of exercise.validators.entries()){
       const shapeProblem=validatorShapeProblem(rule);
       if(shapeProblem){
         issues.push({severity:'error',code:'malformed-validator',exerciseId:exercise.id,message:`Malformed validator: ${shapeProblem}`});
@@ -132,8 +133,7 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
         }
       }
       if(rule.type==='compiles')continue;
-      const conceptual=exercise.mode==='Объяснить'||exercise.mode==='Архитектура';
-      if(!validateRule(rule,exercise.solution,undefined,conceptual).ok)issues.push({severity:'error',code:'solution-fails-rule',exerciseId:exercise.id,message:`Reference solution does not satisfy: ${rule.message}`});
+      if(!solutionValidation.items[ruleIndex]?.ok)issues.push({severity:'error',code:'solution-fails-rule',exerciseId:exercise.id,message:`Reference solution does not satisfy: ${rule.message}`});
     }
   }
 

@@ -9,7 +9,10 @@ export async function runCompilerApiSmoke(root:HTMLElement){
       {path:'sections/body.tex',content:'LaTeX Gym compiler API pdfLaTeX multi-file smoke.'}
     ]),{engine:'pdflatex',bibliography:'none'});
     await requirePdf('xelatex',single('XeLaTeX compiler API smoke.'),{engine:'xelatex',bibliography:'none'});
-    await requirePdf('lualatex',single('LuaLaTeX compiler API smoke.'),{engine:'lualatex',bibliography:'none'});
+
+    const unsupportedLua=await compiler.compile(single('LuaLaTeX compatibility smoke.'),{engine:'lualatex',bibliography:'none'});
+    requireCondition(!unsupportedLua.ok&&unsupportedLua.providerId==='busytex-wasm'&&unsupportedLua.diagnostics.some(item=>item.relatedConcept==='lualatex'),'LuaLaTeX rejection did not come from the real provider');
+
     await requirePdf('bibtex',createCompilerProject('main.tex',[
       {path:'main.tex',content:'\\documentclass{article}\n\\begin{document}\nCitation~\\cite{knuth1984}.\\bibliographystyle{plain}\\bibliography{refs}\\end{document}'},
       {path:'refs.bib',content:'@book{knuth1984,title={The TeXbook},author={Knuth, Donald E.},year={1984},publisher={Addison-Wesley}}'}
@@ -27,7 +30,7 @@ export async function runCompilerApiSmoke(root:HTMLElement){
 
     await requirePdf('post-cancel-recovery',single('Compiler recovered after cancellation.'),{engine:'pdflatex',bibliography:'none'});
     root.dataset.state='passed';
-    root.textContent='COMPILER_API_SMOKE_PASS pdflatex-multifile,xelatex,lualatex,bibtex,biber-rejection,cancel,recovery';
+    root.textContent='COMPILER_API_SMOKE_PASS pdflatex-multifile,xelatex,lualatex-rejection,bibtex,biber-rejection,cancel,recovery';
   }catch(error){
     root.dataset.state='failed';
     root.textContent=`COMPILER_API_SMOKE_FAIL ${error instanceof Error?error.message:String(error)}`;

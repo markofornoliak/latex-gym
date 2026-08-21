@@ -124,7 +124,7 @@ type PendingReal={
 
 export const REAL_TEX_CAPABILITIES:CompilerCapabilities={
   realPdf:true,
-  engines:['pdflatex','xelatex','lualatex'],
+  engines:['pdflatex','xelatex'],
   multiFile:true,
   bibtex:true,
   biber:false,
@@ -152,6 +152,18 @@ export class WasmTexCompilerProvider implements CompilerProvider {
     assertNotCancelled(options.signal);
     const started=performance.now();
     const source=mainSource(project);
+    const engine=options.engine??'pdflatex';
+    if(!this.capabilities.engines.includes(engine)){
+      options.onPhase?.('error');
+      return {
+        ok:false,diagnostics:[{
+          severity:'error',line:1,message:'LuaLaTeX недоступен в текущем браузерном TeX-движке',
+          explanation:'Проверенный BusyTeX runtime не может надёжно собрать даже минимальный LuaLaTeX-документ, поэтому LaTeX Gym не заявляет эту возможность и не подменяет её учебным предпросмотром.',
+          suggestion:'Используйте pdfLaTeX или XeLaTeX. Для LuaLaTeX используйте внешний актуальный TeX toolchain до обновления браузерного runtime.',
+          source:'latex-gym',relatedConcept:'lualatex',originalCompilerMessage:'Unsupported capability: LuaLaTeX'
+        }],blocks:[],elapsedMs:Math.max(1,Math.round(performance.now()-started)),engine,providerId:this.id,capabilities:this.capabilities,rawLog:'LuaLaTeX is disabled because the pinned BusyTeX runtime fails its minimal-document compatibility smoke test.'
+      };
+    }
     const unsupported=detectUnsupportedBibliography(project);
     if(unsupported){
       options.onPhase?.('error');
@@ -161,7 +173,7 @@ export class WasmTexCompilerProvider implements CompilerProvider {
           explanation:'Документ требует Biber. Текущий локальный WASM-провайдер поддерживает BibTeX, но не Biber.',
           suggestion:'Для этой сборки используйте совместимый BibTeX-workflow или внешний TeX/Biber toolchain. LaTeX Gym не будет имитировать успешную сборку.',
           source:'latex-gym',relatedConcept:'biber',originalCompilerMessage:'Unsupported capability: Biber'
-        }],blocks:[],elapsedMs:Math.max(1,Math.round(performance.now()-started)),engine:options.engine??'pdflatex',providerId:this.id,capabilities:this.capabilities,rawLog:'Biber is not supported by the current BusyTeX WASM provider.'
+        }],blocks:[],elapsedMs:Math.max(1,Math.round(performance.now()-started)),engine,providerId:this.id,capabilities:this.capabilities,rawLog:'Biber is not supported by the current BusyTeX WASM provider.'
       };
     }
 
@@ -170,8 +182,7 @@ export class WasmTexCompilerProvider implements CompilerProvider {
     assertNotCancelled(options.signal);
     options.onPhase?.('compiling');
 
-    const engine=options.engine??'pdflatex';
-    const driver=engine==='xelatex'?'xetex_bibtex8_dvipdfmx':engine==='lualatex'?'luahbtex_bibtex8':'pdftex_bibtex8';
+    const driver=engine==='xelatex'?'xetex_bibtex8_dvipdfmx':'pdftex_bibtex8';
     const files=project.files.map(file=>({path:file.path,contents:file.content}));
     const bibliography=options.bibliography==='none'?false:options.bibliography==='bibtex'?true:null;
     const raw=await this.runCompile({files,mainFile:project.mainFile,bibtex:bibliography,driver,onPhase:options.onPhase,signal:options.signal});
@@ -313,6 +324,8 @@ class CompilerManager implements LatexCompiler {
     const project=typeof input==='string'?singleFileProject(input):input;
     try{
       assertNotCancelled(controller.signal);
+      const requestedEngine=requestOptions.engine??'pdflatex';
+      if(!this.real.capabilities.engines.includes(requestedEngine))return await this.real.compile(project,requestOptions);
       const canTryReal=typeof Worker!=='undefined'&&!(typeof navigator!=='undefined'&&navigator.onLine===false)&&Date.now()>=this.realUnavailableUntil;
       if(canTryReal){
         try{return await this.real.compile(project,requestOptions);}
