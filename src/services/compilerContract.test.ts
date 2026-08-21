@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectUnsupportedBibliography, REAL_TEX_CAPABILITIES, WasmTexCompilerProvider } from './compiler';
+import { compiler, detectUnsupportedBibliography, REAL_TEX_CAPABILITIES, WasmTexCompilerProvider } from './compiler';
 import { compilationStateLabel, isCompilationBusy } from './compilerState';
 
 describe('compiler contract',()=>{
@@ -24,6 +24,15 @@ describe('compiler contract',()=>{
     expect(result.diagnostics[0]).toMatchObject({severity:'error',relatedConcept:'lualatex'});
     expect(result.rawLog).toMatch(/LuaLaTeX is disabled/);
     expect(phases).toEqual(['error']);
+  });
+
+  it('keeps LuaLaTeX fail-closed when Worker/runtime fallback routing is unavailable',async()=>{
+    const result=await compiler.compile('\\documentclass{article}\n\\begin{document}Text\\end{document}',{engine:'lualatex'});
+    expect(result.ok).toBe(false);
+    expect(result.providerId).toBe('busytex-wasm');
+    expect(result.engine).toBe('lualatex');
+    expect(result.fallbackReason).toBeUndefined();
+    expect(result.diagnostics.some(item=>item.relatedConcept==='lualatex')).toBe(true);
   });
 
   it('keeps intermediate compilation phases busy and names them honestly',()=>{
