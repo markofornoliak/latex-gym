@@ -1,0 +1,83 @@
+name: Frontend audit validation
+
+on:
+  push:
+    branches: [frontend-audit-20260821]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Prepare BusyTeX smoke runtime
+        run: node scripts/prepare-busytex.mjs smoke
+
+      - name: Browser behavior and responsive visual capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp scripts/qa/real-tex-matrix.html dist/compiler-smoke.html
+          cp scripts/qa/behavior-smoke.html dist/behavior-smoke.html
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/latex-gym-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4173/latex-gym/ >/dev/null && break; sleep 1; done
+          CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          timeout 300s "$CHROME" --headless --no-sandbox --disable-gpu --virtual-time-budget=240000 --dump-dom 'http://127.0.0.1:4173/latex-gym/compiler-smoke.html' > /tmp/real-tex-smoke.html 2>/tmp/real-tex-smoke.browser.log || true
+          grep -Fq 'REAL_TEX_MATRIX_PASS' /tmp/real-tex-smoke.html
+          timeout 60s "$CHROME" --headless --no-sandbox --disable-gpu --virtual-time-budget=20000 --dump-dom 'http://127.0.0.1:4173/latex-gym/behavior-smoke.html' > /tmp/behavior-smoke.html 2>/tmp/behavior-smoke.browser.log || true
+          grep -Fq 'BEHAVIOR_SMOKE_PASS' /tmp/behavior-smoke.html
+          mkdir -p qa-screenshots
+          capture() {
+            local name="$1" route="$2" width="$3" height="$4" expected="$5"
+            local url="http://127.0.0.1:4173/latex-gym/#${route}"
+            "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --run-all-compositor-stages-before-draw --virtual-time-budget=2400 --window-size="${width},${height}" --dump-dom "$url" > "/tmp/${name}.html" 2> "/tmp/${name}.browser.log"
+            grep -Fq "$expected" "/tmp/${name}.html"
+            ! grep -Fq 'Страница не найдена' "/tmp/${name}.html"
+            ! grep -Eq 'Uncaught (TypeError|ReferenceError|SyntaxError)|CONSOLE.*ERROR' "/tmp/${name}.browser.log"
+            "$CHROME" --headless --no-sandbox --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --run-all-compositor-stages-before-draw --virtual-time-budget=2400 --window-size="${width},${height}" --screenshot="qa-screenshots/${name}.png" "$url" 2>> "/tmp/${name}.browser.log"
+          }
+          capture phone-320-foundation /lesson/what-is-latex 320 568 'Что такое LaTeX'
+          capture phone-360-practice /practice/deep-001 360 800 'ЗАДАНИЕ 1 ИЗ 3'
+          capture phone-390-command /lesson/commands-foundation 390 844 'Команды'
+          capture phone-390-project /project/academic-paper/stage-10 390 844 'Архитектура публикации'
+          capture phone-430-first-document /lesson/first-document-foundation 430 932 'Первый документ'
+          capture tablet-768-reference /reference/frac 768 1024 'Дробь'
+          capture tablet-1024-project /project/academic-paper/stage-4 1024 1366 'Математическая модель'
+          capture laptop-1280-lesson /lesson/table-anatomy 1280 800 'Анатомия tabular'
+          capture desktop-1440-practice /practice/e01 1440 900 'Проверить решение'
+          capture desktop-1920-project /project/academic-paper/stage-10 1920 1080 'Архитектура публикации'
+          capture tv-2560-debug /lesson/debug-alignment-tab 2560 1440 'Extra alignment tab'
+          capture tv-3840-project /project/technical-report/build 3840 2160 'Сборка'
+
+      - name: Upload frontend audit screenshots
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-audit-visual
+          path: qa-screenshots
+          if-no-files-found: error
+          retention-days: 7
