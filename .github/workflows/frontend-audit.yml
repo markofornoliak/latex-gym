@@ -36,7 +36,7 @@ jobs:
       - name: Prepare BusyTeX smoke runtime
         run: node scripts/prepare-busytex.mjs smoke
 
-      - name: Browser behavior and responsive visual capture
+      - name: Browser behavior and responsive visual regression
         shell: bash
         run: |
           set -euo pipefail
@@ -74,10 +74,19 @@ jobs:
           capture tv-2560-debug /lesson/debug-alignment-tab 2560 1440 'Extra alignment tab'
           capture tv-3840-project /project/technical-report/build 3840 2160 'Сборка'
 
+          mkdir -p dist/visual-baseline dist/visual-current
+          cp qa/visual-baseline/*.png dist/visual-baseline/
+          cp qa-screenshots/*.png dist/visual-current/
+          cp scripts/qa/visual-regression.html dist/visual-regression.html
+          timeout 60s "$CHROME" --headless --no-sandbox --disable-gpu --virtual-time-budget=30000 --dump-dom 'http://127.0.0.1:4173/latex-gym/visual-regression.html' > /tmp/visual-regression.html 2>/tmp/visual-regression.browser.log || true
+          cat /tmp/visual-regression.html
+          grep -Fq 'VISUAL_REGRESSION_PASS' /tmp/visual-regression.html
+
       - name: Upload frontend audit screenshots
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: frontend-audit-visual
           path: qa-screenshots
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
