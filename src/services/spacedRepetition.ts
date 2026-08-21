@@ -1,4 +1,5 @@
 import type { ConceptMastery, Exercise } from '../types';
+import { filterEligibleExercises, type WorkoutCurriculumContext } from './exerciseEligibility';
 
 export type WorkoutReason='review'|'new'|'weak'|'debugging'|'transfer';
 export type DailyWorkoutItem={exercise:Exercise;reason:WorkoutReason;explanation:string};
@@ -8,10 +9,13 @@ export function buildDailyWorkout(
   conceptScores:Record<string,number>,
   completedLessonIds:string[],
   daySeed=new Date().toISOString().slice(0,10),
-  mastery:Record<string,ConceptMastery>={}
+  mastery:Record<string,ConceptMastery>={},
+  context:WorkoutCurriculumContext={}
 ):DailyWorkoutItem[]{
-  const unlocked=exercises.filter(exercise=>completedLessonIds.length===0?exercise.difficulty==='Начальный':completedLessonIds.includes(exercise.lessonId));
-  const pool=unlocked.length>=5?unlocked:exercises.filter(exercise=>['Начальный','Базовый'].includes(exercise.difficulty));
+  const eligible=filterEligibleExercises(exercises,conceptScores,completedLessonIds,mastery,context);
+  const unlocked=eligible.filter(exercise=>completedLessonIds.length===0?exercise.difficulty==='Начальный':completedLessonIds.includes(exercise.lessonId));
+  const dependencyAware=Boolean(context.graph&&context.lessons);
+  const pool=unlocked.length>=5?unlocked:dependencyAware?eligible:exercises.filter(exercise=>['Начальный','Базовый'].includes(exercise.difficulty));
   const hash=[...daySeed].reduce((value,char)=>((value*31)+char.charCodeAt(0))>>>0,7);
   const now=Date.now();
   const ranked=[...pool].sort((left,right)=>{
@@ -50,9 +54,10 @@ export function selectDailyTraining(
   conceptScores:Record<string,number>,
   completedLessonIds:string[],
   daySeed=new Date().toISOString().slice(0,10),
-  mastery:Record<string,ConceptMastery>={}
+  mastery:Record<string,ConceptMastery>={},
+  context:WorkoutCurriculumContext={}
 ){
-  return buildDailyWorkout(exercises,conceptScores,completedLessonIds,daySeed,mastery).map(item=>item.exercise);
+  return buildDailyWorkout(exercises,conceptScores,completedLessonIds,daySeed,mastery,context).map(item=>item.exercise);
 }
 
 function priority(exercise:Exercise,scores:Record<string,number>,mastery:Record<string,ConceptMastery>,now:number){
