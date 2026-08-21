@@ -2,7 +2,7 @@
 <meta charset="utf-8">
 <title>LaTeX Gym behavioral smoke</title>
 <body data-state="starting">BEHAVIOR_SMOKE_STARTING
-<iframe id="app" src="./#/practice/e01" title="LaTeX Gym QA"></iframe>
+<iframe id="app" title="LaTeX Gym QA"></iframe>
 <script>
 const frame=document.getElementById('app');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -14,9 +14,13 @@ const waitFor=async(check,label,timeout=12000)=>{
 const fail=message=>{document.body.dataset.state='failed';document.body.textContent=`BEHAVIOR_SMOKE_FAIL ${message}`;};
 (async()=>{
   try{
-    await new Promise((resolve,reject)=>{frame.addEventListener('load',resolve,{once:true});setTimeout(()=>reject(new Error('iframe load timeout')),12000);});
+    const loaded=new Promise((resolve,reject)=>{frame.addEventListener('load',resolve,{once:true});setTimeout(()=>reject(new Error('iframe load timeout')),12000);});
+    frame.src='./#/practice/e01';
+    await loaded;
     const win=frame.contentWindow;
     const doc=frame.contentDocument;
+    if(!win||!doc)throw new Error('same-origin app frame unavailable');
+    const keyEvent=(type,init)=>new win.KeyboardEvent(type,{bubbles:true,cancelable:true,...init});
     const bookmark=await waitFor(()=>doc.querySelector('button.practice-bookmark'),'bookmark button');
     const originalLabel=bookmark.getAttribute('aria-label');
     bookmark.click();
@@ -25,13 +29,13 @@ const fail=message=>{document.body.dataset.state='failed';document.body.textCont
     await waitFor(()=>bookmark.getAttribute('aria-label')===originalLabel,'bookmark restore');
 
     bookmark.focus();
-    win.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true,cancelable:true}));
+    win.dispatchEvent(keyEvent('keydown',{key:'k',ctrlKey:true}));
     const dialog=await waitFor(()=>doc.querySelector('.command-palette[role="dialog"]'),'command palette');
     const input=await waitFor(()=>dialog.querySelector('input[role="combobox"]'),'palette input');
     if(doc.activeElement!==input)throw new Error('palette input did not receive focus');
-    input.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
+    input.dispatchEvent(keyEvent('keydown',{key:'Tab',shiftKey:true}));
     if(doc.activeElement===input)throw new Error('focus trap did not wrap Shift+Tab');
-    doc.activeElement?.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+    doc.activeElement?.dispatchEvent(keyEvent('keydown',{key:'Escape'}));
     await waitFor(()=>!doc.querySelector('.command-palette'),'palette close');
     if(doc.activeElement!==bookmark)throw new Error('palette did not restore opener focus');
 
