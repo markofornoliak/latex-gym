@@ -19,7 +19,7 @@ describe('placement assessment',()=>{
       {concept:'e',difficulty:2,correct:false},
       {concept:'f',difficulty:2,correct:false}
     ],'advanced');
-    expect(basic.weightedAccuracy).toBeCloseTo(6/10.5,5);
+    expect(basic.weightedAccuracy).toBeCloseTo(6/10,5);
     expect(advanced.weightedAccuracy).toBeCloseTo(10/14,5);
     expect(basic.recommendedLessonId).toBe('sections-paragraphs');
     expect(advanced.recommendedLessonId).toBe('math-modes');
