@@ -89,8 +89,7 @@ jobs:
           fi
 
           echo 'QA production compiler API: engines, multi-file, BibTeX, Biber rejection, cancellation and recovery'
-          timeout 360s "$CHROME" --headless --no-sandbox --disable-gpu \
-            --virtual-time-budget=300000 --dump-dom \
+          timeout 360s "$CHROME" --headless --no-sandbox --disable-gpu --dump-dom \
             'http://127.0.0.1:4173/latex-gym/?qa=compiler-api' \
             > /tmp/compiler-api-smoke.html 2> /tmp/compiler-api-smoke.browser.log || true
           if ! grep -Fq 'COMPILER_API_SMOKE_PASS' /tmp/compiler-api-smoke.html; then
