@@ -39,8 +39,11 @@ describe('concept mastery evidence',()=>{
     expect(delayed.lastSuccessfulDelayDays).toBeCloseTo(2,5);
   });
 
-  it('does not treat placement as delayed-retention evidence',()=>{
+  it('does not count placement as independent or delayed-retention evidence',()=>{
     const placement=updateConceptMastery(undefined,true,now,{independence:'independent',context:'placement',realCompile:false});
+    expect(placement.score).toBeCloseTo(.4512,4);
+    expect(placement.successes).toBe(1);
+    expect(placement.independentSuccesses).toBe(0);
     expect(placement.lastIndependentSuccess).toBeNull();
     expect(placement.delayedRecallSuccesses).toBe(0);
   });
