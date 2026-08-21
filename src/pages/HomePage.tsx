@@ -25,11 +25,18 @@ export function HomePage() {
   const activeProject=projects.map(project=>({project,done:projectProgress[project.id]?.length??0,completed:new Set(projectProgress[project.id]??[])})).filter(item=>item.done>0&&item.done<item.project.stages.length).sort((a,b)=>b.done-a.done)[0];
   const activeStage=activeProject?.project.stages.find(stage=>!activeProject.completed.has(stage.id));
   const firstWorkout=workout[0]?.exercise;
+  const hasProjectProgress=Object.values(projectProgress).some(stages=>stages.length>0);
+  const firstLearningSession=completed.length===0&&exerciseDone.length===0&&!hasProjectProgress;
 
   return <div className="page home-page training-dashboard">
     <section className="training-hero" aria-labelledby="training-title">
-      <div className="training-hero-copy"><span className="eyebrow">СЕГОДНЯ</span><h1 id="training-title">Что тренировать сегодня</h1><p>До пяти задач собраны из повторения, новых или слабых концептов и задач на диагностику. Выбор основан на вашей истории, а не на случайной выдаче.</p></div>
-      <div className="training-session-summary" aria-label="Состав тренировки"><strong>{workout.length} задач · ~{workout.length*3} мин</strong><span>{counts.review} повторение · {counts.new} новое · {counts.weak} укрепление · {counts.debugging+counts.transfer} отладка/перенос</span>{firstWorkout?<Link className="primary-button primary-button--large" to={`/practice/${firstWorkout.id}`}>Начать сегодняшнюю тренировку <ChevronIcon/></Link>:<Link className="primary-button primary-button--large" to="/practice">Открыть практику <ChevronIcon/></Link>}</div>
+      {firstLearningSession?<>
+        <div className="training-hero-copy"><span className="eyebrow">РЕКОМЕНДОВАННЫЙ СТАРТ</span><h1 id="training-title">Начните с выбранной точки курса</h1><p>Диагностика уже определила стартовый урок. Сначала закрепите эту опорную тему; ежедневная тренировка остаётся доступна ниже и начнёт точнее учитывать вашу практику.</p></div>
+        <div className="training-session-summary" aria-label="Рекомендованный старт"><strong>{current.title}</strong><span>{mod.title} · {current.difficulty}</span><Link className="primary-button primary-button--large" to={`/lesson/${current.id}`}>Начать рекомендованный урок <ChevronIcon/></Link></div>
+      </>:<>
+        <div className="training-hero-copy"><span className="eyebrow">СЕГОДНЯ</span><h1 id="training-title">Что тренировать сегодня</h1><p>До пяти задач собраны из повторения, новых или слабых концептов и задач на диагностику. Выбор основан на вашей истории, а не на случайной выдаче.</p></div>
+        <div className="training-session-summary" aria-label="Состав тренировки"><strong>{workout.length} задач · ~{workout.length*3} мин</strong><span>{counts.review} повторение · {counts.new} новое · {counts.weak} укрепление · {counts.debugging+counts.transfer} отладка/перенос</span>{firstWorkout?<Link className="primary-button primary-button--large" to={`/practice/${firstWorkout.id}`}>Начать сегодняшнюю тренировку <ChevronIcon/></Link>:<Link className="primary-button primary-button--large" to="/practice">Открыть практику <ChevronIcon/></Link>}</div>
+      </>}
     </section>
 
     <section className="home-section workout-section" aria-labelledby="workout-heading">
