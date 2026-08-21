@@ -4,6 +4,7 @@ import { BackIcon, ChevronIcon, PlayIcon } from '../components/Icons';
 import { LatexPreview } from '../components/LatexPreview';
 import { getRuntimeProject } from '../data/runtimeCatalog';
 import { compiler, isCompilerCancellation } from '../services/compiler';
+import { contextualizeProjectDiagnostics } from '../services/compilerDiagnosticContext';
 import { compilationStateLabel, isCompilationBusy } from '../services/compilerState';
 import {
   encodeProjectAsset,
@@ -136,8 +137,9 @@ export function ProjectPage(){
     const snapshot=toBinaryAwareCompilerProject(workspace);
     saveWorkspace();setState('queued');setAssessment(null);
     try{
-      const compiled=await compiler.compile(snapshot,{onPhase:phase=>{if(revision===compileRevision.current)setState(phase);}});
+      const raw=await compiler.compile(snapshot,{onPhase:phase=>{if(revision===compileRevision.current)setState(phase);}});
       if(revision!==compileRevision.current)return null;
+      const compiled=contextualizeProjectDiagnostics(raw,snapshot);
       setResult(compiled);
       return compiled;
     }catch(error){
