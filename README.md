@@ -17,7 +17,8 @@ Curriculum IDs are treated as persistent data identifiers because progress, book
 - Structured theory, annotated examples, practical tasks, progressive hints and non-exclusive reference solutions.
 - CodeMirror 6 LaTeX editor with line numbers, brace matching, auto-closing, indentation, completions, undo/redo, reset, save and keyboard shortcuts.
 - Real browser-side TeX compilation through the BusyTeX WASM runtime when available.
-- pdfLaTeX, XeLaTeX and LuaLaTeX engine selection in the compiler contract.
+- pdfLaTeX and XeLaTeX engine selection in the verified browser compiler contract.
+- Explicit LuaLaTeX capability rejection: the pinned BusyTeX runtime currently fails its minimal-document compatibility smoke test, so the application does not advertise or emulate LuaLaTeX support.
 - Multi-file project compilation and BibTeX workflows.
 - Explicit Biber capability rejection: the current browser provider does not pretend Biber succeeded.
 - A Web Worker educational preview used only as an explicitly labelled fallback when real TeX is unavailable.
@@ -40,16 +41,15 @@ Curriculum IDs are treated as persistent data identifiers because progress, book
 
 `LatexCompiler` is the stable provider interface. The primary provider is `WasmTexCompilerProvider`, backed by a dedicated BusyTeX Worker. Compiler requests are cancellable; timeout or cancellation tears down the affected Worker so a timed-out TeX process cannot continue mutating later requests.
 
-The provider supports:
+The verified provider supports:
 
 - pdfLaTeX;
 - XeLaTeX;
-- LuaLaTeX;
 - multi-file projects;
 - BibTeX;
 - repeated TeX passes when the BusyTeX pipeline requires them.
 
-Biber, shell escape and SyncTeX are not claimed by the current provider. Unsupported capability is reported explicitly rather than converted into a fake success.
+LuaLaTeX remains a recognized API value for backward compatibility with persisted data, but the current provider rejects it before WASM initialization because both tested BusyTeX Lua drivers fail the minimal-document compatibility smoke. Biber, shell escape and SyncTeX are also not claimed by the current provider. Unsupported capability is reported explicitly rather than converted into a fake success.
 
 If the real runtime cannot be used, `EducationalPreviewCompiler` provides a fast structural preview in a separate Worker. Its result carries a fallback reason and lower compiler authority. A full-document assessment that requires real TeX therefore remains unconfirmed until a real PDF has been produced.
 
@@ -95,7 +95,7 @@ Pull requests to `main` and production pushes run the same core build gate:
 5. curriculum integrity checks;
 6. production Vite build and bundle budgets for bootstrap, deferred curriculum data, executable lazy chunks and CSS;
 7. verified BusyTeX smoke-runtime preparation;
-8. browser TeX matrix: pdfLaTeX, XeLaTeX, LuaLaTeX and BibTeX, each required to emit real PDF bytes;
+8. browser TeX matrix: pdfLaTeX, XeLaTeX and BibTeX must emit real PDF bytes, while the compiler API smoke separately verifies deterministic LuaLaTeX and Biber rejection;
 9. behavioral browser smoke: bookmark mutation, command-palette focus behavior and SPA route focus;
 10. deep-route and responsive visual QA at 320, 360, 390, 430, 768, 1024, 1280, 1440, 1920, 2560 and 3840 pixel widths.
 
