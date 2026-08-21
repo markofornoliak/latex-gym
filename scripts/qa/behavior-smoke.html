@@ -33,18 +33,69 @@ const fail=message=>{document.body.dataset.state='failed';document.body.textCont
     const dialog=await waitFor(()=>doc.querySelector('.command-palette[role="dialog"]'),'command palette');
     const input=await waitFor(()=>dialog.querySelector('input[role="combobox"]'),'palette input');
     await waitFor(()=>doc.activeElement===input,'palette input focus');
+    const options=[...dialog.querySelectorAll('[role="option"]')];
+    if(options.some(option=>option.tabIndex!==-1))throw new Error('palette option entered tab order');
     input.dispatchEvent(keyEvent('keydown',{key:'Tab',shiftKey:true}));
-    await waitFor(()=>doc.activeElement!==input,'focus trap Shift+Tab');
-    doc.activeElement?.dispatchEvent(keyEvent('keydown',{key:'Escape'}));
+    await waitFor(()=>doc.activeElement===input,'palette focus containment on single tabbable control');
+    input.dispatchEvent(keyEvent('keydown',{key:'Escape'}));
     await waitFor(()=>!doc.querySelector('.command-palette'),'palette close');
     await waitFor(()=>doc.activeElement===bookmark,'palette opener focus restore');
+
+    const codeTab=await waitFor(()=>doc.getElementById('practice-tab-code'),'practice code tab');
+    codeTab.click();
+    const content=await waitFor(()=>doc.querySelector('.cm-content[contenteditable="true"]'),'CodeMirror content');
+    content.focus();
+    content.dispatchEvent(keyEvent('keydown',{key:'/',ctrlKey:true}));
+    const shortcut=await waitFor(()=>doc.querySelector('.shortcut-dialog[role="dialog"]'),'shortcut dialog');
+    const shortcutClose=await waitFor(()=>shortcut.querySelector('.shortcut-close'),'shortcut close button');
+    await waitFor(()=>doc.activeElement===shortcutClose,'shortcut dialog initial focus');
+    shortcutClose.dispatchEvent(keyEvent('keydown',{key:'Tab'}));
+    await waitFor(()=>doc.activeElement===shortcutClose,'shortcut focus trap');
+    shortcutClose.dispatchEvent(keyEvent('keydown',{key:'Escape'}));
+    await waitFor(()=>!doc.querySelector('.shortcut-dialog'),'shortcut Escape close');
+    await waitFor(()=>doc.activeElement===content,'shortcut opener focus restore');
+
+    const lines=[...doc.querySelectorAll('.cm-line')];
+    if(lines.length>1){
+      const secondText=lines[1].textContent;
+      win.dispatchEvent(new win.CustomEvent('latex-gym:navigate-diagnostic',{detail:{diagnostic:{severity:'error',line:2,message:'QA diagnostic',explanation:'QA navigation'}}}));
+      await waitFor(()=>doc.querySelector('.cm-activeLine')?.textContent===secondText,'diagnostic editor line navigation');
+    }
 
     win.location.hash='#/lesson/what-is-latex';
     await waitFor(()=>[...doc.querySelectorAll('h1')].some(node=>node.textContent?.includes('Что такое LaTeX')),'lesson navigation');
     await waitFor(()=>doc.activeElement?.id==='main-content','route focus');
+    const theoryTab=await waitFor(()=>doc.getElementById('lesson-tab-theory'),'lesson theory tab');
+    const exampleTab=doc.getElementById('lesson-tab-example');
+    theoryTab.focus();
+    theoryTab.dispatchEvent(keyEvent('keydown',{key:'ArrowRight'}));
+    await waitFor(()=>exampleTab?.getAttribute('aria-selected')==='true'&&doc.activeElement===exampleTab,'lesson tab ArrowRight');
+
+    win.location.hash='#/progress';
+    await waitFor(()=>[...doc.querySelectorAll('h1')].some(node=>node.textContent?.includes('Пройдено')),'progress navigation');
+    const progressbar=await waitFor(()=>doc.querySelector('[role="progressbar"][aria-valuenow]'),'semantic progressbar');
+    if(!progressbar.hasAttribute('aria-valuemin')||!progressbar.hasAttribute('aria-valuemax'))throw new Error('progressbar missing range semantics');
+
+    win.location.hash='#/settings';
+    await waitFor(()=>[...doc.querySelectorAll('h2')].some(node=>node.textContent==='Приложение и офлайн'),'PWA settings');
+    if(!doc.body.textContent.includes('Первая загрузка полного TeX-движка может требовать сеть'))throw new Error('offline limitation not communicated');
+
+    win.location.hash='#/';
+    const goalTitle=await waitFor(()=>[...doc.querySelectorAll('h1')].find(node=>node.textContent?.includes('Что вы хотите уметь создавать?')),'onboarding goal');
+    if(doc.querySelectorAll('main').length!==1)throw new Error('onboarding created nested main landmark');
+    doc.querySelector('.goal-grid button')?.click();
+    const goalContinue=await waitFor(()=>[...doc.querySelectorAll('.onboarding-actions button')].find(button=>button.textContent?.includes('Продолжить')&&!button.disabled),'goal continue');
+    goalContinue.click();
+    const experienceTitle=await waitFor(()=>[...doc.querySelectorAll('h1')].find(node=>node.textContent?.includes('Как сейчас ощущается LaTeX?')),'experience step');
+    await waitFor(()=>doc.activeElement===experienceTitle,'onboarding experience focus');
+    doc.querySelector('.experience-list button')?.click();
+    const diagnosisButton=await waitFor(()=>[...doc.querySelectorAll('.onboarding-actions button')].find(button=>button.textContent?.includes('К диагностике')&&!button.disabled),'diagnosis button');
+    diagnosisButton.click();
+    const placementTitle=await waitFor(()=>doc.querySelector('.placement-stage h1'),'placement step');
+    await waitFor(()=>doc.activeElement===placementTitle,'onboarding placement focus');
 
     document.body.dataset.state='passed';
-    document.body.textContent='BEHAVIOR_SMOKE_PASS bookmark,palette-focus,route-focus';
+    document.body.textContent='BEHAVIOR_SMOKE_PASS bookmark,palette-focus,shortcut-modal,diagnostic-navigation,tabs,route-focus,progress-semantics,pwa-copy,onboarding-focus';
   }catch(error){fail(error instanceof Error?error.message:String(error));}
 })();
 </script>
