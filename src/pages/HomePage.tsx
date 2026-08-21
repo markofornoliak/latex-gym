@@ -18,7 +18,7 @@ export function HomePage() {
   const current=curriculum.lessonById[currentId]??lessons[0];
   const mod=curriculum.moduleById[current.moduleId]!;
   const currentProgress=completed.includes(current.id)?100:Math.min(85,Math.round((exerciseDone.filter(id=>current.exercises.some(exercise=>exercise.id===id)).length/Math.max(1,current.exercises.length))*100));
-  const workout=buildDailyWorkout(exercises,conceptScores,completed,undefined,mastery);
+  const workout=buildDailyWorkout(exercises,conceptScores,completed,undefined,mastery,{graph:curriculum.graph,lessons});
   const counts=countReasons(workout.map(item=>item.reason));
   const dueConcepts=Object.entries(mastery).filter(([,state])=>state.nextReview&&new Date(state.nextReview).getTime()<=Date.now()).sort(([,left],[,right])=>new Date(left.nextReview!).getTime()-new Date(right.nextReview!).getTime()).slice(0,4);
   const weakConcepts=Object.entries(mastery).filter(([,state])=>state.attempts>0&&state.score<.68).sort(([,left],[,right])=>left.score-right.score).slice(0,3);
@@ -28,7 +28,7 @@ export function HomePage() {
 
   return <div className="page home-page training-dashboard">
     <section className="training-hero" aria-labelledby="training-title">
-      <div className="training-hero-copy"><span className="eyebrow">СЕГОДНЯ</span><h1 id="training-title">Что тренировать сегодня</h1><p>Пять задач собраны из повторения, новых или слабых концептов и задач на диагностику. Выбор основан на вашей истории, а не на случайной выдаче.</p></div>
+      <div className="training-hero-copy"><span className="eyebrow">СЕГОДНЯ</span><h1 id="training-title">Что тренировать сегодня</h1><p>До пяти задач собраны из повторения, новых или слабых концептов и задач на диагностику. Выбор основан на вашей истории, а не на случайной выдаче.</p></div>
       <div className="training-session-summary" aria-label="Состав тренировки"><strong>{workout.length} задач · ~{workout.length*3} мин</strong><span>{counts.review} повторение · {counts.new} новое · {counts.weak} укрепление · {counts.debugging+counts.transfer} отладка/перенос</span>{firstWorkout?<Link className="primary-button primary-button--large" to={`/practice/${firstWorkout.id}`}>Начать сегодняшнюю тренировку <ChevronIcon/></Link>:<Link className="primary-button primary-button--large" to="/practice">Открыть практику <ChevronIcon/></Link>}</div>
     </section>
 

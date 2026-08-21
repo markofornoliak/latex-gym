@@ -2,6 +2,7 @@ import type { ConceptDefinition, CourseModule, Exercise, LearningProject, Lesson
 import { concepts as defaultConcepts } from '../data/concepts';
 import { projects as defaultProjects } from '../data/projects';
 import { buildCurriculumGraph } from './curriculumGraph';
+import { validateDependencyStructure } from './dependencyValidation';
 import { validateRule } from './validator';
 
 export type CurriculumIssue={
@@ -24,11 +25,6 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
   const referenceIdSet=new Set(referenceIds);
   const projectIds=projects.map(project=>project.id);
   const projectsById=new Map(projects.map(project=>[project.id,project]));
-  const firstIntroduction=new Map<string,{index:number;lesson:Lesson}>();
-  lessons.forEach((lesson,index)=>{
-    for(const concept of lesson.pedagogy?.introduces??[])if(!firstIntroduction.has(concept))firstIntroduction.set(concept,{index,lesson});
-  });
-
   if(modules.length&&!unique(modules.map(module=>module.id)))issues.push({severity:'error',code:'duplicate-module-id',message:'Module IDs must be unique.'});
   if(!unique(lessonIds))issues.push({severity:'error',code:'duplicate-lesson-id',message:'Lesson IDs must be unique.'});
   if(!unique(exerciseIds))issues.push({severity:'error',code:'duplicate-exercise-id',message:'Exercise IDs must be unique.'});
@@ -104,13 +100,7 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
         if(!definition)continue;
         for(const prerequisite of definition.prerequisites){
           if(!conceptIdSet.has(prerequisite)||introduced.has(prerequisite)||introduces.has(prerequisite))continue;
-          const later=firstIntroduction.get(prerequisite);
-          const contradictory=later&&later.index>lessonIndex&&later.lesson.pedagogy?.prerequisites.includes(conceptId);
-          if(contradictory){
-            issues.push({severity:'error',code:'impossible-learning-path',conceptId:conceptId,lessonId:lesson.id,message:`Concept ${conceptId} requires ${prerequisite}, but ${prerequisite} is first introduced later in ${later.lesson.id}, which itself requires ${conceptId}.`});
-          }else{
-            issues.push({severity:'warning',code:'concept-dependency-gap',conceptId:conceptId,lessonId:lesson.id,message:`Lesson ${lesson.id} introduces ${conceptId} before concept dependency ${prerequisite} has been formally introduced.`});
-          }
+          issues.push({severity:'warning',code:'concept-dependency-gap',conceptId:conceptId,lessonId:lesson.id,message:`Lesson ${lesson.id} introduces ${conceptId} before concept dependency ${prerequisite} has been formally introduced.`});
         }
       }
       pedagogy.introduces.forEach(concept=>introduced.add(concept));
@@ -164,6 +154,7 @@ export function lintCurriculum(lessons:readonly Lesson[],exercises:readonly Exer
     for(const relatedId of entry.related)if(!referenceIdSet.has(relatedId))issues.push({severity:'error',code:'unknown-related-reference',referenceId:entry.id,message:`Reference ${entry.id} points to unknown related reference ${relatedId}.`});
   }
   addReferenceTokenCollisions(references,issues);
+  issues.push(...validateDependencyStructure({concepts,lessons,exercises,projects}));
 
   const {graph,issues:graphIssues}=buildCurriculumGraph({concepts,lessons,exercises,references,projects});
   for(const issue of graphIssues)issues.push({severity:'error',code:issue.code,message:issue.message,conceptId:issue.conceptId});
