@@ -1,11 +1,13 @@
 import { assertCanonicalCurriculumSource, materializeCurriculumSource } from './curriculumSource';
 import { buildCurriculumGraph } from '../services/curriculumGraph';
 import { lintCurriculum, type CurriculumIssue } from '../services/curriculumLinter';
+import { assertProjectStageRuleCoverage } from '../services/projectStageValidation';
 
 /** Build-only curriculum construction. Runtime code must import curriculumRuntime. */
 export function buildCurriculum(){
   const {modules,lessons,exercises,concepts,references,projects}=assertCanonicalCurriculumSource(materializeCurriculumSource());
 
+  assertProjectStageRuleCoverage(projects);
   const issues=lintCurriculum(lessons,exercises,references,{modules,concepts,projects});
   const errors=issues.filter(issue=>issue.severity==='error');
   if(errors.length)throw new Error(formatCurriculumErrors(errors));
