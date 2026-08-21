@@ -44,8 +44,8 @@ function RealPdfPreview({result}:{result:CompileResult}){
 function DiagnosticsList({diagnostics}:{diagnostics:Diagnostic[]}){
   if(!diagnostics.length)return null;
   return <div className="diagnostics" aria-label="Диагностика компиляции">
-    {diagnostics.map((diagnostic,index)=><article className={`diagnostic diagnostic--${diagnostic.severity}`} key={`${diagnostic.severity}-${diagnostic.line}-${diagnostic.message}-${index}`}>
-      <header><span>{severityName(diagnostic.severity)}</span><strong>Строка {diagnostic.line}</strong></header>
+    {diagnostics.map((diagnostic,index)=><article className={`diagnostic diagnostic--${diagnostic.severity}`} key={`${diagnostic.severity}-${diagnostic.file??''}-${diagnostic.line}-${diagnostic.message}-${index}`}>
+      <header><span>{severityName(diagnostic.severity)}{diagnostic.cascade==='root'?' · вероятная первопричина':diagnostic.cascade==='secondary'?' · возможное следствие':''}</span><strong>{diagnostic.file?`${diagnostic.file}:${diagnostic.line}`:`Строка ${diagnostic.line}`}</strong></header>
       {diagnostic.originalCompilerMessage&&diagnostic.source==='tex'&&<div className="diagnostic-original"><small>TeX</small><pre>{diagnostic.originalCompilerMessage}</pre></div>}
       <div className="diagnostic-explanation"><small>LaTeX Gym</small><strong>{diagnostic.message}</strong><p>{diagnostic.explanation}</p>{diagnostic.suggestion&&<p className="diagnostic-suggestion">{diagnostic.suggestion}</p>}</div>
     </article>)}
