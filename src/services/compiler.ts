@@ -17,12 +17,25 @@ export interface CompilerProvider {
 
 export interface LatexCompiler {
   compile(input:string|CompilerProject,options?:CompileOptions):Promise<CompileResult>;
+  cancel(reason?:string):void;
   getPrimaryCapabilities():CompilerCapabilities;
   getFallbackCapabilities():CompilerCapabilities;
 }
 
+export class CompilerCancelledError extends Error {
+  constructor(message='Compilation cancelled'){super(message);this.name='AbortError';}
+}
+export function isCompilerCancellation(error:unknown){return error instanceof CompilerCancelledError||(error instanceof Error&&error.name==='AbortError');}
+
+function cancellationFromSignal(signal?:AbortSignal){
+  const reason=signal?.reason;
+  if(reason instanceof Error)return new CompilerCancelledError(reason.message);
+  return new CompilerCancelledError(typeof reason==='string'&&reason?reason:'Compilation cancelled');
+}
+function assertNotCancelled(signal?:AbortSignal){if(signal?.aborted)throw cancellationFromSignal(signal);}
+
 type EducationalWorkerResponse={id:number;result:CompileResult};
-type PendingEducational={resolve:(result:CompileResult)=>void;reject:(error:Error)=>void;timer:number};
+type PendingEducational={resolve:(result:CompileResult)=>void;reject:(error:Error)=>void;timer:number;cleanup:()=>void};
 
 const EDUCATIONAL_CAPABILITIES:CompilerCapabilities={
   realPdf:false,engines:[],multiFile:false,bibtex:false,biber:false,multiplePasses:false,synctex:false,shellEscape:false,offline:true
@@ -41,7 +54,7 @@ export class EducationalPreviewCompiler implements CompilerProvider {
     this.worker.onmessage=(event:MessageEvent<EducationalWorkerResponse>)=>{
       const pending=this.pending.get(event.data.id);
       if(!pending)return;
-      window.clearTimeout(pending.timer);
+      window.clearTimeout(pending.timer);pending.cleanup();
       pending.resolve({...event.data.result,providerId:this.id,capabilities:this.capabilities});
       this.pending.delete(event.data.id);
     };
@@ -49,16 +62,22 @@ export class EducationalPreviewCompiler implements CompilerProvider {
     return this.worker;
   }
 
-  compile(project:CompilerProject):Promise<CompileResult>{
+  compile(project:CompilerProject,options:CompileOptions={}):Promise<CompileResult>{
+    assertNotCancelled(options.signal);
     const source=mainSource(project);
     const worker=this.ensureWorker();
     const id=++this.seq;
     return new Promise((resolve,reject)=>{
+      const onAbort=()=>{
+        const pending=this.pending.get(id);if(!pending)return;
+        window.clearTimeout(pending.timer);pending.cleanup();this.pending.delete(id);reject(cancellationFromSignal(options.signal));
+      };
+      const cleanup=()=>options.signal?.removeEventListener('abort',onAbort);
       const timer=window.setTimeout(()=>{
-        this.pending.delete(id);
-        reject(new Error('Educational preview timed out'));
+        cleanup();this.pending.delete(id);reject(new Error('Educational preview timed out'));
       },8000);
-      this.pending.set(id,{resolve,reject,timer});
+      this.pending.set(id,{resolve,reject,timer,cleanup});
+      options.signal?.addEventListener('abort',onAbort,{once:true});
       worker.postMessage({id,source});
     });
   }
@@ -67,8 +86,7 @@ export class EducationalPreviewCompiler implements CompilerProvider {
 
   private failAll(error:Error){
     for(const item of this.pending.values()){
-      window.clearTimeout(item.timer);
-      item.reject(error);
+      window.clearTimeout(item.timer);item.cleanup();item.reject(error);
     }
     this.pending.clear();
     this.worker?.terminate();
@@ -96,6 +114,7 @@ type PendingReal={
   resolve:(result:BusyTexRawResult)=>void;
   reject:(error:Error)=>void;
   timer:number;
+  cleanup:()=>void;
   onPhase?:(phase:CompilerPhase)=>void;
   texRuns:number;
   bibliographySeen:boolean;
@@ -128,14 +147,15 @@ export class WasmTexCompilerProvider implements CompilerProvider {
   private activeRequestId:number|null=null;
 
   async compile(project:CompilerProject,options:CompileOptions={}):Promise<CompileResult>{
+    assertNotCancelled(options.signal);
     const started=performance.now();
     const source=mainSource(project);
-    const unsupported=unsupportedBibliography(source);
+    const unsupported=unsupportedBibliography(project);
     if(unsupported){
       options.onPhase?.('error');
       return {
         ok:false,diagnostics:[{
-          severity:'error',line:unsupported.line,message:'Biber недоступен в браузерном TeX-движке',
+          severity:'error',line:unsupported.line,file:unsupported.file,message:'Biber недоступен в браузерном TeX-движке',
           explanation:'Документ требует Biber. Текущий локальный WASM-провайдер поддерживает BibTeX, но не Biber.',
           suggestion:'Для этой сборки используйте совместимый BibTeX-workflow или внешний TeX/Biber toolchain. LaTeX Gym не будет имитировать успешную сборку.',
           source:'latex-gym',relatedConcept:'biber',originalCompilerMessage:'Unsupported capability: Biber'
@@ -145,13 +165,15 @@ export class WasmTexCompilerProvider implements CompilerProvider {
 
     options.onPhase?.('initializing');
     await this.ensureInitialized();
+    assertNotCancelled(options.signal);
     options.onPhase?.('compiling');
 
     const engine=options.engine??'pdflatex';
     const driver=engine==='xelatex'?'xetex_bibtex8_dvipdfmx':engine==='lualatex'?'luahbtex_bibtex8':'pdftex_bibtex8';
     const files=project.files.map(file=>({path:file.path,contents:file.content}));
     const bibliography=options.bibliography==='none'?false:options.bibliography==='bibtex'?true:null;
-    const raw=await this.runCompile({files,mainFile:project.mainFile,bibtex:bibliography,driver,onPhase:options.onPhase});
+    const raw=await this.runCompile({files,mainFile:project.mainFile,bibtex:bibliography,driver,onPhase:options.onPhase,signal:options.signal});
+    assertNotCancelled(options.signal);
     const rawLog=raw.log??raw.logs?.map(item=>[item.cmd,item.log,item.stdout,item.stderr].filter(Boolean).join('\n')).join('\n\n')??'';
     const diagnostics=parseTexLog(rawLog,source);
     const ok=Boolean(raw.pdf&&raw.pdf.length)&&Number(raw.exit_code??0)===0;
@@ -177,16 +199,7 @@ export class WasmTexCompilerProvider implements CompilerProvider {
     };
   }
 
-  dispose(){
-    for(const item of this.pending.values()){
-      window.clearTimeout(item.timer);
-      item.reject(new Error('Real TeX compiler disposed'));
-    }
-    this.pending.clear();
-    if(this.initTimer!==null)window.clearTimeout(this.initTimer);
-    this.worker?.terminate();
-    this.worker=null;this.initPromise=null;this.activeRequestId=null;
-  }
+  dispose(){this.handleFatal(new CompilerCancelledError('Real TeX compiler disposed'));}
 
   private ensureWorker(){
     if(this.worker)return this.worker;
@@ -208,17 +221,22 @@ export class WasmTexCompilerProvider implements CompilerProvider {
     return this.initPromise;
   }
 
-  private runCompile(input:{files:Array<{path:string;contents:string|Uint8Array}>;mainFile:string;bibtex:boolean|null;driver:string;onPhase?:CompileOptions['onPhase']}){
+  private runCompile(input:{files:Array<{path:string;contents:string|Uint8Array}>;mainFile:string;bibtex:boolean|null;driver:string;onPhase?:CompileOptions['onPhase'];signal?:AbortSignal}){
     const worker=this.ensureWorker();
     const requestId=++this.seq;
     return new Promise<BusyTexRawResult>((resolve,reject)=>{
+      const onAbort=()=>{
+        if(!this.pending.has(requestId))return;
+        this.handleFatal(cancellationFromSignal(input.signal));
+      };
+      const cleanup=()=>input.signal?.removeEventListener('abort',onAbort);
       const timer=window.setTimeout(()=>{
-        this.pending.delete(requestId);
-        if(this.activeRequestId===requestId)this.activeRequestId=null;
-        reject(new Error('Real TeX compilation timed out'));
+        if(this.pending.has(requestId))this.handleFatal(new Error('Real TeX compilation timed out'));
       },90000);
-      this.pending.set(requestId,{resolve,reject,timer,onPhase:input.onPhase,texRuns:0,bibliographySeen:false});
+      this.pending.set(requestId,{resolve,reject,timer,cleanup,onPhase:input.onPhase,texRuns:0,bibliographySeen:false});
       this.activeRequestId=requestId;
+      input.signal?.addEventListener('abort',onAbort,{once:true});
+      if(input.signal?.aborted){onAbort();return;}
       worker.postMessage({type:'compile',requestId,files:input.files,mainFile:input.mainFile,bibtex:input.bibtex,driver:input.driver});
     });
   }
@@ -244,7 +262,7 @@ export class WasmTexCompilerProvider implements CompilerProvider {
     if(message.type==='compile-result'){
       const pending=this.pending.get(message.requestId);
       if(!pending)return;
-      window.clearTimeout(pending.timer);this.pending.delete(message.requestId);
+      window.clearTimeout(pending.timer);pending.cleanup();this.pending.delete(message.requestId);
       if(this.activeRequestId===message.requestId)this.activeRequestId=null;
       pending.resolve(message.result);
       return;
@@ -253,7 +271,7 @@ export class WasmTexCompilerProvider implements CompilerProvider {
       const error=new Error(message.message);
       if(message.requestId!==undefined){
         const pending=this.pending.get(message.requestId);
-        if(pending){window.clearTimeout(pending.timer);this.pending.delete(message.requestId);pending.reject(error);}
+        if(pending){window.clearTimeout(pending.timer);pending.cleanup();this.pending.delete(message.requestId);pending.reject(error);}
         if(this.activeRequestId===message.requestId)this.activeRequestId=null;
       }else this.handleFatal(error);
     }
@@ -263,7 +281,7 @@ export class WasmTexCompilerProvider implements CompilerProvider {
     if(this.initTimer!==null)window.clearTimeout(this.initTimer);
     this.initTimer=null;this.initReject?.(error);this.initResolve=null;this.initReject=null;this.initPromise=null;
     for(const item of this.pending.values()){
-      window.clearTimeout(item.timer);item.reject(error);
+      window.clearTimeout(item.timer);item.cleanup();item.reject(error);
     }
     this.pending.clear();this.activeRequestId=null;
     this.worker?.terminate();this.worker=null;
@@ -274,27 +292,46 @@ class CompilerManager implements LatexCompiler {
   private readonly real=new WasmTexCompilerProvider();
   private readonly fallback=new EducationalPreviewCompiler();
   private realUnavailableUntil=0;
+  private activeController:AbortController|null=null;
 
   getPrimaryCapabilities(){return this.real.capabilities;}
   getFallbackCapabilities(){return this.fallback.capabilities;}
 
+  cancel(reason='Compilation superseded by newer source'){
+    const controller=this.activeController;this.activeController=null;
+    if(controller&&!controller.signal.aborted)controller.abort(reason);
+  }
+
   async compile(input:string|CompilerProject,options:CompileOptions={}):Promise<CompileResult>{
+    this.cancel();
+    const controller=new AbortController();
+    this.activeController=controller;
+    const detach=linkSignal(options.signal,controller);
+    const requestOptions={...options,signal:controller.signal};
     const project=typeof input==='string'?singleFileProject(input):input;
-    const canTryReal=typeof Worker!=='undefined'&&!(typeof navigator!=='undefined'&&navigator.onLine===false)&&Date.now()>=this.realUnavailableUntil;
-    if(canTryReal){
-      try{return await this.real.compile(project,options);}
-      catch(error){
-        this.realUnavailableUntil=Date.now()+60_000;
-        return this.compileFallback(project,options,error);
+    try{
+      assertNotCancelled(controller.signal);
+      const canTryReal=typeof Worker!=='undefined'&&!(typeof navigator!=='undefined'&&navigator.onLine===false)&&Date.now()>=this.realUnavailableUntil;
+      if(canTryReal){
+        try{return await this.real.compile(project,requestOptions);}
+        catch(error){
+          if(isCompilerCancellation(error))throw error;
+          this.realUnavailableUntil=Date.now()+60_000;
+          return await this.compileFallback(project,requestOptions,error);
+        }
       }
+      const reason=typeof navigator!=='undefined'&&navigator.onLine===false?'Реальный TeX-движок недоступен офлайн, пока его runtime не загружен.':'Реальный TeX-движок временно недоступен.';
+      return await this.compileFallback(project,requestOptions,new Error(reason));
+    }finally{
+      detach();if(this.activeController===controller)this.activeController=null;
     }
-    const reason=typeof navigator!=='undefined'&&navigator.onLine===false?'Реальный TeX-движок недоступен офлайн, пока его runtime не загружен.':'Реальный TeX-движок временно недоступен.';
-    return this.compileFallback(project,options,new Error(reason));
   }
 
   private async compileFallback(project:CompilerProject,options:CompileOptions,error:unknown){
+    assertNotCancelled(options.signal);
     options.onPhase?.('compiling');
-    const fallback=await this.fallback.compile(project);
+    const fallback=await this.fallback.compile(project,options);
+    assertNotCancelled(options.signal);
     const fallbackReason=error instanceof Error?error.message:String(error);
     const diagnostic={
       severity:'info' as const,line:1,message:'Использован учебный предпросмотр',
@@ -309,19 +346,29 @@ class CompilerManager implements LatexCompiler {
 
 export const compiler:LatexCompiler=new CompilerManager();
 
+function linkSignal(source:AbortSignal|undefined,target:AbortController){
+  if(!source)return ()=>{};
+  const abort=()=>{if(!target.signal.aborted)target.abort(source.reason);};
+  if(source.aborted)abort();else source.addEventListener('abort',abort,{once:true});
+  return ()=>source.removeEventListener('abort',abort);
+}
 function singleFileProject(source:string):CompilerProject{return {mainFile:'main.tex',files:[{path:'main.tex',content:source}]};}
 function mainSource(project:CompilerProject){
   const file=project.files.find(item=>item.path===project.mainFile)??project.files[0];
   return typeof file?.content==='string'?file.content:new TextDecoder().decode(file?.content??new Uint8Array());
 }
 
-function unsupportedBibliography(source:string){
-  const usesBiblatex=/\\usepackage(?:\[[^\]]*\])?\{biblatex\}/.test(source);
-  const explicitlyBibtex=/\\usepackage\[[^\]]*backend\s*=\s*bibtex[^\]]*\]\{biblatex\}/.test(source);
-  const explicitlyBiber=/\\usepackage\[[^\]]*backend\s*=\s*biber[^\]]*\]\{biblatex\}/.test(source);
-  if(explicitlyBiber||(usesBiblatex&&!explicitlyBibtex)){
-    const index=Math.max(0,source.search(/\\usepackage(?:\[[^\]]*\])?\{biblatex\}/));
-    return {line:source.slice(0,index).split('\n').length};
+function unsupportedBibliography(project:CompilerProject){
+  for(const file of project.files){
+    if(typeof file.content!=='string'||!file.path.match(/\.(?:tex|sty|cls)$/i))continue;
+    const source=file.content;
+    const usesBiblatex=/\\usepackage(?:\[[^\]]*\])?\{biblatex\}/.test(source);
+    const explicitlyBibtex=/\\usepackage\[[^\]]*backend\s*=\s*bibtex[^\]]*\]\{biblatex\}/.test(source);
+    const explicitlyBiber=/\\usepackage\[[^\]]*backend\s*=\s*biber[^\]]*\]\{biblatex\}/.test(source);
+    if(explicitlyBiber||(usesBiblatex&&!explicitlyBibtex)){
+      const index=Math.max(0,source.search(/\\usepackage(?:\[[^\]]*\])?\{biblatex\}/));
+      return {file:file.path,line:source.slice(0,index).split('\n').length};
+    }
   }
   return null;
 }
