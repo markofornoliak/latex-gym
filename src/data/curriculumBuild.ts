@@ -1,17 +1,20 @@
 import { assertCanonicalCurriculumSource, materializeCurriculumSource } from './curriculumSource';
 import { buildCurriculumGraph } from '../services/curriculumGraph';
+import { inspectCurriculumGraphIntegrity } from '../services/curriculumGraphIntegrity';
 import { lintCurriculum, type CurriculumIssue } from '../services/curriculumLinter';
 
 /** Build-only curriculum construction. Runtime code must import curriculumRuntime. */
 export function buildCurriculum(){
   const {modules,lessons,exercises,concepts,references,projects}=assertCanonicalCurriculumSource(materializeCurriculumSource());
 
-  const issues=lintCurriculum(lessons,exercises,references,{modules,concepts,projects});
+  const lintIssues=lintCurriculum(lessons,exercises,references,{modules,concepts,projects});
+  const {graph,issues:graphIssues}=buildCurriculumGraph({concepts,lessons,exercises,references,projects});
+  if(graphIssues.some(issue=>issue.code==='concept-cycle'))throw new Error(`Curriculum graph contains a dependency cycle:\n${graphIssues.filter(issue=>issue.code==='concept-cycle').map(issue=>issue.message).join('\n')}`);
+
+  const integrityIssues=inspectCurriculumGraphIntegrity(concepts,exercises,graph);
+  const issues:CurriculumIssue[]=[...lintIssues,...integrityIssues];
   const errors=issues.filter(issue=>issue.severity==='error');
   if(errors.length)throw new Error(formatCurriculumErrors(errors));
-
-  const {graph,issues:graphIssues}=buildCurriculumGraph({concepts,lessons,exercises,references,projects});
-  if(graphIssues.some(issue=>issue.code==='concept-cycle'))throw new Error(`Curriculum graph contains a dependency cycle:\n${graphIssues.map(issue=>issue.message).join('\n')}`);
 
   // Historical normalization is now complete: the canonical source stores only
   // canonical concept IDs. Keep the snapshot field for runtime compatibility.
