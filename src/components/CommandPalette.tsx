@@ -37,7 +37,7 @@ export default function CommandPalette({onClose}:{onClose:()=>void}){
         if(event.key==='ArrowUp'){event.preventDefault();setActive(value=>Math.max(0,value-1));}
         if(event.key==='Enter'&&results[active]){event.preventDefault();choose(results[active]);}
       }}/></div>
-      <div id="palette-results" className="palette-results" role="listbox" aria-label="Результаты поиска">{results.map((item,index)=><button id={`palette-${item.id}`} role="option" aria-selected={index===active} className={index===active?'active':''} key={`${item.kind}:${item.id}`} onMouseEnter={()=>setActive(index)} onClick={()=>choose(item)}><span className="palette-kind">{item.kind}</span><span className="palette-result-copy"><strong>{item.title}</strong><small>{item.meta}</small></span>{item.code&&<code>{item.code}</code>}</button>)}</div>
+      <div id="palette-results" className="palette-results" role="listbox" aria-label="Результаты поиска">{results.map((item,index)=><button id={`palette-${item.id}`} tabIndex={-1} role="option" aria-selected={index===active} className={index===active?'active':''} key={`${item.kind}:${item.id}`} onMouseEnter={()=>setActive(index)} onClick={()=>choose(item)}><span className="palette-kind">{item.kind}</span><span className="palette-result-copy"><strong>{item.title}</strong><small>{item.meta}</small></span>{item.code&&<code>{item.code}</code>}</button>)}</div>
       {!results.length&&<p className="palette-empty">Совпадений нет. Попробуйте термин, синтаксис команды или название темы.</p>}
       <div className="palette-foot"><span>↑ ↓ выбор</span><span>Enter открыть</span><span>Esc закрыть</span></div>
     </section>
