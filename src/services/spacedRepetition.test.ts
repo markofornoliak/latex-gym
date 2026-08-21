@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { exercises } from '../data/courses';
-import type { ConceptMastery, Exercise } from '../types';
+import type { ConceptMastery, Exercise, Lesson } from '../types';
 import { buildDailyWorkout, selectDailyTraining } from './spacedRepetition';
+import type { AdaptiveKnowledgeContext } from './adaptiveEligibility';
 
 describe('daily training',()=>{
   it('is deterministic for the same day and scores',()=>{
@@ -41,7 +42,47 @@ describe('daily training',()=>{
     expect(workout.some(item=>item.reason==='debugging')).toBe(true);
     expect(workout.every(item=>item.explanation.length>10)).toBe(true);
   });
+
+  it('never lets the easy fallback bypass an unmet hard prerequisite',()=>{
+    const base=makeExercise('base-ex','base','base-lesson');
+    const advanced=makeExercise('advanced-ex','advanced','target');
+    const baseLesson=makeLesson('base-lesson',['base'],[base]);
+    const target=makeLesson('target',['advanced'],[advanced]);
+    const adaptive=adaptiveContext([baseLesson,target],{base:{requires:[],introducedBy:['base-lesson']},advanced:{requires:['base'],introducedBy:['target']}},'target');
+    const workout=buildDailyWorkout([base,advanced],{},[],'2026-08-21',{},adaptive);
+    expect(workout.map(item=>item.exercise.id)).toEqual(['base-ex']);
+    expect(workout.some(item=>item.exercise.id==='advanced-ex')).toBe(false);
+  });
+
+  it('recommends the nearest missing foundation before unrelated eligible work',()=>{
+    const base=makeExercise('base-ex','base','base-lesson');
+    const advanced=makeExercise('advanced-ex','advanced','target');
+    const unrelated=makeExercise('unrelated-ex','unrelated','completed');
+    const baseLesson=makeLesson('base-lesson',['base'],[base]);
+    const target=makeLesson('target',['advanced'],[advanced]);
+    const completed=makeLesson('completed',['unrelated'],[unrelated]);
+    const adaptive=adaptiveContext([baseLesson,target,completed],{
+      base:{requires:[],introducedBy:['base-lesson']},advanced:{requires:['base'],introducedBy:['target']},unrelated:{requires:[],introducedBy:['completed']}
+    },'target');
+    const workout=buildDailyWorkout([unrelated,advanced,base],{},['completed'],'2026-08-21',{},adaptive);
+    expect(workout[0].exercise.id).toBe('base-ex');
+    expect(workout[0].reason).toBe('weak');
+    expect(workout[0].explanation).toContain('недостающая основа');
+  });
+
+  it('uses evidenceConcepts rather than broad supporting tags for mastery priority',()=>{
+    const precise={...makeExercise('precise','supporting'),concepts:['supporting','target'],evidenceConcepts:['target']};
+    const other=makeExercise('other','supporting');
+    const mastery:Record<string,ConceptMastery>={
+      target:state(.2,3,1,2,'2026-08-01T00:00:00.000Z','2026-08-02T00:00:00.000Z'),
+      supporting:state(.95,8,8,0,'2026-08-20T00:00:00.000Z','2026-09-10T00:00:00.000Z')
+    };
+    const selected=selectDailyTraining([other,precise,makeExercise('f1','f1'),makeExercise('f2','f2'),makeExercise('f3','f3'),makeExercise('f4','f4')],{},['lesson'],'2026-08-21',mastery);
+    expect(selected[0].id).toBe('precise');
+  });
 });
 
-function makeExercise(id:string,concept:string):Exercise{return {id,lessonId:'lesson',category:'Основы',difficulty:'Начальный',mode:'Написать код',title:id,instructions:id,requirements:[id],starterCode:'',validators:[],hints:[],solution:'ok',concepts:[concept]};}
+function makeExercise(id:string,concept:string,lessonId='lesson'):Exercise{return {id,lessonId,category:'Основы',difficulty:'Начальный',mode:'Написать код',title:id,instructions:id,requirements:[id],starterCode:'',validators:[],hints:[],solution:'ok',concepts:[concept],prerequisites:[]};}
+function makeLesson(id:string,introduces:string[],lessonExercises:Exercise[]):Lesson{return {id,moduleId:'module',number:1,title:id,subtitle:id,difficulty:'Начальный',theory:[],examples:[],exercises:lessonExercises,relatedCommands:[],pedagogy:{objective:'Learn',prerequisites:[],introduces,reinforces:[],misconceptions:[],practiceObjective:'Practice',masteryCriteria:['Done']}};}
+function adaptiveContext(lessons:Lesson[],nodes:AdaptiveKnowledgeContext['graph']['nodes'],targetLessonId:string):AdaptiveKnowledgeContext{return {lessons,targetLessonId,completedExerciseIds:[],graph:{nodes}};}
 function state(score:number,attempts:number,successes:number,mistakeCount:number,lastPracticed:string,nextReview:string):ConceptMastery{return {score,attempts,successes,mistakeCount,lastPracticed,stability:4,nextReview,independentSuccesses:successes,hintedSuccesses:0,transferSuccesses:0,projectSuccesses:0,solutionReveals:0,lastEvidence:null};}
