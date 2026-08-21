@@ -28,6 +28,23 @@ describe('concept mastery evidence',()=>{
     expect(transfer.transferSuccesses).toBe(1);
   });
 
+  it('does not confuse massed same-session repetition with delayed recall',()=>{
+    const first=updateConceptMastery(undefined,true,now,{independence:'independent',context:'practice',realCompile:true});
+    const immediate=updateConceptMastery(first,true,new Date('2026-08-18T10:10:00Z'),{independence:'independent',context:'practice',realCompile:true});
+    const delayed=updateConceptMastery(first,true,new Date('2026-08-20T10:00:00Z'),{independence:'independent',context:'practice',realCompile:true});
+    expect(immediate.delayedRecallSuccesses).toBe(0);
+    expect(delayed.delayedRecallSuccesses).toBe(1);
+    expect(delayed.stability).toBeGreaterThan(immediate.stability);
+    expect(immediate.nextReview?.slice(0,10)).toBe('2026-08-21');
+    expect(delayed.lastSuccessfulDelayDays).toBeCloseTo(2,5);
+  });
+
+  it('does not treat placement as delayed-retention evidence',()=>{
+    const placement=updateConceptMastery(undefined,true,now,{independence:'independent',context:'placement',realCompile:false});
+    expect(placement.lastIndependentSuccess).toBeNull();
+    expect(placement.delayedRecallSuccesses).toBe(0);
+  });
+
   it('brings unstable knowledge back quickly after a failure',()=>{
     const strong=updateConceptMastery(undefined,true,now,{independence:'independent',context:'transfer',realCompile:true});
     const failed=updateConceptMastery(strong,false,new Date('2026-08-19T10:00:00Z'),{independence:'independent',context:'practice',realCompile:true});
@@ -57,6 +74,7 @@ describe('canonical mastery migration',()=>{
     expect(fraction.successes).toBe(4);
     expect(fraction.independentSuccesses).toBe(3);
     expect(fraction.transferSuccesses).toBe(1);
+    expect(fraction.delayedRecallSuccesses).toBe(0);
     expect(fraction.stability).toBe(5);
     expect(fraction.nextReview).toBe('2026-08-19T10:00:00Z');
     expect(fraction.lastPracticed).toBe('2026-08-17T10:00:00Z');
