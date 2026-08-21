@@ -10,6 +10,7 @@ if(!chrome||!targetUrl||!passMarker||!failMarker){
 }
 const timeoutMs=Number(timeoutArg);
 if(!Number.isFinite(timeoutMs)||timeoutMs<=0)throw new Error(`Invalid timeout: ${timeoutArg}`);
+const startupTimeoutMs=Math.min(30000,timeoutMs);
 
 const userDataDir=await mkdtemp(join(tmpdir(),'latex-gym-chrome-'));
 const stderr=[];
@@ -27,8 +28,8 @@ browser.stderr.on('data',chunk=>{stderr.push(chunk);if(stderr.join('').length>12
 
 let socket;
 try{
-  const port=await waitForDevToolsPort(userDataDir,10000);
-  const target=await waitForPage(port,targetUrl,10000);
+  const port=await waitForDevToolsPort(userDataDir,startupTimeoutMs);
+  const target=await waitForPage(port,targetUrl,startupTimeoutMs);
   socket=await connect(target.webSocketDebuggerUrl);
   const cdp=createCdp(socket);
   await cdp.send('Runtime.enable');
@@ -74,7 +75,7 @@ async function waitForDevToolsPort(directory,timeout){
     if(browser.exitCode!==null)throw new Error(`Chrome exited before DevTools became available (code ${browser.exitCode})`);
     await delay(100);
   }
-  throw new Error('Timed out waiting for Chrome DevTools port');
+  throw new Error(`Timed out after ${timeout}ms waiting for Chrome DevTools port`);
 }
 
 async function waitForPage(port,url,timeout){
@@ -86,15 +87,16 @@ async function waitForPage(port,url,timeout){
       const page=pages.find(item=>item.type==='page'&&item.url===url)??pages.find(item=>item.type==='page');
       if(page?.webSocketDebuggerUrl)return page;
     }catch{}
+    if(browser.exitCode!==null)throw new Error(`Chrome exited before a page target became available (code ${browser.exitCode})`);
     await delay(100);
   }
-  throw new Error('Timed out waiting for browser page target');
+  throw new Error(`Timed out after ${timeout}ms waiting for browser page target`);
 }
 
 async function connect(url){
   const ws=new WebSocket(url);
   await new Promise((resolve,reject)=>{
-    const timer=setTimeout(()=>reject(new Error('Timed out opening DevTools WebSocket')),5000);
+    const timer=setTimeout(()=>reject(new Error('Timed out opening DevTools WebSocket')),10000);
     ws.onopen=()=>{clearTimeout(timer);resolve();};
     ws.onerror=()=>{clearTimeout(timer);reject(new Error('Failed to open DevTools WebSocket'));};
   });
