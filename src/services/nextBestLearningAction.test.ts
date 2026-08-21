@@ -32,7 +32,7 @@ describe('next best learning action',()=>{
   });
 
   it('does not allow placement-only evidence to satisfy a track prerequisite',()=>{
-    const placement={...mastered('2026-08-21T00:00:00.000Z','2026-08-22T00:00:00.000Z',.45),lastIndependentSuccess:null,independentSuccesses:0,lastEvidence:{outcome:'success' as const,independence:'independent' as const,context:'placement' as const,realCompile:false}};
+    const placement={...mastered('2026-08-21T00:00:00.000Z','2026-08-22T00:00:00.000Z',.7),attempts:1,successes:1,delayedRecallSuccesses:0,lastIndependentSuccess:null,independentSuccesses:0,lastSuccessfulDelayDays:null,lastEvidence:{outcome:'success' as const,independence:'independent' as const,context:'placement' as const,realCompile:false}};
     const action=nextBestLearningAction({lessons,exercises,projects:[],graph,conceptScores:{base:1},mastery:{base:placement},completedLessonIds:[],completedProjectStages:{},goals:['mathematics'],experience:'advanced',now:new Date('2026-08-21T12:00:00Z')});
     expect(action).toEqual({kind:'lesson',lessonId:'what-is-latex',reason:'course-sequence'});
   });
