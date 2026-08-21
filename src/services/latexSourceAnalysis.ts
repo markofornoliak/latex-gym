@@ -105,7 +105,7 @@ export function hasParagraph(source:string){
   return /[\p{L}\p{N}]{2,}/u.test(stripped);
 }
 
-export function hasInlineMath(source:string){return /(?<!\\)\$[^$\n]+(?<!\\)\$/.test(activeLatexSource(source));}
+export function hasInlineMath(source:string){return /(?<!\\)\$[^$\n]+(?<!\\)\$|\\\([^\n]+\\\)/.test(activeLatexSource(source));}
 export function hasDisplayMath(source:string){return /\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\\begin\{(?:equation\*?|align\*?)\}[\s\S]*?\\end\{(?:equation\*?|align\*?)\}/.test(activeLatexSource(source));}
 
 export function environmentsBalanced(source:string){
