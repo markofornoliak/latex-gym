@@ -4,7 +4,8 @@ import {
   commandCount,
   documentClass,
   environmentsBalanced,
-  firstLineContaining,
+  firstActiveLineContaining,
+  hasActiveStructuralText,
   hasDisplayMath,
   hasDocumentClassOption,
   hasEnvironment,
@@ -47,8 +48,8 @@ export function validateRule(rule:ValidatorRule,source:string,compileResult?:Com
     case 'environment':ok=hasEnvironment(source,rule.value);break;
     case 'command':ok=commandCount(source,rule.value)>=(rule.min??1);break;
     case 'package':ok=hasPackage(source,rule.value);break;
-    case 'containsText':ok=conceptualAnswer?hasConceptualText(source,rule.value):hasStructuralText(source,rule.value);line=ok?undefined:firstLineContaining(source,rule.value);break;
-    case 'forbiddenText':ok=!source.includes(rule.value);line=ok?undefined:firstLineContaining(source,rule.value);break;
+    case 'containsText':ok=conceptualAnswer?hasConceptualText(source,rule.value):hasActiveStructuralText(source,rule.value);line=ok?undefined:firstActiveLineContaining(source,rule.value);break;
+    case 'forbiddenText':ok=!hasActiveStructuralText(source,rule.value);line=ok?undefined:firstActiveLineContaining(source,rule.value);break;
     case 'regex':try{ok=new RegExp(rule.value,rule.flags).test(source);}catch{ok=false;}break;
     case 'paragraph':ok=hasParagraph(source);break;
     case 'inlineMath':ok=hasInlineMath(source);break;
@@ -59,4 +60,4 @@ export function validateRule(rule:ValidatorRule,source:string,compileResult?:Com
   return {ok,message:rule.message,hint:rule.hint,line};
 }
 
-export const validatorInternals={countCommand:commandCount,commandCount,hasEnvironment,hasPackage,hasDocumentClassOption,hasStructuralText,hasConceptualText,environmentsBalanced};
+export const validatorInternals={countCommand:commandCount,commandCount,hasEnvironment,hasPackage,hasDocumentClassOption,hasStructuralText,hasActiveStructuralText,hasConceptualText,environmentsBalanced};
