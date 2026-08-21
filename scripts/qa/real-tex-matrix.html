@@ -29,7 +29,9 @@ const tests=[
 const worker=new Worker('./busytex.worker.js');
 let index=-1;
 let current=null;
-let timer=setTimeout(()=>fail('matrix timeout'),240000);
+// Keep this above Chrome's virtual-time budget. The workflow-level `timeout`
+// remains the authoritative wall-clock hang guard.
+let timer=setTimeout(()=>fail('matrix watchdog timeout'),600000);
 function fail(message){clearTimeout(timer);document.body.dataset.state='failed';document.body.textContent=`REAL_TEX_MATRIX_FAIL ${message}`;worker.terminate();}
 function pdfSignature(pdf){return pdf&&pdf.length>=4?String.fromCharCode(pdf[0],pdf[1],pdf[2],pdf[3]):'';}
 function runNext(){
