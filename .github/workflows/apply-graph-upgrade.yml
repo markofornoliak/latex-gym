@@ -24,6 +24,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node scripts/apply-graph-upgrade.mjs
+      - run: node scripts/update-graph-baseline.mjs
       - run: npm run curriculum:prepare
       - run: npm run curriculum:check
       - run: npm test
