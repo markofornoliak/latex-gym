@@ -107,16 +107,19 @@ jobs:
           grep -Fq 'COMPILER_API_SMOKE_PASS' /tmp/compiler-api-smoke.html
 
           echo 'QA behavior: bookmark mutation, command-palette focus and SPA route focus'
-          timeout 60s "$CHROME" --headless --no-sandbox --disable-gpu \
-            --virtual-time-budget=20000 --dump-dom \
+          if ! timeout 90s node scripts/qa/wait-browser-text.mjs \
+            "$CHROME" \
             'http://127.0.0.1:4173/latex-gym/behavior-smoke.html' \
-            > /tmp/behavior-smoke.html 2> /tmp/behavior-smoke.browser.log || true
-          if ! grep -Fq 'BEHAVIOR_SMOKE_PASS' /tmp/behavior-smoke.html; then
+            'BEHAVIOR_SMOKE_PASS' \
+            'BEHAVIOR_SMOKE_FAIL' \
+            60000 \
+            > /tmp/behavior-smoke.html 2> /tmp/behavior-smoke.browser.log; then
             echo 'Behavioral smoke test failed.'
             cat /tmp/behavior-smoke.html || true
             cat /tmp/behavior-smoke.browser.log || true
             exit 1
           fi
+          grep -Fq 'BEHAVIOR_SMOKE_PASS' /tmp/behavior-smoke.html
 
           mkdir -p qa-screenshots
           capture() {
