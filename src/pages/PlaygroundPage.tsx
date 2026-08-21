@@ -1,15 +1,18 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
+import { AccessibleTabs } from '../components/AccessibleTabs';
 import { DownloadIcon, PlayIcon } from '../components/Icons';
-import { LatexPreview } from '../components/LatexPreview';
+import { LatexPreview, type DiagnosticNavigation } from '../components/LatexPreview';
 import { useCompilationSession } from '../hooks/useCompilationSession';
 import { useDocumentDraft } from '../hooks/useDocumentDraft';
 import { compiler } from '../services/compiler';
 import { compilationStateLabel } from '../services/compilerState';
+import { diagnosticFitsSource, requestDiagnosticNavigation } from '../services/editorNavigation';
 import { useAppStore } from '../store/useAppStore';
 import type { CompileResult, CompilerEngine } from '../types';
 const CodeEditor=lazy(()=>import('../components/CodeEditor').then(m=>({default:m.CodeEditor})));
 
 type RealEngine=Exclude<CompilerEngine,'educational-preview'>;
+type PlaygroundTab='editor'|'preview';
 const templates:Record<string,string>={
   'Минимальный документ':'\\documentclass{article}\n\\begin{document}\nПривет, LaTeX!\n\\end{document}',
   'Научная статья':'\\documentclass{article}\n\\title{Название исследования}\n\\author{Автор}\n\\begin{document}\n\\maketitle\n\\begin{abstract}\nКраткая аннотация.\n\\end{abstract}\n\\section{Введение}\nТекст статьи.\n\\end{document}',
@@ -29,15 +32,20 @@ export function PlaygroundPage(){
   const draft=useDocumentDraft({key:'playground',initialValue:templates['Минимальный документ'],debounceMs:250});
   const source=draft.value;
   const compilation=useCompilationSession(playgroundFailure);
-  const [engine,setEngine]=useState<RealEngine>('pdflatex');const [mobileTab,setMobileTab]=useState<'editor'|'preview'>('editor');
+  const [engine,setEngine]=useState<RealEngine>('pdflatex');const [mobileTab,setMobileTab]=useState<PlaygroundTab>('editor');
   const names=useMemo(()=>Object.keys(templates),[]);const capabilities=compiler.getPrimaryCapabilities();const busy=compilation.busy;
   const updateSource=(value:string)=>{draft.setValue(value);if(compilation.result||compilation.state!=='ready')compilation.invalidate();};
   const compile=async()=>{await compilation.run(source,{engine});setMobileTab('preview');};
   const download=()=>{const blob=new Blob([source],{type:'application/x-tex'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='latex-gym-document.tex';a.click();URL.revokeObjectURL(url);};
+  const tabs=[
+    {id:'editor' as const,label:'Код',tabId:'playground-tab-editor',panelId:'playground-panel-editor'},
+    {id:'preview' as const,label:'Результат',tabId:'playground-tab-preview',panelId:'playground-panel-preview'}
+  ];
+  const diagnosticNavigation:DiagnosticNavigation={canNavigate:diagnostic=>diagnosticFitsSource(diagnostic,source),navigate:diagnostic=>{setMobileTab('editor');requestAnimationFrame(()=>requestDiagnosticNavigation(diagnostic));}};
   return <div className="playground-page"><header className="workspace-heading"><div><span className="eyebrow">PLAYGROUND</span><h1>Свободный документ</h1></div><div className="workspace-actions"><select aria-label="Загрузить шаблон" defaultValue="" onChange={e=>{if(e.target.value)updateSource(templates[e.target.value])}}><option value="" disabled>Загрузить шаблон</option>{names.map(n=><option key={n}>{n}</option>)}</select><select aria-label="TeX-движок" value={engine} onChange={event=>setEngine(event.target.value as RealEngine)} disabled={busy}>{capabilities.engines.map(item=><option key={item} value={item}>{engineLabel(item)}</option>)}</select><button className="secondary-button" onClick={download}><DownloadIcon/> .tex</button><button className="primary-button" onClick={()=>{void compile();}} disabled={busy}><PlayIcon/>{busy?compilationStateLabel(compilation.state):'Скомпилировать'}</button></div></header>
     <div className="compiler-capability-strip" aria-label="Возможности компилятора"><strong>Real TeX</strong><span>PDF: да</span><span>Несколько файлов: движок поддерживает</span><span>BibTeX: {capabilities.bibtex?'да':'нет'}</span><span>Biber: {capabilities.biber?'да':'нет'}</span><span>Shell escape: {capabilities.shellEscape?'да':'отключён'}</span><span>Офлайн: {capabilities.offline?'да':'не гарантируется'}</span></div>
-    <div className="workspace-mobile-tabs"><button className={mobileTab==='editor'?'active':''} onClick={()=>setMobileTab('editor')}>Код</button><button className={mobileTab==='preview'?'active':''} onClick={()=>setMobileTab('preview')}>Результат</button></div>
-    <div className="playground-workspace"><section className={mobileTab==='editor'?'mobile-active':''}><div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${compilation.state}`}>{compilationStateLabel(compilation.state)}</span><span>{compilation.result?.fallbackReason?'Учебный предпросмотр':draft.saved?engineLabel(engine):'Сохранение…'}</span></div><Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={updateSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={620} onReset={()=>updateSource(templates['Минимальный документ'])} onCompile={()=>{void compile();}} onSave={()=>{void draft.saveNow();}} diagnostics={compilation.result?.diagnostics??[]}/></Suspense></section><section className={`playground-preview ${mobileTab==='preview'?'mobile-active':''}`}><div className="mode-label">РЕЗУЛЬТАТ</div><LatexPreview result={compilation.result}/></section></div>
+    <AccessibleTabs className="workspace-mobile-tabs" label="Рабочая область Playground" options={tabs} active={mobileTab} onChange={setMobileTab}/>
+    <div className="playground-workspace"><section id="playground-panel-editor" role="tabpanel" aria-labelledby="playground-tab-editor" className={mobileTab==='editor'?'mobile-active':''}><div className="editor-status-line" aria-live="polite"><span className={`compile-state compile-state--${compilation.state}`}>{compilationStateLabel(compilation.state)}</span><span>{compilation.result?.fallbackReason?'Учебный предпросмотр':draft.saved?engineLabel(engine):'Сохранение…'}</span></div><Suspense fallback={<div className="editor-loading">Загрузка редактора…</div>}><CodeEditor value={source} onChange={updateSource} wordWrap={settings.wordWrap} showLineNumbers={settings.lineNumbers} autoClose={settings.autoClose} minHeight={620} onReset={()=>updateSource(templates['Минимальный документ'])} onCompile={()=>{void compile();}} onSave={()=>{void draft.saveNow();}} diagnostics={compilation.result?.diagnostics??[]}/></Suspense></section><section id="playground-panel-preview" role="tabpanel" aria-labelledby="playground-tab-preview" className={`playground-preview ${mobileTab==='preview'?'mobile-active':''}`}><div className="mode-label">РЕЗУЛЬТАТ</div><LatexPreview result={compilation.result} diagnosticNavigation={diagnosticNavigation}/></section></div>
   </div>;
 }
 function playgroundFailure(error:unknown):CompileResult{const message=error instanceof Error?error.message:String(error);return {ok:false,diagnostics:[{severity:'error',line:1,message:'Компилятор не завершил запрос',explanation:'Исходник сохранён. Ни основной движок, ни резервный предпросмотр не вернули результат.',suggestion:'Повторите компиляцию после проверки соединения.',source:'latex-gym',originalCompilerMessage:message}],blocks:[],elapsedMs:1,engine:'educational-preview'};}
