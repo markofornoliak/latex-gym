@@ -26,6 +26,14 @@ describe('dependency graph validation',()=>{
     expect(issue?.message).toContain('island-a');
   });
 
+  it('reports a directionally unreachable concept even inside the same weakly connected region',()=>{
+    const concepts=[concept('latex-model',[]),concept('shared',['latex-model','alternate-root']),concept('alternate-root',[])];
+    const issues=validateDependencyStructure({concepts,lessons:[],exercises:[],projects:[]});
+    const unreachable=issues.find(issue=>issue.code==='unreachable-concept'&&issue.conceptId==='alternate-root');
+    expect(unreachable?.severity).toBe('warning');
+    expect(issues.some(issue=>issue.code==='disconnected-concept-region')).toBe(false);
+  });
+
   it('detects a multi-step lesson/concept constraint cycle',()=>{
     const concepts=[concept('a',['b']),concept('b',['c']),concept('c',[])];
     const lessons=[lesson('introduce-a',['a'],[]),lesson('introduce-c',['c'],['a']),lesson('introduce-b',['b'],['c'])];
